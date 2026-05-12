@@ -5,7 +5,7 @@
 import logging
 import os
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, validator
 from typing import Optional
 import pytz
@@ -30,23 +30,6 @@ from logger import (
     log_alert,
     get_recent_logs,
 )
-from logger import (
-    init_db,
-    log_signal,
-    log_decision,
-    log_risk_result,
-    log_trade_event,
-    log_alert,
-    get_recent_logs,
-)
-from notifier import (
-    alert_signal_received,
-    alert_claude_approved,
-    alert_claude_rejected,
-    alert_risk_passed,
-    alert_risk_blocked,
-    alert_ready_to_execute,
-)
 
 # -----------------------------------------------------------------------------
 # LOGGING SETUP
@@ -69,7 +52,6 @@ log = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 app = FastAPI(title="Trading Bot Webhook Server", version="1.0.0")
 init_db()
-init_db()
 
 # -----------------------------------------------------------------------------
 # SIGNAL PAYLOAD MODEL
@@ -79,7 +61,7 @@ class SignalPayload(BaseModel):
     symbol:      str
     direction:   str
     token:       str
-    timeframe:   Optional[str] = "5m"
+    timeframe:   Optional[str]   = "5m"
     range_high:  Optional[float] = 0.0
     range_low:   Optional[float] = 0.0
     range_mid:   Optional[float] = 0.0
@@ -89,10 +71,10 @@ class SignalPayload(BaseModel):
     tp1:         Optional[float] = 0.0
     tp2:         Optional[float] = 0.0
     rr_to_tp1:   Optional[float] = 0.0
-    session:     Optional[str] = "unknown"
-    bar_time:    Optional[str] = ""
-    notes:       Optional[str] = ""
-    test_mode:   Optional[bool] = False
+    session:     Optional[str]   = "unknown"
+    bar_time:    Optional[str]   = ""
+    notes:       Optional[str]   = ""
+    test_mode:   Optional[bool]  = False
 
     @validator("direction")
     def direction_must_be_valid(cls, v):
@@ -217,10 +199,12 @@ async def process_ftmo_signal(signal: SignalPayload):
 # WEBHOOK ENDPOINTS
 # -----------------------------------------------------------------------------
 @app.post("/webhook/apex")
-async def webhook_apex(signal: SignalPayload, background_tasks: BackgroundTasks):
+async def webhook_apex(signal: SignalPayload, background_tasks: BackgroundTasks, request: Request):
     validate_token("APEX", signal.token)
     if signal.account != "APEX":
         raise HTTPException(status_code=400, detail="Account mismatch — expected APEX")
+    if not getattr(request.app.state, "apex_allowed", True):
+        raise HTTPException(status_code=403, detail="Apex trading killed — past 2:55 PM CT cutoff")
     log_signal(signal, "RECEIVED — APEX")
     background_tasks.add_task(route_signal, signal)
     return {
@@ -261,11 +245,6 @@ async def health_check():
 @app.get("/")
 async def root():
     return {"message": "Trading bot server is running. POST signals to /webhook/apex or /webhook/ftmo"}
-
-@app.get("/logs")
-async def get_logs(limit: int = 20):
-    """Return recent log entries from all pipeline stages."""
-    return get_recent_logs(limit=limit)
 
 @app.get("/logs")
 async def get_logs(limit: int = 20):
