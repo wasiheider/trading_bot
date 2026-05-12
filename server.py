@@ -78,19 +78,19 @@ class SignalPayload(BaseModel):
     account:     str
     symbol:      str
     direction:   str
-    timeframe:   str
-    range_high:  float
-    range_low:   float
-    range_mid:   float
-    bos_extreme: float
-    entry_price: float
-    stop_loss:   float
-    tp1:         float
-    tp2:         float
-    rr_to_tp1:   float
-    session:     str
-    bar_time:    str
     token:       str
+    timeframe:   Optional[str] = "5m"
+    range_high:  Optional[float] = 0.0
+    range_low:   Optional[float] = 0.0
+    range_mid:   Optional[float] = 0.0
+    bos_extreme: Optional[float] = 0.0
+    entry_price: Optional[float] = 0.0
+    stop_loss:   Optional[float] = 0.0
+    tp1:         Optional[float] = 0.0
+    tp2:         Optional[float] = 0.0
+    rr_to_tp1:   Optional[float] = 0.0
+    session:     Optional[str] = "unknown"
+    bar_time:    Optional[str] = ""
     notes:       Optional[str] = ""
     test_mode:   Optional[bool] = False
 
