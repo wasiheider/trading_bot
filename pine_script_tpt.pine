@@ -1,10 +1,10 @@
 // =============================================================================
-// PINE SCRIPT — APEX 5M WYCKOFF BOS MASTER STRATEGY
+// PINE SCRIPT — TPT 5M WYCKOFF BOS MASTER STRATEGY
 // =============================================================================
 // Strategy : Wyckoff range trading — BOS reversal entries
 // Symbols  : MNQ1! | MCL1! | MGC1! (auto-detected)
 // Timeframe: 5 minutes
-// Account  : Apex Trader Funding → Tradovate → TradingView Desktop
+// Account  : Take Profit Trader → Tradovate → TradingView Desktop
 //
 // Logic:
 //   1. Detect a valid trading range (high/low touched 2+ times, mid touched 2+)
@@ -24,7 +24,7 @@
 // =============================================================================
 
 //@version=5
-indicator(title="APEX 5m Wyckoff BOS — Master", shorttitle="APEX-MASTER", overlay=true)
+indicator(title="TPT 5m Wyckoff BOS — Master", shorttitle="TPT-MASTER", overlay=true)
 
 // -----------------------------------------------------------------------------
 // SYMBOL AUTO-DETECTION
@@ -157,27 +157,23 @@ long_action     = long_rr_tp1  >= 3.0 ? "FULL_CLOSE_TP1" : "PARTIAL_CLOSE_TP1"
 // -----------------------------------------------------------------------------
 // VISUALS
 // -----------------------------------------------------------------------------
-// Range lines
 plot(show_range and range_valid ? range_high : na, "Range High", color=color.red,    style=plot.style_linebr, linewidth=1)
 plot(show_range and range_valid ? range_low  : na, "Range Low",  color=color.green,  style=plot.style_linebr, linewidth=1)
 plot(show_range and range_valid ? range_mid  : na, "Range Mid",  color=color.yellow, style=plot.style_linebr, linewidth=1)
 
-// Signal arrows
 plotshape(show_signals and short_signal, title="SHORT Signal", location=location.abovebar, style=shape.triangledown, color=color.red,   size=size.normal)
 plotshape(show_signals and long_signal,  title="LONG Signal",  location=location.belowbar, style=shape.triangleup,   color=color.green, size=size.normal)
 
-// BOS labels
 if bearish_bos
     label.new(bar_index, range_high, "BOS↑", color=color.red,   textcolor=color.white, style=label.style_label_down, size=size.small)
 if bullish_bos
     label.new(bar_index, range_low,  "BOS↓", color=color.green, textcolor=color.white, style=label.style_label_up,   size=size.small)
 
-// Info label (top right) — shows detected symbol and session
 var label info_label = na
 label.delete(info_label)
 if show_info and barstate.islast
     session_color = in_session ? color.green : color.gray
-    info_text = "APEX MASTER\n" +
+    info_text = "TPT MASTER\n" +
          "Symbol  : " + symbol_name + "\n" +
          "Session : " + session_name + "\n" +
          "Range   : " + (range_valid ? "VALID ✓" : "INVALID ✗") + "\n" +
@@ -185,14 +181,13 @@ if show_info and barstate.islast
          "R:R Min : " + str.tostring(min_rr) + ":1"
     info_label := label.new(bar_index, high, info_text, color=session_color, textcolor=color.white, style=label.style_label_left, size=size.small)
 
-// Session background highlight
 bgcolor(in_session ? color.new(color.blue, 92) : na, title="Session Background")
 
 // -----------------------------------------------------------------------------
 // WEBHOOK ALERT MESSAGES (JSON for Python server)
 // -----------------------------------------------------------------------------
 short_alert_msg =
-     '{"account":"APEX"' +
+     '{"account":"TPT"' +
      ',"symbol":"'        + symbol_name + '"' +
      ',"direction":"SHORT"' +
      ',"timeframe":"5"' +
@@ -207,10 +202,10 @@ short_alert_msg =
      ',"rr_to_tp1":'      + str.tostring(short_rr_tp1,      "#.##") +
      ',"session":"'       + session_name + '"' +
      ',"bar_time":"'      + str.tostring(year) + "-" + str.tostring(month, "00") + "-" + str.tostring(dayofmonth, "00") + " " + str.tostring(hour, "00") + ":" + str.tostring(minute, "00") + '"' +
-     ',"token":"apex_xK9mP2qL8nR4vT7w"}'
+     ',"token":"tpt_xK9mP2qL8nR4vT7w"}'
 
 long_alert_msg =
-     '{"account":"APEX"' +
+     '{"account":"TPT"' +
      ',"symbol":"'        + symbol_name + '"' +
      ',"direction":"LONG"' +
      ',"timeframe":"5"' +
@@ -225,11 +220,12 @@ long_alert_msg =
      ',"rr_to_tp1":'      + str.tostring(long_rr_tp1,      "#.##") +
      ',"session":"'       + session_name + '"' +
      ',"bar_time":"'      + str.tostring(year) + "-" + str.tostring(month, "00") + "-" + str.tostring(dayofmonth, "00") + " " + str.tostring(hour, "00") + ":" + str.tostring(minute, "00") + '"' +
-     ',"token":"apex_xK9mP2qL8nR4vT7w"}'
+     ',"token":"tpt_xK9mP2qL8nR4vT7w"}'
 
 // -----------------------------------------------------------------------------
 // ALERT CONDITIONS
 // Create these manually: Alerts → + New Alert → pick condition → set webhook URL
+// Webhook URL: https://tradingbot-production-1e5a.up.railway.app/webhook/tpt
 // -----------------------------------------------------------------------------
-alertcondition(short_signal, title="APEX SHORT Signal", message="{{short_alert_msg}}")
-alertcondition(long_signal,  title="APEX LONG Signal",  message="{{long_alert_msg}}")
+alertcondition(short_signal, title="TPT SHORT Signal", message="{{short_alert_msg}}")
+alertcondition(long_signal,  title="TPT LONG Signal",  message="{{long_alert_msg}}")

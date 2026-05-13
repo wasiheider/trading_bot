@@ -1,252 +1,142 @@
-# =============================================================================
-# SERVER.PY — FASTAPI WEBHOOK RECEIVER (Phase 4 — Risk engine added)
-# =============================================================================
-
-import logging
-import os
+from flask import Flask, request, jsonify
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
-from pydantic import BaseModel, validator
-from typing import Optional
 import pytz
 
-import config
-from validator import validate_signal
-from risk import run_risk_checks
-from notifier import (
-    alert_signal_received,
-    alert_claude_approved,
-    alert_claude_rejected,
-    alert_risk_passed,
-    alert_risk_blocked,
-    alert_ready_to_execute,
-)
-from logger import (
-    init_db,
-    log_signal,
-    log_decision,
-    log_risk_result,
-    log_trade_event,
-    log_alert,
-    get_recent_logs,
-)
+from config import TPT_WEBHOOK_TOKEN, FTMO_WEBHOOK_TOKEN
+from risk import check_tpt_risk, check_ftmo_risk, tpt_state
+from notifier import send_telegram
+from logger import log_trade
 
-# -----------------------------------------------------------------------------
-# LOGGING SETUP
-# -----------------------------------------------------------------------------
-os.makedirs("logs", exist_ok=True)
-os.makedirs("data", exist_ok=True)
+app = Flask(__name__)
+CT = pytz.timezone("America/Chicago")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(config.LOG_FILE, encoding="utf-8"),
-        logging.StreamHandler()
-    ]
-)
-log = logging.getLogger(__name__)
+def ct_now():
+    return datetime.now(CT)
 
-# -----------------------------------------------------------------------------
-# FASTAPI APP
-# -----------------------------------------------------------------------------
-app = FastAPI(title="Trading Bot Webhook Server", version="1.0.0")
-init_db()
+def is_tpt_killed():
+    now = ct_now()
+    if tpt_state["killed"]:
+        return True
+    # Hard time gate: no new signals at or after 3:55 PM CT
+    if now.hour > 15 or (now.hour == 15 and now.minute >= 55):
+        return True
+    return False
 
-# -----------------------------------------------------------------------------
-# SIGNAL PAYLOAD MODEL
-# -----------------------------------------------------------------------------
-class SignalPayload(BaseModel):
-    account:     str
-    symbol:      str
-    direction:   str
-    token:       str
-    timeframe:   Optional[str]   = "5m"
-    range_high:  Optional[float] = 0.0
-    range_low:   Optional[float] = 0.0
-    range_mid:   Optional[float] = 0.0
-    bos_extreme: Optional[float] = 0.0
-    entry_price: Optional[float] = 0.0
-    stop_loss:   Optional[float] = 0.0
-    tp1:         Optional[float] = 0.0
-    tp2:         Optional[float] = 0.0
-    rr_to_tp1:   Optional[float] = 0.0
-    session:     Optional[str]   = "unknown"
-    bar_time:    Optional[str]   = ""
-    notes:       Optional[str]   = ""
-    test_mode:   Optional[bool]  = False
+# ── TPT Webhook ────────────────────────────────────────────
+@app.route("/webhook/tpt", methods=["POST"])
+def webhook_tpt():
+    data = request.json or {}
 
-    @validator("direction")
-    def direction_must_be_valid(cls, v):
-        if v.upper() not in ["LONG", "SHORT"]:
-            raise ValueError("direction must be LONG or SHORT")
-        return v.upper()
+    # Auth
+    if data.get("token") != TPT_WEBHOOK_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
 
-    @validator("account")
-    def account_must_be_valid(cls, v):
-        if v.upper() not in ["APEX", "FTMO"]:
-            raise ValueError("account must be APEX or FTMO")
-        return v.upper()
+    instrument = data.get("instrument", "").upper()
+    direction  = data.get("direction", "").upper()
+    price      = data.get("price")
+    sl         = data.get("sl")
+    tp1        = data.get("tp1")
+    tp2        = data.get("tp2")
+    sl_ticks   = data.get("sl_ticks")
 
-# -----------------------------------------------------------------------------
-# HELPERS
-# -----------------------------------------------------------------------------
-def validate_token(account: str, token: str):
-    expected = config.WEBHOOK_SECRET_APEX if account == "APEX" else config.WEBHOOK_SECRET_FTMO
-    if token != expected:
-        log.warning(f"Invalid token received for {account} account")
-        raise HTTPException(status_code=401, detail="Invalid webhook token")
+    # Time gate
+    if is_tpt_killed():
+        msg = f"🚫 *TPT Signal Blocked*\n`{instrument} {direction}` — kill switch active or past 3:55 PM CT"
+        send_telegram(msg)
+        return jsonify({"status": "blocked", "reason": "kill switch"}), 200
 
-def log_signal(signal: SignalPayload, status: str = "RECEIVED"):
-    ct = pytz.timezone("America/Chicago")
-    now_ct = datetime.now(ct).strftime("%Y-%m-%d %H:%M:%S CT")
-    log.info(
-        f"\n"
-        f"{'='*60}\n"
-        f"  SIGNAL {status}\n"
-        f"  Time     : {now_ct}\n"
-        f"  Account  : {signal.account}\n"
-        f"  Symbol   : {signal.symbol}\n"
-        f"  Direction: {signal.direction}\n"
-        f"  Timeframe: {signal.timeframe}m\n"
-        f"  Session  : {signal.session}\n"
-        f"  Range H  : {signal.range_high}\n"
-        f"  Range Mid: {signal.range_mid}\n"
-        f"  Range L  : {signal.range_low}\n"
-        f"  Entry    : {signal.entry_price}\n"
-        f"  Stop     : {signal.stop_loss}\n"
-        f"  TP1      : {signal.tp1}  (R:R {signal.rr_to_tp1:.1f})\n"
-        f"  TP2      : {signal.tp2}\n"
-        f"{'='*60}"
+    # Risk check
+    risk = check_tpt_risk(instrument, sl_ticks)
+    if not risk["allowed"]:
+        msg = f"🚫 *TPT Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
+        send_telegram(msg)
+        return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
+
+    # Signal approved — fire Telegram
+    emoji = "🟢" if direction == "LONG" else "🔴"
+    msg = (
+        f"{emoji} *TPT Signal — {instrument} {direction}*\n"
+        f"Price: `{price}`\n"
+        f"SL: `{sl}`\n"
+        f"TP1: `{tp1}`\n"
+        f"TP2: `{tp2}`\n"
+        f"Contracts: `{risk['contracts']}`\n"
+        f"Risk: `${risk['risk_dollars']}`"
     )
+    send_telegram(msg)
 
-# -----------------------------------------------------------------------------
-# PIPELINES
-# -----------------------------------------------------------------------------
-async def route_signal(signal: SignalPayload):
-    if signal.account == "APEX":
-        await process_apex_signal(signal)
-    else:
-        await process_ftmo_signal(signal)
+    # Log trade
+    log_trade({
+        "account":    "TPT",
+        "instrument": instrument,
+        "direction":  direction,
+        "price":      price,
+        "sl":         sl,
+        "tp1":        tp1,
+        "tp2":        tp2,
+        "contracts":  risk["contracts"],
+        "risk_usd":   risk["risk_dollars"],
+        "timestamp":  ct_now().isoformat(),
+    })
 
-async def process_apex_signal(signal: SignalPayload):
-    log.info(f"[APEX] Signal received — {signal.symbol} {signal.direction}")
-    log_signal(signal)
-    alert_signal_received(signal)
+    return jsonify({"status": "approved", "contracts": risk["contracts"]}), 200
 
-    # Step 1 — Claude validation
-    decision = await validate_signal(signal)
-    log_decision(signal, decision)
-    if not decision["approve"]:
-        log.info(f"[APEX] Signal REJECTED by Claude — {decision['reasoning']}")
-        alert_claude_rejected(signal, decision)
-        return
 
-    log.info(f"[APEX] Claude APPROVED — confidence {decision['confidence']}% | action: {decision['action']}")
-    alert_claude_approved(signal, decision)
+# ── FTMO Webhook ───────────────────────────────────────────
+@app.route("/webhook/ftmo", methods=["POST"])
+def webhook_ftmo():
+    data = request.json or {}
 
-    # Step 2 — Risk engine
-    passed, reason, sizing = run_risk_checks(signal)
-    log_risk_result(signal, passed, reason, sizing)
-    if not passed:
-        log.warning(f"[APEX] Signal BLOCKED by risk engine — {reason}")
-        alert_risk_blocked(signal, reason)
-        return
+    # Auth
+    if data.get("token") != FTMO_WEBHOOK_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
 
-    log.info(f"[APEX] Risk engine PASSED — {reason}")
-    log.info(f"[APEX] Sizing: {sizing}")
-    alert_risk_passed(signal, reason, sizing)
+    instrument = data.get("instrument", "").upper()
+    direction  = data.get("direction", "").upper()
+    price      = data.get("price")
+    sl         = data.get("sl")
+    tp1        = data.get("tp1")
+    tp2        = data.get("tp2")
+    sl_pips    = data.get("sl_pips")
 
-    # Step 3 — Order execution (Phase 7)
-    log_trade_event(signal, decision, sizing)
-    alert_ready_to_execute(signal, decision, sizing)
-    log.info(f"[APEX] Ready to execute — {sizing.get('contracts', 0)} contract(s). Execution coming in Phase 7.")
+    # Risk check
+    risk = check_ftmo_risk(instrument, sl_pips)
+    if not risk["allowed"]:
+        msg = f"🚫 *FTMO Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
+        send_telegram(msg)
+        return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
-async def process_ftmo_signal(signal: SignalPayload):
-    log.info(f"[FTMO] Signal received — {signal.symbol} {signal.direction}")
-    log_signal(signal)
-    alert_signal_received(signal)
+    # Signal approved — fire Telegram
+    emoji = "🟢" if direction == "LONG" else "🔴"
+    msg = (
+        f"{emoji} *FTMO Signal — {instrument} {direction}*\n"
+        f"Price: `{price}`\n"
+        f"SL: `{sl}`\n"
+        f"TP1: `{tp1}`\n"
+        f"TP2: `{tp2}`\n"
+        f"Lot Size: `{risk['lot_size']}`\n"
+        f"Risk: `${risk['risk_dollars']}`"
+    )
+    send_telegram(msg)
 
-    # Step 1 — Claude validation
-    decision = await validate_signal(signal)
-    log_decision(signal, decision)
-    if not decision["approve"]:
-        log.info(f"[FTMO] Signal REJECTED by Claude — {decision['reasoning']}")
-        alert_claude_rejected(signal, decision)
-        return
+    # Log trade
+    log_trade({
+        "account":    "FTMO",
+        "instrument": instrument,
+        "direction":  direction,
+        "price":      price,
+        "sl":         sl,
+        "tp1":        tp1,
+        "tp2":        tp2,
+        "lot_size":   risk["lot_size"],
+        "risk_usd":   risk["risk_dollars"],
+        "timestamp":  ct_now().isoformat(),
+    })
 
-    log.info(f"[FTMO] Claude APPROVED — confidence {decision['confidence']}% | action: {decision['action']}")
-    alert_claude_approved(signal, decision)
+    return jsonify({"status": "approved", "lot_size": risk["lot_size"]}), 200
 
-    # Step 2 — Risk engine
-    passed, reason, sizing = run_risk_checks(signal)
-    log_risk_result(signal, passed, reason, sizing)
-    if not passed:
-        log.warning(f"[FTMO] Signal BLOCKED by risk engine — {reason}")
-        alert_risk_blocked(signal, reason)
-        return
 
-    log.info(f"[FTMO] Risk engine PASSED — {reason}")
-    log.info(f"[FTMO] Sizing: {sizing}")
-    alert_risk_passed(signal, reason, sizing)
-
-    # Step 3 — Order execution (Phase 7)
-    log_trade_event(signal, decision, sizing)
-    alert_ready_to_execute(signal, decision, sizing)
-    log.info(f"[FTMO] Ready to execute — {sizing.get('lots', 0)} lot(s). Execution coming in Phase 7.")
-
-# -----------------------------------------------------------------------------
-# WEBHOOK ENDPOINTS
-# -----------------------------------------------------------------------------
-@app.post("/webhook/apex")
-async def webhook_apex(signal: SignalPayload, background_tasks: BackgroundTasks, request: Request):
-    validate_token("APEX", signal.token)
-    if signal.account != "APEX":
-        raise HTTPException(status_code=400, detail="Account mismatch — expected APEX")
-    if not getattr(request.app.state, "apex_allowed", True):
-        raise HTTPException(status_code=403, detail="Apex trading killed — past 2:55 PM CT cutoff")
-    log_signal(signal, "RECEIVED — APEX")
-    background_tasks.add_task(route_signal, signal)
-    return {
-        "status": "received",
-        "account": signal.account,
-        "symbol": signal.symbol,
-        "direction": signal.direction,
-        "message": "Signal accepted and queued for processing"
-    }
-
-@app.post("/webhook/ftmo")
-async def webhook_ftmo(signal: SignalPayload, background_tasks: BackgroundTasks):
-    validate_token("FTMO", signal.token)
-    if signal.account != "FTMO":
-        raise HTTPException(status_code=400, detail="Account mismatch — expected FTMO")
-    log_signal(signal, "RECEIVED — FTMO")
-    background_tasks.add_task(route_signal, signal)
-    return {
-        "status": "received",
-        "account": signal.account,
-        "symbol": signal.symbol,
-        "direction": signal.direction,
-        "message": "Signal accepted and queued for processing"
-    }
-
-@app.get("/health")
-async def health_check():
-    ct = pytz.timezone("America/Chicago")
-    now_ct = datetime.now(ct).strftime("%Y-%m-%d %H:%M:%S CT")
-    return {
-        "status": "online",
-        "server": "Trading Bot Webhook Server",
-        "time_ct": now_ct,
-        "accounts": ["APEX", "FTMO"],
-        "endpoints": ["/webhook/apex", "/webhook/ftmo", "/health"]
-    }
-
-@app.get("/")
-async def root():
-    return {"message": "Trading bot server is running. POST signals to /webhook/apex or /webhook/ftmo"}
-
-@app.get("/logs")
-async def get_logs(limit: int = 20):
-    """Return recent log entries from all pipeline stages."""
-    return get_recent_logs(limit=limit)
+# ── Health check ───────────────────────────────────────────
+@app.route("/", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "time": ct_now().isoformat()}), 200

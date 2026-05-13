@@ -1,0 +1,157 @@
+// =============================================================================
+// FTMO WYCKOFF BOS STRATEGY — 4H + 1H CONFIRMATION
+// Instruments : Forex, Gold (XAUUSD), Indices
+// Sessions    : 24/5 (Sunday 5pm ET — Friday 5pm ET)
+// News Filter : Block 30min before/after high impact events
+// Webhook     : /webhook/ftmo
+// =============================================================================
+
+//@version=5
+indicator("FTMO Wyckoff BOS Master", overlay=true, max_bars_back=500)
+
+// =============================================================================
+// INPUTS
+// =============================================================================
+range_lookback     = input.int(20,    "Range Lookback (bars)",        group="Wyckoff Range")
+range_strength     = input.int(3,     "Min Touches to Confirm Range", group="Wyckoff Range")
+bos_lookback       = input.int(10,    "BOS Lookback (bars)",          group="Break of Structure")
+bos_buffer         = input.float(0.1, "BOS Buffer (points)",          group="Break of Structure")
+confirm_lookback   = input.int(5,     "1H Confirmation Lookback",     group="Break of Structure")
+rr_target          = input.float(2.0, "R:R Target (TP1)",             group="Risk")
+rr_tp2             = input.float(3.5, "R:R Target (TP2)",             group="Risk")
+stop_atr_mult      = input.float(1.5, "Stop Loss ATR Multiplier",     group="Risk")
+use_session_filter = input.bool(true, "Use Session Filter",           group="Sessions")
+use_news_filter    = input.bool(true, "Enable News Filter",           group="News Filter")
+
+// =============================================================================
+// ATR
+// =============================================================================
+atr_val = ta.atr(14)
+
+// =============================================================================
+// WYCKOFF RANGE DETECTION
+// =============================================================================
+range_high = ta.highest(high, range_lookback)
+range_low  = ta.lowest(low,  range_lookback)
+range_mid  = (range_high + range_low) / 2
+range_size = range_high - range_low
+
+touches_high = 0
+touches_low  = 0
+for i = 0 to range_lookback - 1
+    if math.abs(high[i] - range_high) <= range_size * 0.02
+        touches_high := touches_high + 1
+    if math.abs(low[i] - range_low) <= range_size * 0.02
+        touches_low := touches_low + 1
+
+range_confirmed = touches_high >= range_strength and touches_low >= range_strength
+
+// =============================================================================
+// BREAK OF STRUCTURE
+// =============================================================================
+bos_high_level = ta.highest(high, bos_lookback)[1]
+bos_low_level  = ta.lowest(low,  bos_lookback)[1]
+
+bos_bull = close > (bos_high_level + bos_buffer) and close[1] <= bos_high_level
+bos_bear = close < (bos_low_level  - bos_buffer) and close[1] >= bos_low_level
+
+// =============================================================================
+// 1H CONFIRMATION
+// =============================================================================
+confirm_high = ta.highest(high, confirm_lookback)[1]
+confirm_low  = ta.lowest(low,  confirm_lookback)[1]
+
+confirm_bull = close > confirm_high
+confirm_bear = close < confirm_low
+
+// =============================================================================
+// SESSION FILTER
+// =============================================================================
+is_weekday = dayofweek != dayofweek.saturday and dayofweek != dayofweek.sunday
+session_ok = use_session_filter ? is_weekday : true
+
+// =============================================================================
+// NEWS FILTER
+// =============================================================================
+et_hour  = hour(time, "America/New_York")
+et_time  = et_hour * 100 + minute(time, "America/New_York")
+
+news_window_1 = et_time >= 800  and et_time <= 900
+news_window_2 = et_time >= 1330 and et_time <= 1430
+news_window_3 = et_time >= 230  and et_time <= 330
+
+news_blocked = use_news_filter ? (news_window_1 or news_window_2 or news_window_3) : false
+news_ok      = not news_blocked
+
+// =============================================================================
+// ENTRY CONDITIONS
+// =============================================================================
+long_condition  = range_confirmed and bos_bull and confirm_bull and session_ok and news_ok
+short_condition = range_confirmed and bos_bear and confirm_bear and session_ok and news_ok
+
+// =============================================================================
+// STOPS & TARGETS — plotted so TradingView {{plot}} vars can reference them
+// =============================================================================
+sl_long  = close - (atr_val * stop_atr_mult)
+sl_short = close + (atr_val * stop_atr_mult)
+
+tp1_long  = close + ((close - sl_long)  * rr_target)
+tp1_short = close - ((sl_short - close) * rr_target)
+tp2_long  = close + ((close - sl_long)  * rr_tp2)
+tp2_short = close - ((sl_short - close) * rr_tp2)
+
+// Export key values as plots so {{plot_0}} etc work in alert messages
+plot(sl_long,       "SL Long",    color=na, display=display.none)  // {{plot_0}}
+plot(sl_short,      "SL Short",   color=na, display=display.none)  // {{plot_1}}
+plot(tp1_long,      "TP1 Long",   color=na, display=display.none)  // {{plot_2}}
+plot(tp1_short,     "TP1 Short",  color=na, display=display.none)  // {{plot_3}}
+plot(tp2_long,      "TP2 Long",   color=na, display=display.none)  // {{plot_4}}
+plot(tp2_short,     "TP2 Short",  color=na, display=display.none)  // {{plot_5}}
+plot(range_high,    "R High",     color=na, display=display.none)  // {{plot_6}}
+plot(range_low,     "R Low",      color=na, display=display.none)  // {{plot_7}}
+plot(range_mid,     "R Mid",      color=na, display=display.none)  // {{plot_8}}
+plot(bos_high_level,"BOS High",   color=na, display=display.none)  // {{plot_9}}
+plot(bos_low_level, "BOS Low",    color=na, display=display.none)  // {{plot_10}}
+
+// =============================================================================
+// ALERT CONDITIONS
+// NOTE: Message field is filled in TradingView alert dialog (see below)
+// =============================================================================
+alertcondition(long_condition,  title="FTMO LONG Signal",  message="FTMO_LONG")
+alertcondition(short_condition, title="FTMO SHORT Signal", message="FTMO_SHORT")
+
+// =============================================================================
+// VISUAL PLOTS
+// =============================================================================
+plot(range_high, "Range High", color=color.new(color.red,   60), linewidth=1, style=plot.style_stepline)
+plot(range_low,  "Range Low",  color=color.new(color.green, 60), linewidth=1, style=plot.style_stepline)
+plot(range_mid,  "Range Mid",  color=color.new(color.gray,  60), linewidth=1, style=plot.style_stepline)
+
+plotshape(bos_bull and session_ok, "BOS Bull", shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.small)
+plotshape(bos_bear and session_ok, "BOS Bear", shape.triangledown, location.abovebar, color.new(color.red,  0), size=size.small)
+plotshape(long_condition,  "LONG",  shape.labelup,   location.belowbar, color.new(color.green, 0), text="LONG",  size=size.normal)
+plotshape(short_condition, "SHORT", shape.labeldown, location.abovebar, color.new(color.red,   0), text="SHORT", size=size.normal)
+
+bgcolor(news_blocked ? color.new(color.orange, 90) : na, title="News Block")
+
+// =============================================================================
+// INFO TABLE
+// =============================================================================
+var table info = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 70), border_width=1)
+if barstate.islast
+    table.cell(info, 0, 0, "FTMO BOT",      text_color=color.white,  text_size=size.normal)
+    table.cell(info, 1, 0, "4H+1H WYC BOS", text_color=color.yellow)
+    table.cell(info, 0, 1, "Range",          text_color=color.gray)
+    table.cell(info, 1, 1, range_confirmed ? "✓ CONFIRMED" : "waiting", text_color=range_confirmed ? color.green  : color.gray)
+    table.cell(info, 0, 2, "Session",        text_color=color.gray)
+    table.cell(info, 1, 2, session_ok   ? "✓ ACTIVE"  : "✗ CLOSED",    text_color=session_ok   ? color.green  : color.red)
+    table.cell(info, 0, 3, "News",           text_color=color.gray)
+    table.cell(info, 1, 3, news_blocked ? "✗ BLOCKED" : "✓ CLEAR",     text_color=news_blocked ? color.orange : color.green)
+    table.cell(info, 0, 4, "BOS Bull",       text_color=color.gray)
+    table.cell(info, 1, 4, bos_bull ? "✓ YES" : "—",                   text_color=bos_bull ? color.green : color.gray)
+    table.cell(info, 0, 5, "BOS Bear",       text_color=color.gray)
+    table.cell(info, 1, 5, bos_bear ? "✓ YES" : "—",                   text_color=bos_bear ? color.red   : color.gray)
+    table.cell(info, 0, 6, "ATR",            text_color=color.gray)
+    table.cell(info, 1, 6, str.tostring(math.round(atr_val, 2)),        text_color=color.white)
+    table.cell(info, 0, 7, "R:R",            text_color=color.gray)
+    table.cell(info, 1, 7, str.tostring(rr_target) + " / " + str.tostring(rr_tp2), text_color=color.white)

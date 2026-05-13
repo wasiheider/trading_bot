@@ -1,0 +1,88 @@
+TRADING BOT BUILD — SESSION SUMMARY
+Dates: May 9, 10 & 11, 2026
+PROGRESS: 11 of 11 files complete | Phases 1–6 fully done | Phase 7 next
+
+---
+
+WHAT'S COMPLETE ✅
+
+Files done: config.py, requirements.txt, validator.py, risk.py, server.py, notifier.py, logger.py, pine_script_apex_master.pine, pine_script_ftmo.pine, main.py, .env, .gitignore, runtime.txt
+
+Infrastructure done:
+- GitHub repo live: github.com/wasiheider/trading_bot
+- Railway deployed & stable: https://tradingbot-production-1e5a.up.railway.app
+- Full pipeline tested — Telegram firing correctly on both Apex and FTMO
+- Git installed and working on local machine
+- All signals routing correctly through Claude → risk engine → Telegram
+
+TradingView Alerts live:
+- 6 Apex alerts (MNQ/MCL/MGC × LONG/SHORT) → /webhook/apex
+- 14 FTMO alerts (XAUUSD/USOIL/US100/GBPUSD/USDJPY/EURNZD/EURUSD × LONG/SHORT) → /webhook/ftmo
+- All alerts: Once Per Bar Close, full JSON payload with live price variables
+
+FTMO Pine Script live:
+- 4H Wyckoff BOS + 1H confirmation
+- Range detection with boundary touch confirmation
+- News filter: blocks 30min before/after NY Open, FOMC/CPI, London Open
+- Info table on chart: Range / Session / News / BOS status
+- Hidden plots exporting SL, TP1, TP2, range levels to alert payloads
+
+main.py scheduler live:
+- Apex hard kill at 3:55 PM CT Monday–Friday
+- Apex reset + consecutive loss counter reset at midnight CT
+- Daily P&L reset at 12:01 AM CT both accounts
+- Hourly heartbeat keeping Railway alive
+- FTMO runs 24/5 — no kill switch
+
+Risk engine updates:
+- Apex risk per trade: 0.25% of account balance
+- Hard stop after 2 consecutive Apex losses — no new signals until next day
+- Consecutive loss counter resets on winning trade or midnight
+- FTMO pip values updated for all 7 instruments (XAUUSD, USOIL, US100, GBPUSD, USDJPY, EURNZD, EURUSD)
+
+Tokens confirmed working:
+- Apex: apex_xK9mP2qL8nR4vT7w
+- FTMO: ftmo_xK9mP2qL8nR4vT7w
+
+Library versions locked (working on Railway):
+- anthropic==0.40.0
+- pydantic==2.9.2
+- Python 3.11.9
+
+---
+
+WHAT'S REMAINING (IN ORDER)
+
+Phase 7 — Tradovate Order Execution (next session)
+- Wire Tradovate REST API into the bot
+- Test order placement on Apex evaluation account
+- Full pipeline: TradingView → webhook → Claude → risk → Tradovate order placed
+- BEFORE THIS SESSION: Sign up for Apex evaluation account and grab from Tradovate API settings:
+  - Username
+  - Password
+  - App ID
+  - Client ID (CID)
+  - Client Secret (SEC)
+
+Phase 8 — FTMO Order Monitoring
+- FTMO orders placed by TradingView Pine Script directly on OANDA
+- Python server monitors, logs, and fires Telegram alerts only
+- Estimated: ~30 min
+
+Phase 9 — Live Trading Test
+- Real signal end to end on Apex eval account
+- Confirm full chain fires: alert → webhook → Claude → risk → Tradovate order
+- Estimated: ~30 min
+
+Phase 10 — Dashboard (web UI)
+- Visual dashboard to monitor trades, P&L, signal history
+- Both Apex and FTMO accounts
+- Built on top of existing SQLite logger
+
+---
+
+FIRST THING NEXT SESSION
+
+Confirm Railway still running:
+py -3.11 -c "import requests; r=requests.get('https://tradingbot-production-1e5a.up.railway.app'); print(r.status_code)"
+Expected: 200 → then provide Tradovate eval credentials to start Phase 7.
