@@ -1,18 +1,13 @@
 # =============================================================================
 # TRADING BOT — PYTHON DEPENDENCIES
 # =============================================================================
-# Install all at once with:  pip install -r requirements.txt
-# =============================================================================
 
 # Web server — receives TradingView webhooks
-fastapi==0.111.0
-uvicorn==0.29.0
+flask==3.0.3
+gunicorn==21.2.0
 
-# HTTP requests — Tradovate API calls, news calendar
+# HTTP requests
 requests==2.31.0
-
-# Oanda API — official Python wrapper
-oandapyV20==0.7.2
 
 # Anthropic Claude API
 anthropic==0.40.0
@@ -20,17 +15,14 @@ anthropic==0.40.0
 # Telegram notifications
 python-telegram-bot==21.1.1
 
-# Job scheduling — EOD summary, force-close timer, news refresh
-APScheduler==3.10.4
-
-# Database — trade logging
-# (sqlite3 is built into Python — no install needed)
+# Job scheduling
+schedule==1.2.2
 
 # Date/time handling with timezone support
 pytz==2024.1
 
-# Environment variable loading (optional but good practice)
+# Environment variable loading
 python-dotenv==1.0.1
 
-# Data validation — webhook payload checking
+# Data validation
 pydantic==2.9.2
