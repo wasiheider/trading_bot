@@ -5,10 +5,13 @@ import pytz
 from config import TPT_WEBHOOK_TOKEN, FTMO_WEBHOOK_TOKEN
 from risk import check_tpt_risk, check_ftmo_risk, tpt_state
 from notifier import send_telegram
-from logger import log_trade
+from logger import log_trade_event, init_db
 
 app = Flask(__name__)
 CT = pytz.timezone("America/Chicago")
+
+# Initialize DB on startup
+init_db()
 
 def ct_now():
     return datetime.now(CT)
@@ -17,7 +20,6 @@ def is_tpt_killed():
     now = ct_now()
     if tpt_state["killed"]:
         return True
-    # Hard time gate: no new signals at or after 3:55 PM CT
     if now.hour > 15 or (now.hour == 15 and now.minute >= 55):
         return True
     return False
@@ -27,32 +29,28 @@ def is_tpt_killed():
 def webhook_tpt():
     data = request.json or {}
 
-    # Auth
     if data.get("token") != TPT_WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
 
-    instrument = data.get("instrument", "").upper()
+    instrument = data.get("instrument", data.get("symbol", "")).upper()
     direction  = data.get("direction", "").upper()
-    price      = data.get("price")
-    sl         = data.get("sl")
+    price      = data.get("price", data.get("entry_price"))
+    sl         = data.get("sl", data.get("stop_loss"))
     tp1        = data.get("tp1")
     tp2        = data.get("tp2")
     sl_ticks   = data.get("sl_ticks")
 
-    # Time gate
     if is_tpt_killed():
         msg = f"🚫 *TPT Signal Blocked*\n`{instrument} {direction}` — kill switch active or past 3:55 PM CT"
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": "kill switch"}), 200
 
-    # Risk check
     risk = check_tpt_risk(instrument, sl_ticks)
     if not risk["allowed"]:
         msg = f"🚫 *TPT Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
-    # Signal approved — fire Telegram
     emoji = "🟢" if direction == "LONG" else "🔴"
     msg = (
         f"{emoji} *TPT Signal — {instrument} {direction}*\n"
@@ -65,20 +63,6 @@ def webhook_tpt():
     )
     send_telegram(msg)
 
-    # Log trade
-    log_trade({
-        "account":    "TPT",
-        "instrument": instrument,
-        "direction":  direction,
-        "price":      price,
-        "sl":         sl,
-        "tp1":        tp1,
-        "tp2":        tp2,
-        "contracts":  risk["contracts"],
-        "risk_usd":   risk["risk_dollars"],
-        "timestamp":  ct_now().isoformat(),
-    })
-
     return jsonify({"status": "approved", "contracts": risk["contracts"]}), 200
 
 
@@ -87,26 +71,23 @@ def webhook_tpt():
 def webhook_ftmo():
     data = request.json or {}
 
-    # Auth
     if data.get("token") != FTMO_WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
 
-    instrument = data.get("instrument", "").upper()
+    instrument = data.get("instrument", data.get("symbol", "")).upper()
     direction  = data.get("direction", "").upper()
-    price      = data.get("price")
-    sl         = data.get("sl")
+    price      = data.get("price", data.get("entry_price"))
+    sl         = data.get("sl", data.get("stop_loss"))
     tp1        = data.get("tp1")
     tp2        = data.get("tp2")
     sl_pips    = data.get("sl_pips")
 
-    # Risk check
     risk = check_ftmo_risk(instrument, sl_pips)
     if not risk["allowed"]:
         msg = f"🚫 *FTMO Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
-    # Signal approved — fire Telegram
     emoji = "🟢" if direction == "LONG" else "🔴"
     msg = (
         f"{emoji} *FTMO Signal — {instrument} {direction}*\n"
@@ -118,20 +99,6 @@ def webhook_ftmo():
         f"Risk: `${risk['risk_dollars']}`"
     )
     send_telegram(msg)
-
-    # Log trade
-    log_trade({
-        "account":    "FTMO",
-        "instrument": instrument,
-        "direction":  direction,
-        "price":      price,
-        "sl":         sl,
-        "tp1":        tp1,
-        "tp2":        tp2,
-        "lot_size":   risk["lot_size"],
-        "risk_usd":   risk["risk_dollars"],
-        "timestamp":  ct_now().isoformat(),
-    })
 
     return jsonify({"status": "approved", "lot_size": risk["lot_size"]}), 200
 
