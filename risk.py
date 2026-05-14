@@ -16,8 +16,9 @@ tpt_state = {
 }
 
 ftmo_state = {
-    "daily_pnl":       0.0,
-    "account_balance": FTMO_ACCOUNT_SIZE,
+    "daily_pnl":          0.0,
+    "consecutive_losses": 0,
+    "account_balance":    FTMO_ACCOUNT_SIZE,
 }
 
 # ── TPT pip/tick values ────────────────────────────────────
@@ -52,10 +53,10 @@ def calculate_tpt_position_size(instrument: str, sl_ticks: int = None) -> dict:
     contracts = max(1, min(contracts, TPT_MAX_CONTRACTS))
 
     return {
-        "contracts":      contracts,
-        "risk_dollars":   round(risk_dollars, 2),
-        "sl_ticks":       sl,
-        "tick_value":     cfg["tick_value"],
+        "contracts":    contracts,
+        "risk_dollars": round(risk_dollars, 2),
+        "sl_ticks":     sl,
+        "tick_value":   cfg["tick_value"],
     }
 
 
@@ -119,6 +120,22 @@ def check_ftmo_risk(instrument: str, sl_pips: int = None) -> dict:
     }
 
 
+def update_ftmo_outcome(won: bool, pnl: float = None) -> None:
+    """
+    Phase 8 — Called when TradingView fires tp1_hit, tp2_hit, or sl_hit.
+    Updates FTMO daily P&L and consecutive loss counter.
+    Note: TP1 and TP2 both count as wins — counter resets on either.
+    """
+    if pnl is not None:
+        ftmo_state["daily_pnl"] += pnl
+
+    if won:
+        ftmo_state["consecutive_losses"] = 0
+    else:
+        ftmo_state["consecutive_losses"] += 1
+
+
 def reset_ftmo_daily():
     """Called at midnight CT by scheduler."""
-    ftmo_state["daily_pnl"] = 0.0
+    ftmo_state["daily_pnl"]          = 0.0
+    ftmo_state["consecutive_losses"] = 0

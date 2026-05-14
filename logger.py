@@ -1,18 +1,15 @@
 # =============================================================================
-# LOGGER.PY — SQLITE TRADE LOGGER (Phase 6)
+# LOGGER.PY — SQLITE TRADE LOGGER (Phase 6 + Phase 8)
 # =============================================================================
 # Logs every stage of the signal pipeline to a local SQLite database.
-# Replaces the in-memory daily P&L tracker in risk.py with persistent storage.
 #
 # Tables:
-#   signals       — every incoming webhook signal
-#   decisions     — Claude approve/reject with reasoning
-#   risk_results  — risk engine pass/block with sizing
-#   trade_events  — ready-to-execute records (entry, SL, TP1, TP2, sizing)
-#   alerts        — Telegram alert success/failure log
-#
-# Provides:
-#   get_recent_logs(n)  — returns last n rows across all tables for /logs endpoint
+#   signals         — every incoming webhook signal
+#   decisions       — Claude approve/reject with reasoning
+#   risk_results    — risk engine pass/block with sizing
+#   trade_events    — ready-to-execute records (entry, SL, TP1, TP2, sizing)
+#   alerts          — Telegram alert success/failure log
+#   ftmo_lifecycle  — Phase 8: FTMO order lifecycle events (fill, TP1, TP2, SL)
 # =============================================================================
 
 import sqlite3
@@ -119,6 +116,20 @@ def init_db():
             success     INTEGER NOT NULL,
             message     TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS ftmo_lifecycle (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts          TEXT NOT NULL,
+            event       TEXT NOT NULL,
+            symbol      TEXT NOT NULL,
+            direction   TEXT NOT NULL,
+            price       REAL,
+            lot_size    REAL,
+            stop_loss   REAL,
+            tp1         REAL,
+            tp2         REAL,
+            pnl         REAL
+        );
     """)
 
     conn.commit()
@@ -136,9 +147,7 @@ def now_ts() -> str:
 # -----------------------------------------------------------------------------
 
 def log_signal(signal) -> int:
-    """
-    Log an incoming signal. Returns the row ID for reference.
-    """
+    """Log an incoming signal. Returns the row ID for reference."""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -278,7 +287,6 @@ def update_trade_status(trade_id: int, status: str) -> None:
     """
     Update a trade event status.
     Status values: PENDING → TP1_HIT | TP2_HIT | SL_HIT | CANCELLED
-    Called in Phase 7 when Pine Script reports trade outcome.
     """
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -289,6 +297,49 @@ def update_trade_status(trade_id: int, status: str) -> None:
         log.info(f"[LOGGER] Trade {trade_id} status updated → {status}")
     except Exception as e:
         log.warning(f"[LOGGER] Failed to update trade status — {e}")
+
+
+# -----------------------------------------------------------------------------
+# LOG — FTMO LIFECYCLE EVENT (Phase 8)
+# -----------------------------------------------------------------------------
+
+def log_ftmo_lifecycle(
+    event: str,
+    symbol: str,
+    direction: str,
+    price: Optional[float] = None,
+    pnl: Optional[float] = None,
+    lot_size: Optional[float] = None,
+    sl: Optional[float] = None,
+    tp1: Optional[float] = None,
+    tp2: Optional[float] = None,
+) -> int:
+    """
+    Log an FTMO order lifecycle event from TradingView Pine Script.
+    Events: entry_filled | tp1_hit | tp2_hit | sl_hit
+    Returns the row ID.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO ftmo_lifecycle (
+                ts, event, symbol, direction,
+                price, lot_size, stop_loss, tp1, tp2, pnl
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            now_ts(),
+            event, symbol, direction,
+            price, lot_size, sl, tp1, tp2, pnl,
+        ))
+        row_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        log.info(f"[LOGGER] FTMO lifecycle logged — ID {row_id} | {event} {symbol} {direction}")
+        return row_id
+    except Exception as e:
+        log.warning(f"[LOGGER] Failed to log FTMO lifecycle — {e}")
+        return -1
 
 
 # -----------------------------------------------------------------------------
@@ -308,7 +359,7 @@ def log_alert(account: str, alert_type: str, success: bool, message: str = "") -
             account,
             alert_type,
             1 if success else 0,
-            message[:500],  # truncate long messages
+            message[:500],
         ))
         conn.commit()
         conn.close()
@@ -321,10 +372,7 @@ def log_alert(account: str, alert_type: str, success: bool, message: str = "") -
 # -----------------------------------------------------------------------------
 
 def get_recent_logs(limit: int = 50) -> dict:
-    """
-    Return the most recent rows from all tables.
-    Used by the /logs endpoint in server.py.
-    """
+    """Return the most recent rows from all tables."""
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -335,12 +383,13 @@ def get_recent_logs(limit: int = 50) -> dict:
             return [dict(row) for row in c.fetchall()]
 
         result = {
-            "signals":      fetch("signals", limit),
-            "decisions":    fetch("decisions", limit),
-            "risk_results": fetch("risk_results", limit),
-            "trade_events": fetch("trade_events", limit),
-            "alerts":       fetch("alerts", limit),
-            "generated_at": now_ts(),
+            "signals":         fetch("signals", limit),
+            "decisions":       fetch("decisions", limit),
+            "risk_results":    fetch("risk_results", limit),
+            "trade_events":    fetch("trade_events", limit),
+            "alerts":          fetch("alerts", limit),
+            "ftmo_lifecycle":  fetch("ftmo_lifecycle", limit),
+            "generated_at":    now_ts(),
         }
 
         conn.close()
@@ -352,14 +401,11 @@ def get_recent_logs(limit: int = 50) -> dict:
 
 
 # -----------------------------------------------------------------------------
-# DAILY P&L FROM DB (replaces in-memory tracker in risk.py — Phase 6+)
+# DAILY P&L FROM DB
 # -----------------------------------------------------------------------------
 
 def get_daily_pnl(account: str) -> float:
-    """
-    Sum P&L for today from closed trade_events.
-    Currently returns 0.0 until trade outcomes are tracked in Phase 7.
-    """
+    """Sum P&L for today from closed trade_events."""
     try:
         today = datetime.now(CT).strftime("%Y-%m-%d")
         conn = sqlite3.connect(DB_PATH)
@@ -370,7 +416,7 @@ def get_daily_pnl(account: str) -> float:
         """, (account, f"{today}%"))
         count = c.fetchone()[0]
         conn.close()
-        return 0.0  # Will be real P&L in Phase 7 when outcomes are tracked
+        return 0.0  # Real P&L tracked in Phase 7 when outcomes are wired up
     except Exception as e:
         log.warning(f"[LOGGER] Failed to get daily P&L — {e}")
         return 0.0

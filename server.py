@@ -3,9 +3,9 @@ from datetime import datetime
 import pytz
 
 from config import TPT_WEBHOOK_TOKEN, FTMO_WEBHOOK_TOKEN
-from risk import check_tpt_risk, check_ftmo_risk, tpt_state
+from risk import check_tpt_risk, check_ftmo_risk, tpt_state, update_ftmo_outcome
 from notifier import send_telegram
-from logger import log_trade_event, init_db
+from logger import log_trade_event, log_ftmo_lifecycle, init_db
 
 app = Flask(__name__)
 CT = pytz.timezone("America/Chicago")
@@ -23,6 +23,7 @@ def is_tpt_killed():
     if now.hour > 15 or (now.hour == 15 and now.minute >= 55):
         return True
     return False
+
 
 # ── TPT Webhook ────────────────────────────────────────────
 @app.route("/webhook/tpt", methods=["POST"])
@@ -74,6 +75,18 @@ def webhook_ftmo():
     if data.get("token") != FTMO_WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
 
+    event = data.get("event", "").lower()
+
+    # ── Phase 8: Lifecycle events ──────────────────────────
+    if event in ("entry_filled", "tp1_hit", "tp2_hit", "sl_hit"):
+        return handle_ftmo_lifecycle(data, event)
+
+    # ── Original: new signal risk check ───────────────────
+    return handle_ftmo_signal(data)
+
+
+def handle_ftmo_signal(data):
+    """Original FTMO signal handler — risk check + Telegram alert."""
     instrument = data.get("instrument", data.get("symbol", "")).upper()
     direction  = data.get("direction", "").upper()
     price      = data.get("price", data.get("entry_price"))
@@ -101,6 +114,73 @@ def webhook_ftmo():
     send_telegram(msg)
 
     return jsonify({"status": "approved", "lot_size": risk["lot_size"]}), 200
+
+
+def handle_ftmo_lifecycle(data, event):
+    """
+    Phase 8 — FTMO order lifecycle handler.
+    Called when TradingView fires entry_filled | tp1_hit | tp2_hit | sl_hit.
+    Logs to DB, updates risk state, fires Telegram alert.
+    """
+    instrument = data.get("instrument", data.get("symbol", "")).upper()
+    direction  = data.get("direction", "").upper()
+    price      = data.get("price", data.get("entry_price"))
+    pnl        = data.get("pnl")           # optional — TradingView can pass this
+    lot_size   = data.get("lot_size")
+    sl         = data.get("stop_loss", data.get("sl"))
+    tp1        = data.get("tp1")
+    tp2        = data.get("tp2")
+
+    # Log to DB
+    log_ftmo_lifecycle(
+        event=event,
+        symbol=instrument,
+        direction=direction,
+        price=price,
+        pnl=pnl,
+        lot_size=lot_size,
+        sl=sl,
+        tp1=tp1,
+        tp2=tp2,
+    )
+
+    # Update FTMO consecutive loss counter in risk engine
+    if event == "sl_hit":
+        update_ftmo_outcome(won=False, pnl=pnl)
+    elif event in ("tp1_hit", "tp2_hit"):
+        update_ftmo_outcome(won=True, pnl=pnl)
+
+    # Build Telegram message
+    emoji_map = {
+        "entry_filled": "📥",
+        "tp1_hit":      "✅",
+        "tp2_hit":      "🏆",
+        "sl_hit":       "❌",
+    }
+    label_map = {
+        "entry_filled": "Entry Filled",
+        "tp1_hit":      "TP1 Hit",
+        "tp2_hit":      "TP2 Hit",
+        "sl_hit":       "Stop Loss Hit",
+    }
+
+    emoji = emoji_map.get(event, "📊")
+    label = label_map.get(event, event.upper())
+    dir_emoji = "🟢" if direction == "LONG" else "🔴"
+
+    pnl_line = f"\nP&L: `${pnl:+.2f}`" if pnl is not None else ""
+    lots_line = f"\nLots: `{lot_size}`" if lot_size else ""
+
+    msg = (
+        f"{emoji} *FTMO {label}*\n"
+        f"{dir_emoji} `{instrument} {direction}`\n"
+        f"Price: `{price}`"
+        f"{lots_line}"
+        f"{pnl_line}"
+    )
+    send_telegram(msg)
+
+    return jsonify({"status": "logged", "event": event, "symbol": instrument}), 200
 
 
 # ── Health check ───────────────────────────────────────────
