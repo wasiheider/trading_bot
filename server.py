@@ -33,7 +33,7 @@ def webhook_tpt():
     if data.get("token") != TPT_WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
 
-    instrument = data.get("instrument", data.get("symbol", "")).upper()
+    instrument = data.get("instrument", data.get("symbol", "")).upper().replace("1!", "").replace("!", "")
     direction  = data.get("direction", "").upper()
     price      = data.get("price", data.get("entry_price"))
     sl         = data.get("sl", data.get("stop_loss"))
@@ -87,7 +87,7 @@ def webhook_ftmo():
 
 def handle_ftmo_signal(data):
     """Original FTMO signal handler — risk check + Telegram alert."""
-    instrument = data.get("instrument", data.get("symbol", "")).upper()
+    instrument = data.get("instrument", data.get("symbol", "")).upper().replace("1!", "").replace("!", "")
     direction  = data.get("direction", "").upper()
     price      = data.get("price", data.get("entry_price"))
     sl         = data.get("sl", data.get("stop_loss"))
@@ -122,7 +122,7 @@ def handle_ftmo_lifecycle(data, event):
     Called when TradingView fires entry_filled | tp1_hit | tp2_hit | sl_hit.
     Logs to DB, updates risk state, fires Telegram alert.
     """
-    instrument = data.get("instrument", data.get("symbol", "")).upper()
+    instrument = data.get("instrument", data.get("symbol", "")).upper().replace("1!", "").replace("!", "")
     direction  = data.get("direction", "").upper()
     price      = data.get("price", data.get("entry_price"))
     pnl        = data.get("pnl")           # optional — TradingView can pass this
