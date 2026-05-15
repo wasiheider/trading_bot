@@ -18,11 +18,18 @@ def ct_now():
 
 def is_tpt_killed():
     now = ct_now()
+    # Manual kill switch (2 consecutive losses)
     if tpt_state["killed"]:
         return True
-    if now.hour > 15 or (now.hour == 15 and now.minute >= 55):
+    # Maintenance window: 3:55 PM – 5:00 PM CT (exchange closed)
+    if (now.hour == 15 and now.minute >= 55) or now.hour == 16:
         return True
     return False
+
+def is_maintenance_window():
+    """True during 3:55–5:00 PM CT exchange close."""
+    now = ct_now()
+    return (now.hour == 15 and now.minute >= 55) or now.hour == 16
 
 
 # ── TPT Webhook ────────────────────────────────────────────
@@ -46,9 +53,10 @@ def webhook_tpt():
     contracts  = max(2, min(5, int(data.get("contracts", 2))))
 
     if is_tpt_killed():
-        msg = f"🚫 *TPT Signal Blocked*\n`{instrument} {direction}` — kill switch active or past 3:55 PM CT"
+        reason = "maintenance window (3:55–5:00 PM CT)" if is_maintenance_window() else "kill switch active (2 consecutive losses)"
+        msg = f"🚫 *TPT Signal Blocked*\n`{instrument} {direction}` — {reason}"
         send_telegram(msg)
-        return jsonify({"status": "blocked", "reason": "kill switch"}), 200
+        return jsonify({"status": "blocked", "reason": reason}), 200
 
     # Only check kill switch + drawdown floor — Pine Script handles sizing
     risk = check_tpt_risk(instrument)
