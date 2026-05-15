@@ -39,32 +39,38 @@ def webhook_tpt():
     sl         = data.get("sl", data.get("stop_loss"))
     tp1        = data.get("tp1")
     tp2        = data.get("tp2")
-    sl_ticks   = data.get("sl_ticks")
+    rr         = data.get("rr_to_tp1")
+
+    # Pine Script calculates contracts using real SL distance — trust it directly
+    # Clamp to 2–5 as a hard safety cap in case of payload issues
+    contracts  = max(2, min(5, int(data.get("contracts", 2))))
 
     if is_tpt_killed():
         msg = f"🚫 *TPT Signal Blocked*\n`{instrument} {direction}` — kill switch active or past 3:55 PM CT"
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": "kill switch"}), 200
 
-    risk = check_tpt_risk(instrument, sl_ticks)
+    # Only check kill switch + drawdown floor — Pine Script handles sizing
+    risk = check_tpt_risk(instrument)
     if not risk["allowed"]:
         msg = f"🚫 *TPT Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
+    rr_line = f"\nR:R: `{rr}`" if rr else ""
     emoji = "🟢" if direction == "LONG" else "🔴"
     msg = (
         f"{emoji} *TPT Signal — {instrument} {direction}*\n"
-        f"Price: `{price}`\n"
+        f"Entry: `{price}`\n"
         f"SL: `{sl}`\n"
         f"TP1: `{tp1}`\n"
         f"TP2: `{tp2}`\n"
-        f"Contracts: `{risk['contracts']}`\n"
-        f"Risk: `${risk['risk_dollars']}`"
+        f"Contracts: `{contracts}`"
+        f"{rr_line}"
     )
     send_telegram(msg)
 
-    return jsonify({"status": "approved", "contracts": risk["contracts"]}), 200
+    return jsonify({"status": "approved", "contracts": contracts}), 200
 
 
 # ── FTMO Webhook ───────────────────────────────────────────

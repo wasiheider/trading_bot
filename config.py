@@ -24,8 +24,14 @@ MAX_CONSEC_LOSSES = 2
 KILL_HOUR_CT      = 15
 KILL_MINUTE_CT    = 55
 
-# ── TPT Rule: max 15 contracts at any time ─────────────────
-TPT_MAX_CONTRACTS = 15
+# ── TPT Rule: 2–5 contracts (Pine Script sizes, Railway caps) ──
+TPT_MAX_CONTRACTS = 5
+TPT_MIN_CONTRACTS = 2
+
+# ── TPT Rule: drawdown basis $45k (TPT evaluation threshold) ──
+# Pine Script uses this same basis: risk_dollars = $112.50 (0.25% of $45k)
+TPT_DRAWDOWN_BASIS = 45000.0
+TPT_RISK_DOLLARS   = TPT_DRAWDOWN_BASIS * RISK_PER_TRADE  # $112.50
 
 # ── TPT Rule: account floor $145,500 ──────────────────────
 TPT_DRAWDOWN_FLOOR = 145500.0
