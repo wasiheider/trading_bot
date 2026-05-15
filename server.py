@@ -183,6 +183,30 @@ def handle_ftmo_lifecycle(data, event):
     return jsonify({"status": "logged", "event": event, "symbol": instrument}), 200
 
 
+# ── Manual Reset Endpoint ──────────────────────────────────
+@app.route("/reset/tpt", methods=["POST"])
+def reset_tpt():
+    data = request.json or {}
+    if data.get("token") != TPT_WEBHOOK_TOKEN:
+        return jsonify({"status": "error", "reason": "invalid token"}), 403
+    tpt_state["killed"] = False
+    tpt_state["consecutive_losses"] = 0
+    send_telegram("🔄 *TPT Reset*\nKill switch cleared — signals active.")
+    return jsonify({"status": "ok", "message": "TPT state reset"}), 200
+
+
+# ── State Inspection Endpoint ───────────────────────────────
+@app.route("/state", methods=["GET"])
+def state():
+    now = ct_now()
+    return jsonify({
+        "time_ct": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "tpt_killed": tpt_state["killed"],
+        "tpt_consecutive_losses": tpt_state.get("consecutive_losses", 0),
+        "is_tpt_killed": is_tpt_killed(),
+    }), 200
+
+
 # ── Health check ───────────────────────────────────────────
 @app.route("/", methods=["GET"])
 def health():
