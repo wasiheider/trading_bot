@@ -20,11 +20,26 @@
 //   No-trade : 15:00 — 17:00 CT
 //   Hard kill: 14:55 CT
 //
-// Execution: Webhook alert only — Python server handles Claude validation
+// Sizing:
+//   Risk basis : $45,000 (TPT drawdown limit)
+//   Risk/trade : 0.25% = $112.50
+//   Contracts  : 2–5 scaled by entry-to-SL distance
+//
+// Execution: TradingView broker connection (Tradovate) + Webhook to Railway
 // =============================================================================
 
 //@version=5
-indicator(title="TPT 5m Wyckoff BOS — Master", shorttitle="TPT-MASTER", overlay=true)
+strategy(
+     title            = "TPT 5m Wyckoff BOS — Master",
+     shorttitle       = "TPT-MASTER",
+     overlay          = true,
+     pyramiding       = 0,
+     default_qty_type = strategy.fixed,
+     default_qty_value = 1,
+     currency         = currency.USD,
+     commission_type  = strategy.commission.cash_per_contract,
+     commission_value = 0.35
+ )
 
 // -----------------------------------------------------------------------------
 // SYMBOL AUTO-DETECTION
@@ -33,42 +48,50 @@ is_mnq = str.contains(syminfo.tickerid, "MNQ")
 is_mcl = str.contains(syminfo.tickerid, "MCL")
 is_mgc = str.contains(syminfo.tickerid, "MGC")
 
-// Warn if unsupported symbol
 unsupported = not is_mnq and not is_mcl and not is_mgc
 var label unsupported_label = na
 if unsupported and barstate.islast
     unsupported_label := label.new(bar_index, high, "⚠️ Unsupported symbol.\nLoad on MNQ1!, MCL1!, or MGC1!", color=color.red, textcolor=color.white, style=label.style_label_left, size=size.normal)
 
-// Symbol name for webhook
 symbol_name = is_mnq ? "MNQ1!" : is_mcl ? "MCL1!" : is_mgc ? "MGC1!" : syminfo.tickerid
 
 // Per-symbol minimum range size
 min_range_default = is_mnq ? 20.0 : is_mcl ? 0.50 : is_mgc ? 5.0 : 10.0
 
-// Per-symbol price format (decimal places for webhook)
+// Per-symbol price format
 price_format = is_mcl ? "#.###" : "#.##"
+
+// Per-symbol tick value (USD per 1 tick move × 1 contract)
+// MNQ: $0.50/tick, tick=0.25pts → $2.00/point
+// MCL: $10/tick, tick=0.01 → $1000/point
+// MGC: $1/tick, tick=0.10 → $10/point
+tick_value  = is_mnq ? 0.50  : is_mcl ? 10.0 : is_mgc ? 1.0  : 1.0
+tick_size   = is_mnq ? 0.25  : is_mcl ? 0.01 : is_mgc ? 0.10 : 0.25
+point_value = tick_value / tick_size   // USD per 1 full point per contract
+
+// -----------------------------------------------------------------------------
+// SIZING CONSTANTS
+// -----------------------------------------------------------------------------
+risk_dollars  = 112.50   // 0.25% of $45,000 drawdown basis
+min_contracts = 2
+max_contracts = 5
 
 // -----------------------------------------------------------------------------
 // INPUTS
 // -----------------------------------------------------------------------------
-range_lookback  = input.int(50,   title="Range Lookback (bars)",                 minval=10, maxval=200)
-mid_touch_min   = input.int(2,    title="Min Midpoint Touches for Valid Range",  minval=1)
-bos_closes      = input.int(2,    title="BOS Confirmation (consecutive closes)", minval=1, maxval=3)
-min_range_pts   = input.float(0,  title="Min Range Size (0 = auto per symbol)",  minval=0.0, step=0.5, tooltip="Leave 0 to use the default for the loaded symbol: MNQ=20, MCL=0.50, MGC=5")
-min_rr          = input.float(2.0,title="Minimum R:R to fire signal",            minval=1.0)
+range_lookback  = input.int(50,    title="Range Lookback (bars)",                 minval=10, maxval=200)
+mid_touch_min   = input.int(2,     title="Min Midpoint Touches for Valid Range",  minval=1)
+bos_closes      = input.int(2,     title="BOS Confirmation (consecutive closes)", minval=1, maxval=3)
+min_range_pts   = input.float(0,   title="Min Range Size (0 = auto per symbol)",  minval=0.0, step=0.5)
+min_rr          = input.float(2.0, title="Minimum R:R to fire signal",            minval=1.0)
 show_range      = input.bool(true, title="Show Range on Chart")
 show_signals    = input.bool(true, title="Show Signal Arrows")
 show_info       = input.bool(true, title="Show Symbol Info Label")
 
-// Use auto min range if input is 0
 effective_min_range = min_range_pts == 0 ? min_range_default : min_range_pts
 
 // -----------------------------------------------------------------------------
 // SESSION FILTER (UTC times)
-// London 07:00-10:00 UTC = 01:00-04:00 CT
-// NY     14:00-17:00 UTC = 08:00-11:00 CT
-// No-trade 20:00-22:00 UTC = 14:00-16:00 CT
-// Hard kill 19:55 UTC = 14:55 CT
 // -----------------------------------------------------------------------------
 london_session  = time(timeframe.period, "0700-1000:23456")
 ny_session      = time(timeframe.period, "1400-1700:23456")
@@ -124,7 +147,6 @@ long_entry  = bullish_bos and close >= range_low  and close < range_mid and in_s
 // -----------------------------------------------------------------------------
 // TRADE LEVELS
 // -----------------------------------------------------------------------------
-// SHORT
 short_entry_price   = close
 short_sl            = bearish_bos_extreme
 short_tp1           = range_mid
@@ -133,7 +155,6 @@ short_risk          = not na(short_sl) ? short_sl - short_entry_price : 0.0
 short_reward_tp1    = short_entry_price - short_tp1
 short_rr_tp1        = short_risk > 0 ? short_reward_tp1 / short_risk : 0.0
 
-// LONG
 long_entry_price    = close
 long_sl             = bullish_bos_extreme
 long_tp1            = range_mid
@@ -142,17 +163,53 @@ long_risk           = not na(long_sl) ? long_entry_price - long_sl : 0.0
 long_reward_tp1     = long_tp1 - long_entry_price
 long_rr_tp1         = long_risk > 0 ? long_reward_tp1 / long_risk : 0.0
 
-// R:R filter
 short_valid_rr  = short_rr_tp1 >= min_rr
 long_valid_rr   = long_rr_tp1  >= min_rr
 
-// Final signals
 short_signal    = short_entry and short_valid_rr and not na(short_sl)
 long_signal     = long_entry  and long_valid_rr  and not na(long_sl)
 
-// Trade plan
 short_action    = short_rr_tp1 >= 3.0 ? "FULL_CLOSE_TP1" : "PARTIAL_CLOSE_TP1"
 long_action     = long_rr_tp1  >= 3.0 ? "FULL_CLOSE_TP1" : "PARTIAL_CLOSE_TP1"
+
+// -----------------------------------------------------------------------------
+// DYNAMIC POSITION SIZING
+// 
+// risk_dollars ÷ (SL distance in points × point_value per contract)
+// Clamped between min_contracts and max_contracts
+// -----------------------------------------------------------------------------
+long_sl_pts   = long_risk   > 0 ? long_risk   : 1.0
+short_sl_pts  = short_risk  > 0 ? short_risk  : 1.0
+
+long_contracts  = math.max(min_contracts, math.min(max_contracts, math.round(risk_dollars / (long_sl_pts  * point_value))))
+short_contracts = math.max(min_contracts, math.min(max_contracts, math.round(risk_dollars / (short_sl_pts * point_value))))
+
+// Half size for TP1 partial close (remaining half runs to TP2)
+long_tp1_qty  = math.max(1, math.floor(long_contracts  / 2))
+short_tp1_qty = math.max(1, math.floor(short_contracts / 2))
+
+// -----------------------------------------------------------------------------
+// STRATEGY EXECUTION — AUTO ORDER PLACEMENT VIA TRADOVATE BROKER CONNECTION
+// -----------------------------------------------------------------------------
+
+// No trade if already in a position
+no_position = strategy.position_size == 0
+
+if long_signal and no_position
+    strategy.entry("LONG", strategy.long, qty=long_contracts, comment="BOS LONG " + str.tostring(long_contracts) + "c")
+    strategy.exit("LONG_TP1", from_entry="LONG", qty=long_tp1_qty, limit=long_tp1, stop=long_sl, comment="TP1")
+    strategy.exit("LONG_TP2", from_entry="LONG", limit=long_tp2, stop=long_sl, comment="TP2+SL")
+    alert('{"account":"TPT","symbol":"' + symbol_name + '","direction":"LONG","timeframe":"5","contracts":' + str.tostring(long_contracts) + ',"entry_price":' + str.tostring(long_entry_price, price_format) + ',"stop_loss":' + str.tostring(long_sl, price_format) + ',"tp1":' + str.tostring(long_tp1, price_format) + ',"tp2":' + str.tostring(long_tp2, price_format) + ',"rr_to_tp1":' + str.tostring(long_rr_tp1, "#.##") + ',"action":"' + long_action + '","session":"' + session_name + '","token":"tpt_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+if short_signal and no_position
+    strategy.entry("SHORT", strategy.short, qty=short_contracts, comment="BOS SHORT " + str.tostring(short_contracts) + "c")
+    strategy.exit("SHORT_TP1", from_entry="SHORT", qty=short_tp1_qty, limit=short_tp1, stop=short_sl, comment="TP1")
+    strategy.exit("SHORT_TP2", from_entry="SHORT", limit=short_tp2, stop=short_sl, comment="TP2+SL")
+    alert('{"account":"TPT","symbol":"' + symbol_name + '","direction":"SHORT","timeframe":"5","contracts":' + str.tostring(short_contracts) + ',"entry_price":' + str.tostring(short_entry_price, price_format) + ',"stop_loss":' + str.tostring(short_sl, price_format) + ',"tp1":' + str.tostring(short_tp1, price_format) + ',"tp2":' + str.tostring(short_tp2, price_format) + ',"rr_to_tp1":' + str.tostring(short_rr_tp1, "#.##") + ',"action":"' + short_action + '","session":"' + session_name + '","token":"tpt_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+// Hard kill — close all at 14:55 CT (19:55 UTC)
+if not na(hard_kill_zone)
+    strategy.close_all(comment="HARD KILL 14:55 CT")
 
 // -----------------------------------------------------------------------------
 // VISUALS
@@ -178,54 +235,15 @@ if show_info and barstate.islast
          "Session : " + session_name + "\n" +
          "Range   : " + (range_valid ? "VALID ✓" : "INVALID ✗") + "\n" +
          "Min Rng : " + str.tostring(effective_min_range) + " pts\n" +
-         "R:R Min : " + str.tostring(min_rr) + ":1"
+         "R:R Min : " + str.tostring(min_rr) + ":1\n" +
+         "Pt Val  : $" + str.tostring(point_value) + "/pt\n" +
+         "Risk $  : $" + str.tostring(risk_dollars)
     info_label := label.new(bar_index, high, info_text, color=session_color, textcolor=color.white, style=label.style_label_left, size=size.small)
 
 bgcolor(in_session ? color.new(color.blue, 92) : na, title="Session Background")
 
 // -----------------------------------------------------------------------------
-// WEBHOOK ALERT MESSAGES (JSON for Python server)
+// END OF SCRIPT
+// One alert per chart needed in TradingView — set webhook to:
+// https://tradingbot-production-1e5a.up.railway.app/webhook/tpt
 // -----------------------------------------------------------------------------
-short_alert_msg =
-     '{"account":"TPT"' +
-     ',"symbol":"'        + symbol_name + '"' +
-     ',"direction":"SHORT"' +
-     ',"timeframe":"5"' +
-     ',"range_high":'     + str.tostring(range_high,        price_format) +
-     ',"range_low":'      + str.tostring(range_low,         price_format) +
-     ',"range_mid":'      + str.tostring(range_mid,         price_format) +
-     ',"bos_extreme":'    + str.tostring(short_sl,          price_format) +
-     ',"entry_price":'    + str.tostring(short_entry_price, price_format) +
-     ',"stop_loss":'      + str.tostring(short_sl,          price_format) +
-     ',"tp1":'            + str.tostring(short_tp1,         price_format) +
-     ',"tp2":'            + str.tostring(short_tp2,         price_format) +
-     ',"rr_to_tp1":'      + str.tostring(short_rr_tp1,      "#.##") +
-     ',"session":"'       + session_name + '"' +
-     ',"bar_time":"'      + str.tostring(year) + "-" + str.tostring(month, "00") + "-" + str.tostring(dayofmonth, "00") + " " + str.tostring(hour, "00") + ":" + str.tostring(minute, "00") + '"' +
-     ',"token":"tpt_xK9mP2qL8nR4vT7w"}'
-
-long_alert_msg =
-     '{"account":"TPT"' +
-     ',"symbol":"'        + symbol_name + '"' +
-     ',"direction":"LONG"' +
-     ',"timeframe":"5"' +
-     ',"range_high":'     + str.tostring(range_high,       price_format) +
-     ',"range_low":'      + str.tostring(range_low,        price_format) +
-     ',"range_mid":'      + str.tostring(range_mid,        price_format) +
-     ',"bos_extreme":'    + str.tostring(long_sl,          price_format) +
-     ',"entry_price":'    + str.tostring(long_entry_price, price_format) +
-     ',"stop_loss":'      + str.tostring(long_sl,          price_format) +
-     ',"tp1":'            + str.tostring(long_tp1,         price_format) +
-     ',"tp2":'            + str.tostring(long_tp2,         price_format) +
-     ',"rr_to_tp1":'      + str.tostring(long_rr_tp1,      "#.##") +
-     ',"session":"'       + session_name + '"' +
-     ',"bar_time":"'      + str.tostring(year) + "-" + str.tostring(month, "00") + "-" + str.tostring(dayofmonth, "00") + " " + str.tostring(hour, "00") + ":" + str.tostring(minute, "00") + '"' +
-     ',"token":"tpt_xK9mP2qL8nR4vT7w"}'
-
-// -----------------------------------------------------------------------------
-// ALERT CONDITIONS
-// Create these manually: Alerts → + New Alert → pick condition → set webhook URL
-// Webhook URL: https://tradingbot-production-1e5a.up.railway.app/webhook/tpt
-// -----------------------------------------------------------------------------
-alertcondition(short_signal, title="TPT SHORT Signal", message="{{short_alert_msg}}")
-alertcondition(long_signal,  title="TPT LONG Signal",  message="{{long_alert_msg}}")

@@ -4,10 +4,27 @@
 // Sessions    : 24/5 (Sunday 5pm ET — Friday 5pm ET)
 // News Filter : Block 30min before/after high impact events
 // Webhook     : /webhook/ftmo
+//
+// Sizing:
+//   Risk basis : $100,000 (FTMO account balance)
+//   Risk/trade : 0.5% = $500 per trade
+//   Lots       : Dynamic — scaled by entry-to-SL distance per instrument
+//
+// Execution: TradingView broker connection (FTMO/OANDA) + Webhook to Railway
 // =============================================================================
 
 //@version=5
-indicator("FTMO Wyckoff BOS Master", overlay=true, max_bars_back=500)
+strategy(
+     title             = "FTMO Wyckoff BOS Master",
+     shorttitle        = "FTMO-BOS",
+     overlay           = true,
+     pyramiding        = 0,
+     default_qty_type  = strategy.fixed,
+     default_qty_value = 0.01,
+     currency          = currency.USD,
+     commission_type   = strategy.commission.cash_per_contract,
+     commission_value  = 0.0
+ )
 
 // =============================================================================
 // INPUTS
@@ -22,6 +39,28 @@ rr_tp2             = input.float(3.5, "R:R Target (TP2)",             group="Ris
 stop_atr_mult      = input.float(1.5, "Stop Loss ATR Multiplier",     group="Risk")
 use_session_filter = input.bool(true, "Use Session Filter",           group="Sessions")
 use_news_filter    = input.bool(true, "Enable News Filter",           group="News Filter")
+
+// =============================================================================
+// SIZING CONSTANTS
+// =============================================================================
+risk_dollars = 500.0   // 0.5% of $100,000 FTMO account balance
+
+// Per-instrument pip/point value (USD per 0.01 lot per pip/point)
+// Standard lot sizes and pip values for OANDA
+// XAUUSD : 1 lot = 100 oz, pip = $0.01/oz → $1/pip per lot → $0.01 per 0.01 lot
+// USOIL  : 1 lot = 1000 barrels, pip = $0.01 → $10/pip per lot
+// US100  : 1 lot = $1/point → $0.01 per 0.01 lot
+// Forex  : standard pip value $10 per lot → $0.10 per 0.01 lot
+
+is_xauusd = str.contains(syminfo.tickerid, "XAU")
+is_usoil  = str.contains(syminfo.tickerid, "OIL") or str.contains(syminfo.tickerid, "WTI") or str.contains(syminfo.tickerid, "USOIL")
+is_us100  = str.contains(syminfo.tickerid, "US100") or str.contains(syminfo.tickerid, "NAS") or str.contains(syminfo.tickerid, "NDX")
+
+// pip value per 0.01 lot in USD
+pip_value_per_001 = is_xauusd ? 0.01 : is_usoil ? 0.10 : is_us100 ? 0.01 : 0.10
+
+// pip size (how many price units = 1 pip)
+pip_size = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
 
 // =============================================================================
 // ATR
@@ -90,7 +129,7 @@ long_condition  = range_confirmed and bos_bull and confirm_bull and session_ok a
 short_condition = range_confirmed and bos_bear and confirm_bear and session_ok and news_ok
 
 // =============================================================================
-// STOPS & TARGETS — plotted so TradingView {{plot}} vars can reference them
+// STOPS & TARGETS
 // =============================================================================
 sl_long  = close - (atr_val * stop_atr_mult)
 sl_short = close + (atr_val * stop_atr_mult)
@@ -100,7 +139,52 @@ tp1_short = close - ((sl_short - close) * rr_target)
 tp2_long  = close + ((close - sl_long)  * rr_tp2)
 tp2_short = close - ((sl_short - close) * rr_tp2)
 
-// Export key values as plots so {{plot_0}} etc work in alert messages
+// =============================================================================
+// DYNAMIC LOT SIZING
+//
+// Formula:
+//   SL distance in pips = (entry - sl) / pip_size
+//   risk per 0.01 lot   = sl_pips × pip_value_per_001
+//   lots (0.01 units)   = risk_dollars / risk_per_001
+//   Final lots          = floor(lots_units) × 0.01, min 0.01
+// =============================================================================
+long_sl_pips    = math.max((close - sl_long)  / pip_size, 0.01)
+short_sl_pips   = math.max((sl_short - close) / pip_size, 0.01)
+
+long_risk_per_001  = long_sl_pips  * pip_value_per_001
+short_risk_per_001 = short_sl_pips * pip_value_per_001
+
+long_lots_raw   = long_risk_per_001  > 0 ? risk_dollars / long_risk_per_001  : 0.01
+short_lots_raw  = short_risk_per_001 > 0 ? risk_dollars / short_risk_per_001 : 0.01
+
+// Round down to nearest 0.01, minimum 0.01
+long_lots   = math.max(0.01, math.floor(long_lots_raw)  * 0.01)
+short_lots  = math.max(0.01, math.floor(short_lots_raw) * 0.01)
+
+// Half size for TP1 partial close
+long_tp1_lots  = math.max(0.01, math.floor(long_lots  / 2 / 0.01) * 0.01)
+short_tp1_lots = math.max(0.01, math.floor(short_lots / 2 / 0.01) * 0.01)
+
+// =============================================================================
+// STRATEGY EXECUTION — AUTO ORDER PLACEMENT VIA OANDA BROKER CONNECTION
+// =============================================================================
+no_position = strategy.position_size == 0
+
+if long_condition and no_position
+    strategy.entry("LONG", strategy.long, qty=long_lots, comment="BOS LONG " + str.tostring(long_lots) + "L")
+    strategy.exit("LONG_TP1", from_entry="LONG", qty=long_tp1_lots, limit=tp1_long,  stop=sl_long,  comment="TP1")
+    strategy.exit("LONG_TP2", from_entry="LONG",                    limit=tp2_long,  stop=sl_long,  comment="TP2+SL")
+    alert('{"account":"FTMO","symbol":"' + syminfo.tickerid + '","direction":"LONG","lots":' + str.tostring(long_lots) + ',"entry_price":' + str.tostring(close) + ',"stop_loss":' + str.tostring(sl_long) + ',"tp1":' + str.tostring(tp1_long) + ',"tp2":' + str.tostring(tp2_long) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+if short_condition and no_position
+    strategy.entry("SHORT", strategy.short, qty=short_lots, comment="BOS SHORT " + str.tostring(short_lots) + "L")
+    strategy.exit("SHORT_TP1", from_entry="SHORT", qty=short_tp1_lots, limit=tp1_short, stop=sl_short, comment="TP1")
+    strategy.exit("SHORT_TP2", from_entry="SHORT",                     limit=tp2_short, stop=sl_short, comment="TP2+SL")
+    alert('{"account":"FTMO","symbol":"' + syminfo.tickerid + '","direction":"SHORT","lots":' + str.tostring(short_lots) + ',"entry_price":' + str.tostring(close) + ',"stop_loss":' + str.tostring(sl_short) + ',"tp1":' + str.tostring(tp1_short) + ',"tp2":' + str.tostring(tp2_short) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+// =============================================================================
+// HIDDEN PLOTS — for {{plot_X}} in alert messages
+// =============================================================================
 plot(sl_long,       "SL Long",    color=na, display=display.none)  // {{plot_0}}
 plot(sl_short,      "SL Short",   color=na, display=display.none)  // {{plot_1}}
 plot(tp1_long,      "TP1 Long",   color=na, display=display.none)  // {{plot_2}}
@@ -112,13 +196,14 @@ plot(range_low,     "R Low",      color=na, display=display.none)  // {{plot_7}}
 plot(range_mid,     "R Mid",      color=na, display=display.none)  // {{plot_8}}
 plot(bos_high_level,"BOS High",   color=na, display=display.none)  // {{plot_9}}
 plot(bos_low_level, "BOS Low",    color=na, display=display.none)  // {{plot_10}}
+plot(long_lots,     "Long Lots",  color=na, display=display.none)  // {{plot_11}}
+plot(short_lots,    "Short Lots", color=na, display=display.none)  // {{plot_12}}
 
 // =============================================================================
-// ALERT CONDITIONS
-// NOTE: Message field is filled in TradingView alert dialog (see below)
+// END OF SCRIPT
+// One alert per chart needed in TradingView — set webhook to:
+// https://tradingbot-production-1e5a.up.railway.app/webhook/ftmo
 // =============================================================================
-alertcondition(long_condition,  title="FTMO LONG Signal",  message="FTMO_LONG")
-alertcondition(short_condition, title="FTMO SHORT Signal", message="FTMO_SHORT")
 
 // =============================================================================
 // VISUAL PLOTS
@@ -137,7 +222,7 @@ bgcolor(news_blocked ? color.new(color.orange, 90) : na, title="News Block")
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 9, bgcolor=color.new(color.black, 70), border_width=1)
 if barstate.islast
     table.cell(info, 0, 0, "FTMO BOT",      text_color=color.white,  text_size=size.normal)
     table.cell(info, 1, 0, "4H+1H WYC BOS", text_color=color.yellow)
@@ -155,3 +240,5 @@ if barstate.islast
     table.cell(info, 1, 6, str.tostring(math.round(atr_val, 2)),        text_color=color.white)
     table.cell(info, 0, 7, "R:R",            text_color=color.gray)
     table.cell(info, 1, 7, str.tostring(rr_target) + " / " + str.tostring(rr_tp2), text_color=color.white)
+    table.cell(info, 0, 8, "Risk $",         text_color=color.gray)
+    table.cell(info, 1, 8, "$" + str.tostring(risk_dollars) + " / trade (0.5%)", text_color=color.white)
