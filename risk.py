@@ -39,12 +39,23 @@ tpt_state = {
     "killed":             _saved.get("tpt", {}).get("killed", False),
     "daily_pnl":          _saved.get("tpt", {}).get("daily_pnl", 0.0),
     "account_balance":    _saved.get("tpt", {}).get("account_balance", TPT_ACCOUNT_SIZE),
+    # Dashboard additions
+    "daily_signals":      _saved.get("tpt", {}).get("daily_signals", 0),
+    "daily_wins":         _saved.get("tpt", {}).get("daily_wins", 0),
+    "daily_losses":       _saved.get("tpt", {}).get("daily_losses", 0),
+    "last_signal":        _saved.get("tpt", {}).get("last_signal", None),   # full payload from Pine Script
+    "trades":             _saved.get("tpt", {}).get("trades", []),           # last 20 trades
 }
 
 ftmo_state = {
     "daily_pnl":          _saved.get("ftmo", {}).get("daily_pnl", 0.0),
     "consecutive_losses": _saved.get("ftmo", {}).get("consecutive_losses", 0),
     "account_balance":    _saved.get("ftmo", {}).get("account_balance", FTMO_ACCOUNT_SIZE),
+    # Dashboard additions
+    "daily_signals":      _saved.get("ftmo", {}).get("daily_signals", 0),
+    "daily_wins":         _saved.get("ftmo", {}).get("daily_wins", 0),
+    "daily_losses":       _saved.get("ftmo", {}).get("daily_losses", 0),
+    "trades":             _saved.get("ftmo", {}).get("trades", []),           # last 20 trades
 }
 
 # Save immediately so file always exists after first startup
@@ -115,10 +126,55 @@ def record_tpt_result(won: bool):
     if won:
         tpt_state["consecutive_losses"] = 0
         tpt_state["killed"] = False
+        tpt_state["daily_wins"] += 1
     else:
         tpt_state["consecutive_losses"] += 1
+        tpt_state["daily_losses"] += 1
         if tpt_state["consecutive_losses"] >= MAX_CONSEC_LOSSES:
             tpt_state["killed"] = True
+    _save_state()
+
+
+def record_tpt_signal(payload: dict):
+    """Store the last incoming Pine Script payload so dashboard can show live levels."""
+    from datetime import datetime
+    import pytz
+    ct = pytz.timezone("America/Chicago")
+    tpt_state["daily_signals"] += 1
+    tpt_state["last_signal"] = {
+        "time":        datetime.now(ct).strftime("%H:%M"),
+        "instrument":  payload.get("instrument", payload.get("symbol", "MNQ")),
+        "direction":   payload.get("direction", ""),
+        "price":       payload.get("price", payload.get("entry_price")),
+        "sl":          payload.get("sl", payload.get("stop_loss")),
+        "tp1":         payload.get("tp1"),
+        "tp2":         payload.get("tp2"),
+        "contracts":   payload.get("contracts"),
+        "retrace_pts": payload.get("retrace_pts"),
+        "atr":         payload.get("atr"),
+        "rr":          payload.get("rr_to_tp1"),
+        "bos_level":   payload.get("bos_level"),
+    }
+    _save_state()
+
+
+def record_tpt_trade(trade: dict):
+    """Append completed trade to rolling log (max 20 kept)."""
+    tpt_state["trades"].append(trade)
+    tpt_state["trades"] = tpt_state["trades"][-20:]  # keep last 20 only
+    _save_state()
+
+
+def record_ftmo_signal():
+    """Increment FTMO daily signal count."""
+    ftmo_state["daily_signals"] += 1
+    _save_state()
+
+
+def record_ftmo_trade(trade: dict):
+    """Append completed FTMO trade to rolling log (max 20 kept)."""
+    ftmo_state["trades"].append(trade)
+    ftmo_state["trades"] = ftmo_state["trades"][-20:]
     _save_state()
 
 
@@ -127,6 +183,19 @@ def reset_tpt_daily():
     tpt_state["consecutive_losses"] = 0
     tpt_state["killed"]             = False
     tpt_state["daily_pnl"]          = 0.0
+    tpt_state["daily_signals"]      = 0
+    tpt_state["daily_wins"]         = 0
+    tpt_state["daily_losses"]       = 0
+    _save_state()
+
+
+def reset_ftmo_daily():
+    """Called at midnight CT by scheduler."""
+    ftmo_state["consecutive_losses"] = 0
+    ftmo_state["daily_pnl"]          = 0.0
+    ftmo_state["daily_signals"]      = 0
+    ftmo_state["daily_wins"]         = 0
+    ftmo_state["daily_losses"]       = 0
     _save_state()
 
 
@@ -156,13 +225,8 @@ def update_ftmo_outcome(won: bool, pnl: float = None):
         ftmo_state["account_balance"] += pnl
     if won:
         ftmo_state["consecutive_losses"] = 0
+        ftmo_state["daily_wins"] += 1
     else:
         ftmo_state["consecutive_losses"] += 1
-    _save_state()
-
-
-def reset_ftmo_daily():
-    """Called at midnight CT by scheduler."""
-    ftmo_state["consecutive_losses"] = 0
-    ftmo_state["daily_pnl"]          = 0.0
+        ftmo_state["daily_losses"] += 1
     _save_state()
