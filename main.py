@@ -18,26 +18,59 @@ def ct_now():
 def log(msg):
     print(f"[{ct_now().strftime('%Y-%m-%d %H:%M:%S')} CT] {msg}", flush=True)
 
-# ── TPT Kill Switch (3:55 PM CT) ───────────────────────────
+# ── TPT Kill Switch (3:55 PM CT, Mon–Thu only) ────────────
 def tpt_kill():
+    if ct_now().weekday() in (5, 6):  # Sat/Sun — skip, weekend handles it
+        return
     tpt_state["killed"] = True
     from risk import _save_state
     _save_state()
     log("TPT kill switch fired — maintenance window 3:55–5:00 PM CT")
     send_telegram("🛑 *TPT Kill Switch*\nMarket entering maintenance window.\nSignals resume at 5:00 PM CT.")
 
-# ── TPT Hard Close Warning (3:53 PM CT) ───────────────────
+# ── TPT Hard Close Warning (3:53 PM CT, Mon–Thu only) ─────
 def tpt_close_warning():
+    if ct_now().weekday() in (5, 6):  # Sat/Sun — skip
+        return
     log("TPT 2-min warning — close any open positions now")
     send_telegram("⚠️ *TPT 2-Min Warning*\nClose all open TPT positions — hard cutoff at 3:55 PM CT.")
 
-# ── TPT Market Reopen (5:00 PM CT) ────────────────────────
+# ── TPT Market Reopen (5:00 PM CT, Tue–Fri only) ──────────
 def tpt_reopen():
+    if ct_now().weekday() in (5, 6):  # Sat/Sun — skip, weekend handles it
+        return
     tpt_state["killed"] = False
     from risk import _save_state
     _save_state()
     log("TPT market reopen — signals active (full futures session)")
     send_telegram("🟢 *TPT Market Open*\nFutures session live — signals active 5:00 PM CT.")
+
+# ── Weekend Kill (Friday 4:00 PM CT) ──────────────────────
+def tpt_weekend_kill():
+    if ct_now().weekday() != 4:  # Only Friday (0=Mon … 4=Fri)
+        return
+    tpt_state["killed"] = True
+    from risk import _save_state
+    _save_state()
+    log("TPT weekend kill fired — bot offline until Sunday 5:00 PM CT")
+    send_telegram("🛑 *TPT Weekend Shutdown*\nMarkets closed for the weekend.\nSignals resume Sunday 5:00 PM CT.")
+
+# ── Weekend Kill Warning (Friday 3:58 PM CT) ──────────────
+def tpt_weekend_kill_warning():
+    if ct_now().weekday() != 4:  # Only Friday
+        return
+    log("TPT weekend 2-min warning — close all positions, shutting down for weekend")
+    send_telegram("⚠️ *TPT Weekend Warning*\nClose all open TPT positions — weekend shutdown at 4:00 PM CT.")
+
+# ── Weekend Reopen (Sunday 5:00 PM CT) ────────────────────
+def tpt_weekend_reopen():
+    if ct_now().weekday() != 6:  # Only Sunday (6=Sun)
+        return
+    tpt_state["killed"] = False
+    from risk import _save_state
+    _save_state()
+    log("TPT weekend reopen — Asian session live, signals active")
+    send_telegram("🟢 *TPT Weekend Open*\nFutures session live — Asian session open, signals active.")
 
 # ── Midnight Reset ─────────────────────────────────────────
 def midnight_reset():
@@ -56,18 +89,30 @@ def heartbeat():
 
 # ── Scheduler setup ────────────────────────────────────────
 def run_scheduler():
-    # TPT
-    schedule.every().day.at("15:53").do(tpt_close_warning)
-    schedule.every().day.at("15:55").do(tpt_kill)
-    schedule.every().day.at("17:00").do(tpt_reopen)
+    # ── Weekday cycle (Mon–Thu) ────────────────────────────
+    # Guards inside each function handle day filtering since
+    # the `schedule` library runs .day jobs every day.
+    schedule.every().day.at("15:53").do(tpt_close_warning)   # Mon–Thu warning (skips Sat/Sun)
+    schedule.every().day.at("15:55").do(tpt_kill)             # Mon–Thu kill   (skips Sat/Sun)
+    schedule.every().day.at("17:00").do(tpt_reopen)           # Tue–Fri reopen (skips Sat/Sun)
 
-    # Daily resets (both accounts) — midnight CT
+    # ── Weekend cycle ──────────────────────────────────────
+    schedule.every().day.at("15:58").do(tpt_weekend_kill_warning)  # Fri only — 2-min weekend warning
+    schedule.every().day.at("16:00").do(tpt_weekend_kill)          # Fri only — weekend shutdown
+    schedule.every().day.at("17:00").do(tpt_weekend_reopen)        # Sun only — Asian session open
+
+    # ── Daily resets (both accounts) — midnight CT ─────────
     schedule.every().day.at("00:00").do(midnight_reset)
 
-    # Heartbeat every hour
+    # ── Heartbeat (keeps Railway alive) ───────────────────
     schedule.every().hour.do(heartbeat)
 
-    log("Scheduler started — TPT kill 15:55 CT | reopen 17:00 CT | resets 00:00 CT | heartbeat hourly")
+    log(
+        "Scheduler started — "
+        "Weekday kill 15:55 CT | reopen 17:00 CT | "
+        "Weekend kill Fri 16:00 CT | reopen Sun 17:00 CT | "
+        "resets 00:00 CT | heartbeat hourly"
+    )
 
     while True:
         schedule.run_pending()
