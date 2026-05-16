@@ -3,13 +3,7 @@ from datetime import datetime
 import pytz
 
 from config import TPT_WEBHOOK_TOKEN, FTMO_WEBHOOK_TOKEN
-from risk import (
-    check_tpt_risk, check_ftmo_risk,
-    tpt_state, ftmo_state,
-    update_ftmo_outcome,
-    record_tpt_signal, record_tpt_trade,
-    record_ftmo_signal, record_ftmo_trade,
-)
+from risk import check_tpt_risk, check_ftmo_risk, tpt_state, update_ftmo_outcome
 from notifier import send_telegram
 from logger import log_trade_event, log_ftmo_lifecycle, init_db
 
@@ -24,16 +18,11 @@ def ct_now():
 
 def is_tpt_killed():
     now = ct_now()
+    # Manual kill switch (2 consecutive losses)
     if tpt_state["killed"]:
         return True
+    # Maintenance window: 3:55 PM – 5:00 PM CT (exchange closed)
     if (now.hour == 15 and now.minute >= 55) or now.hour == 16:
-        return True
-    # Weekend: Fri 4pm CT through Sun 5pm CT
-    if now.weekday() == 4 and now.hour >= 16:
-        return True
-    if now.weekday() == 5:
-        return True
-    if now.weekday() == 6 and now.hour < 17:
         return True
     return False
 
@@ -87,7 +76,6 @@ def webhook_tpt():
         f"Contracts: `{contracts}`"
         f"{rr_line}"
     )
-    record_tpt_signal(data)
     send_telegram(msg)
 
     return jsonify({"status": "approved", "contracts": contracts}), 200
@@ -137,7 +125,6 @@ def handle_ftmo_signal(data):
         f"Lot Size: `{risk['lot_size']}`\n"
         f"Risk: `${risk['risk_dollars']}`"
     )
-    record_ftmo_signal()
     send_telegram(msg)
 
     return jsonify({"status": "approved", "lot_size": risk["lot_size"]}), 200
@@ -226,53 +213,11 @@ def reset_tpt():
 @app.route("/state", methods=["GET"])
 def state():
     now = ct_now()
-    tpt_wins   = tpt_state.get("daily_wins", 0)
-    tpt_losses = tpt_state.get("daily_losses", 0)
-    tpt_total  = tpt_wins + tpt_losses
-    tpt_wr     = round((tpt_wins / tpt_total) * 100) if tpt_total > 0 else 0
-
-    ftmo_wins   = ftmo_state.get("daily_wins", 0)
-    ftmo_losses = ftmo_state.get("daily_losses", 0)
-    ftmo_total  = ftmo_wins + ftmo_losses
-    ftmo_wr     = round((ftmo_wins / ftmo_total) * 100) if ftmo_total > 0 else 0
-
     return jsonify({
-        # ── Meta ──────────────────────────────────────────────
-        "time_ct":            now.strftime("%Y-%m-%d %H:%M:%S"),
-        "is_weekend":         now.weekday() in (5, 6),
-        "is_maintenance":     is_maintenance_window(),
-
-        # ── TPT ───────────────────────────────────────────────
-        "tpt_killed":             tpt_state["killed"],
-        "is_tpt_killed":          is_tpt_killed(),
+        "time_ct": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "tpt_killed": tpt_state["killed"],
         "tpt_consecutive_losses": tpt_state.get("consecutive_losses", 0),
-        "tpt_account_balance":    tpt_state.get("account_balance", 0),
-        "tpt_daily_pnl":          round(tpt_state.get("daily_pnl", 0.0), 2),
-        "tpt_daily_signals":      tpt_state.get("daily_signals", 0),
-        "tpt_daily_wins":         tpt_wins,
-        "tpt_daily_losses":       tpt_losses,
-        "tpt_win_rate":           tpt_wr,
-        "tpt_last_signal":        tpt_state.get("last_signal"),
-        "tpt_trades":             tpt_state.get("trades", [])[-5:],  # last 5
-
-        # ── FTMO ──────────────────────────────────────────────
-        "ftmo_account_balance":    ftmo_state.get("account_balance", 0),
-        "ftmo_daily_pnl":          round(ftmo_state.get("daily_pnl", 0.0), 2),
-        "ftmo_daily_signals":      ftmo_state.get("daily_signals", 0),
-        "ftmo_daily_wins":         ftmo_wins,
-        "ftmo_daily_losses":       ftmo_losses,
-        "ftmo_win_rate":           ftmo_wr,
-        "ftmo_consecutive_losses": ftmo_state.get("consecutive_losses", 0),
-        "ftmo_trades":             ftmo_state.get("trades", [])[-5:],
-    }), 200
-
-
-# ── Full Trade History Endpoint ────────────────────────────
-@app.route("/trades", methods=["GET"])
-def trades():
-    return jsonify({
-        "tpt":  tpt_state.get("trades", []),
-        "ftmo": ftmo_state.get("trades", []),
+        "is_tpt_killed": is_tpt_killed(),
     }), 200
 
 
@@ -280,3 +225,13 @@ def trades():
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "time": ct_now().isoformat()}), 200
+
+# ── Dashboard HTML ──────────────────────────────────────────
+@app.route("/dashboard", methods=["GET"])
+def dashboard():
+    import os
+    from flask import send_file, Response
+    dash_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
+    if os.path.exists(dash_path):
+        return send_file(dash_path, mimetype="text/html")
+    return Response("<h1>dashboard.html not found in repo</h1>", mimetype="text/html"), 404
