@@ -76,6 +76,12 @@ def tpt_weekend_reopen():
 def midnight_reset():
     reset_tpt_daily()
     reset_ftmo_daily()
+    # Monday midnight — reset FTMO weekly consecutive loss counter
+    if ct_now().weekday() == 0:  # 0 = Monday
+        from risk import reset_ftmo_weekly
+        reset_ftmo_weekly()
+        log("FTMO weekly reset — consecutive loss counter cleared")
+        send_telegram("🔄 *FTMO Weekly Reset*\nConsecutive loss counter cleared — new week active.")
     log("Midnight reset — TPT & FTMO daily counters cleared")
     send_telegram("🔄 *Midnight Reset*\nTPT & FTMO daily P&L and loss counters reset.")
 

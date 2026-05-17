@@ -204,7 +204,6 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="row"><span class="rl">Maint. Window</span><span class="rv" id="maint-badge">--</span></div>
     <div class="row"><span class="rl">Weekend Mode</span><span class="bd" id="wknd-badge">--</span></div>
     <div class="row"><span class="rl">Railway State</span><span class="rv" style="color:var(--g)">Persistent</span></div>
-    <div class="row"><span class="rl">Consec. Losses</span><span class="rv" id="consec-val">0 / 2</span></div>
     <div class="row"><span class="rl">Last Updated</span><span class="rv" style="color:var(--t3)" id="last-update">--</span></div>
   </div>
 
@@ -285,7 +284,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:8px;color:var(--t3)">
       <span>Signals today: <span style="color:var(--t2)" id="tpt-sigs">0</span></span>
       <span>W/L: <span style="color:var(--t2)" id="tpt-wl">0 / 0</span></span>
-      <span>Consec. L: <span id="consec-val" style="color:var(--t1)">0/2</span></span>
+      <span>Consec L: <span id="consec-val" style="color:var(--t1)">0/2</span></span>
     </div>
   </div>
 
@@ -382,19 +381,28 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
         <div id="ftmo-profit-bar" style="height:5px;border-radius:2px;background:var(--g);width:0%;transition:width 1s ease"></div>
       </div>
     </div>
-    <!-- Drawdown bar -->
-    <div>
+    <!-- Max drawdown bar -->
+    <div style="margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
-        <span>Drawdown Used</span><span id="ftmo-dd-pct">0%</span>
+        <span>Max Drawdown Used</span><span id="ftmo-dd-pct">0%</span>
       </div>
       <div style="background:var(--bg3);border-radius:2px;height:5px">
         <div id="ftmo-dd-bar" style="height:5px;border-radius:2px;background:var(--r);width:0%;transition:width 1s ease"></div>
       </div>
     </div>
+    <!-- Daily hard loss bar -->
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
+        <span>Daily Loss Used <span style="color:var(--t3)">(limit $5,000)</span></span><span id="ftmo-dl-pct">0%</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:2px;height:5px">
+        <div id="ftmo-dl-bar" style="height:5px;border-radius:2px;background:var(--a);width:0%;transition:width 1s ease"></div>
+      </div>
+    </div>
     <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:8px;color:var(--t3)">
       <span>Signals: <span style="color:var(--t2)" id="ftmo-sigs">0</span></span>
       <span>W/L: <span style="color:var(--t2)" id="ftmo-wl">0 / 0</span></span>
-      <span>One-time fee ✓</span>
+      <span>Wk Consec L: <span id="ftmo-wcl" style="color:var(--t1)">0/4</span></span>
     </div>
   </div>
 
@@ -610,12 +618,6 @@ function updateDashboard(d) {
   wb.textContent = d.is_weekend ? 'YES' : 'NO';
   wb.className = 'bd ' + (d.is_weekend ? 'ba' : 'bdim');
 
-  // ── Consecutive losses ──────────────────────────────────
-  const cl = d.tpt_consecutive_losses || 0;
-  const cv = document.getElementById('consec-val');
-  cv.textContent = cl + ' / 2';
-  cv.style.color = cl >= 2 ? 'var(--r)' : cl === 1 ? 'var(--a)' : 'var(--t1)';
-
   // ── Balances ────────────────────────────────────────────
   document.getElementById('tpt-bal').textContent = fmtBal(d.tpt_account_balance || 150000);
   document.getElementById('ftmo-bal').textContent = fmtBal(d.ftmo_account_balance || 100000);
@@ -680,11 +682,27 @@ function updateDashboard(d) {
   const ftmoProfitPct = Math.min(100, Math.round((ftmoProfit / FTMO_TARGET) * 100));
   const ftmoDDUsed = Math.max(0, FTMO_START - ftmoBal);
   const ftmoDDPct = Math.min(100, Math.round((ftmoDDUsed / FTMO_MAX_DD) * 100));
+  const ftmoDailyLoss = Math.max(0, -(d.ftmo_daily_pnl || 0));
+  const ftmoDLPct = Math.min(100, Math.round((ftmoDailyLoss / 5000) * 100));
+
   document.getElementById('ftmo-profit-pct').textContent = ftmoProfitPct + '%';
   document.getElementById('ftmo-profit-bar').style.width = ftmoProfitPct + '%';
   document.getElementById('ftmo-dd-pct').textContent = ftmoDDPct + '%';
   document.getElementById('ftmo-dd-bar').style.width = ftmoDDPct + '%';
   document.getElementById('ftmo-dd-bar').style.background = ftmoDDPct > 70 ? 'var(--r)' : ftmoDDPct > 40 ? 'var(--a)' : 'var(--r)';
+  document.getElementById('ftmo-dl-pct').textContent = ftmoDLPct + '%';
+  document.getElementById('ftmo-dl-bar').style.width = ftmoDLPct + '%';
+  document.getElementById('ftmo-dl-bar').style.background = ftmoDLPct > 80 ? 'var(--r)' : 'var(--a)';
+
+  // FTMO weekly consec losses
+  const fwcl = d.ftmo_weekly_consec_losses || 0;
+  const fwclEl = document.getElementById('ftmo-wcl');
+  if (fwclEl) { fwclEl.textContent = fwcl + '/4'; fwclEl.style.color = fwcl >= 3 ? 'var(--r)' : fwcl >= 2 ? 'var(--a)' : 'var(--t1)'; }
+
+  // TPT consec losses
+  const cl = d.tpt_consecutive_losses || 0;
+  const cv = document.getElementById('consec-val');
+  if (cv) { cv.textContent = cl + '/2'; cv.style.color = cl >= 2 ? 'var(--r)' : cl === 1 ? 'var(--a)' : 'var(--t1)'; }
 
   // ── Last signal / key levels ────────────────────────────
   if (d.tpt_last_signal) {
@@ -1181,13 +1199,34 @@ function doKill() {
   setTimeout(() => { btn.innerHTML = '&#9211; EMERGENCY KILL'; btn.style.background = ''; }, 2500);
 }
 
-// ── News Feed ──────────────────────────────────────────────
+// ── News Feed — rss2json.com (free, no key, browser-side) ─
+const RSS_FEEDS = [
+  { url: 'https://finance.yahoo.com/rss/topstories',           cat: 'Markets'   },
+  { url: 'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines', cat: 'MarketWatch' },
+  { url: 'https://finance.yahoo.com/rss/industry?industry=gold', cat: 'Gold/Comm' },
+];
+
 async function fetchNews() {
   try {
-    const res = await fetch(RAILWAY_URL + '/news', {cache:'no-store'});
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    renderNews(data.articles || []);
+    const results = await Promise.allSettled(RSS_FEEDS.map(f =>
+      fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(f.url)}&count=2`)
+        .then(r => r.json())
+        .then(d => (d.items || []).map(i => ({ title: i.title, link: i.link, pub: i.pubDate, category: f.cat })))
+    ));
+    const articles = [];
+    const seen = new Set();
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        for (const a of r.value) {
+          if (!seen.has(a.title) && articles.length < 6) {
+            seen.add(a.title);
+            articles.push(a);
+          }
+        }
+      }
+    }
+    if (articles.length) renderNews(articles);
+    else throw new Error('no articles');
   } catch(e) {
     console.warn('News fetch failed:', e);
     document.getElementById('news-feed').innerHTML =

@@ -246,7 +246,10 @@ def state():
         "ftmo_daily_wins":      ftmo_wins,
         "ftmo_daily_losses":    ftmo_losses,
         "ftmo_win_rate":        ftmo_wr,
-        "ftmo_consecutive_losses": ftmo_state.get("consecutive_losses", 0),
+        "ftmo_consecutive_losses":        ftmo_state.get("consecutive_losses", 0),
+        "ftmo_weekly_consec_losses":      ftmo_state.get("weekly_consec_losses", 0),
+        "ftmo_killed":                    ftmo_state.get("killed", False),
+        "ftmo_daily_loss_limit":          5000,
         "ftmo_trades":          ftmo_state.get("trades", [])[-5:],
     }), 200
 
@@ -282,7 +285,64 @@ def trades():
     }), 200
 
 
-# ── Dashboard ──────────────────────────────────────────────
+# ── News Endpoint — Yahoo Finance RSS proxy ────────────────
+import urllib.request
+import xml.etree.ElementTree as ET
+import time as _time
+
+_news_cache = {"data": [], "ts": 0}
+NEWS_TTL = 900  # 15 minutes
+
+YAHOO_FEEDS = [
+    ("Markets",      "https://finance.yahoo.com/rss/topstories"),
+    ("Gold/Comm",    "https://finance.yahoo.com/rss/industry?industry=gold"),
+    ("US Indices",   "https://finance.yahoo.com/rss/industry?industry=financial"),
+]
+
+def _fetch_rss(url: str, label: str, n: int = 2) -> list:
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            tree = ET.parse(r)
+        items = tree.findall(".//item")[:n]
+        results = []
+        for item in items:
+            title = (item.findtext("title") or "").strip()
+            link  = (item.findtext("link")  or "").strip()
+            pub   = (item.findtext("pubDate") or "").strip()
+            if title:
+                results.append({"title": title, "link": link, "pub": pub, "category": label})
+        return results
+    except Exception as e:
+        print(f"[news] RSS fetch failed ({label}): {e}", flush=True)
+        return []
+
+@app.route("/news", methods=["GET"])
+def news():
+    global _news_cache
+    now = _time.time()
+    if now - _news_cache["ts"] < NEWS_TTL and _news_cache["data"]:
+        return jsonify({"articles": _news_cache["data"], "cached": True}), 200
+
+    articles = []
+    for label, url in YAHOO_FEEDS:
+        articles += _fetch_rss(url, label, n=2)
+
+    # Deduplicate by title, keep max 6
+    seen = set()
+    unique = []
+    for a in articles:
+        if a["title"] not in seen:
+            seen.add(a["title"])
+            unique.append(a)
+        if len(unique) >= 6:
+            break
+
+    _news_cache = {"data": unique, "ts": now}
+    return jsonify({"articles": unique, "cached": False}), 200
+
+
+
 @app.route("/dashboard", methods=["GET"])
 def dashboard():
     dash_path = os.path.join(os.path.dirname(__file__), "dashboard.html")

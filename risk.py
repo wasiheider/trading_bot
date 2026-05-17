@@ -62,15 +62,17 @@ tpt_state = {
 }
 
 ftmo_state = {
-    "daily_pnl":          _saved.get("ftmo", {}).get("daily_pnl", 0.0),
-    "consecutive_losses": _saved.get("ftmo", {}).get("consecutive_losses", 0),
-    "account_balance":    _saved.get("ftmo", {}).get("account_balance",
-                              _load_balance_from_trades("ftmo", FTMO_ACCOUNT_SIZE)),
+    "daily_pnl":              _saved.get("ftmo", {}).get("daily_pnl", 0.0),
+    "consecutive_losses":     _saved.get("ftmo", {}).get("consecutive_losses", 0),
+    "weekly_consec_losses":   _saved.get("ftmo", {}).get("weekly_consec_losses", 0),
+    "killed":                 _saved.get("ftmo", {}).get("killed", False),
+    "account_balance":        _saved.get("ftmo", {}).get("account_balance",
+                                  _load_balance_from_trades("ftmo", FTMO_ACCOUNT_SIZE)),
     # Dashboard additions
-    "daily_signals":      _saved.get("ftmo", {}).get("daily_signals", 0),
-    "daily_wins":         _saved.get("ftmo", {}).get("daily_wins", 0),
-    "daily_losses":       _saved.get("ftmo", {}).get("daily_losses", 0),
-    "trades":             _saved.get("ftmo", {}).get("trades", []),           # last 20 trades
+    "daily_signals":          _saved.get("ftmo", {}).get("daily_signals", 0),
+    "daily_wins":             _saved.get("ftmo", {}).get("daily_wins", 0),
+    "daily_losses":           _saved.get("ftmo", {}).get("daily_losses", 0),
+    "trades":                 _saved.get("ftmo", {}).get("trades", []),
 }
 
 # Save immediately so file always exists after first startup
@@ -204,18 +206,37 @@ def reset_tpt_daily():
     _save_state()
 
 
+FTMO_DAILY_LOSS_LIMIT  = 5000.0   # FTMO hard daily loss limit
+FTMO_MAX_WEEKLY_LOSSES = 4        # max consecutive losses per week
+
 def reset_ftmo_daily():
-    """Called at midnight CT by scheduler."""
-    ftmo_state["consecutive_losses"] = 0
+    """Called at midnight CT by scheduler — resets daily counters only."""
     ftmo_state["daily_pnl"]          = 0.0
     ftmo_state["daily_signals"]      = 0
     ftmo_state["daily_wins"]         = 0
     ftmo_state["daily_losses"]       = 0
+    ftmo_state["consecutive_losses"] = 0  # daily consec resets each day
+    _save_state()
+
+
+def reset_ftmo_weekly():
+    """Called Monday midnight CT — resets weekly consecutive loss counter."""
+    ftmo_state["weekly_consec_losses"] = 0
+    ftmo_state["killed"]               = False
     _save_state()
 
 
 def check_ftmo_risk(instrument: str, sl_pips: int = None) -> dict:
     """Gate check before allowing an FTMO signal through."""
+    # Weekly consecutive loss kill
+    if ftmo_state.get("killed", False):
+        wl = ftmo_state.get("weekly_consec_losses", 0)
+        return {"allowed": False, "reason": f"FTMO killed — {wl} consecutive losses this week (limit {FTMO_MAX_WEEKLY_LOSSES}). Resets Monday."}
+
+    # Daily hard loss limit
+    if ftmo_state["daily_pnl"] <= -FTMO_DAILY_LOSS_LIMIT:
+        return {"allowed": False, "reason": f"FTMO daily loss limit hit (${FTMO_DAILY_LOSS_LIMIT:,.0f}). Resumes tomorrow."}
+
     cfg = FTMO_INSTRUMENT_CONFIG.get(instrument.upper())
     if not cfg:
         return {"allowed": False, "reason": f"Unknown FTMO instrument: {instrument}"}
@@ -236,12 +257,16 @@ def check_ftmo_risk(instrument: str, sl_pips: int = None) -> dict:
 def update_ftmo_outcome(won: bool, pnl: float = None):
     """Call this after each FTMO trade closes."""
     if pnl is not None:
-        ftmo_state["daily_pnl"] += pnl
+        ftmo_state["daily_pnl"]       += pnl
         ftmo_state["account_balance"] += pnl
     if won:
-        ftmo_state["consecutive_losses"] = 0
-        ftmo_state["daily_wins"] += 1
+        ftmo_state["consecutive_losses"]   = 0
+        ftmo_state["weekly_consec_losses"] = 0
+        ftmo_state["daily_wins"]          += 1
     else:
-        ftmo_state["consecutive_losses"] += 1
-        ftmo_state["daily_losses"] += 1
+        ftmo_state["consecutive_losses"]   += 1
+        ftmo_state["weekly_consec_losses"] += 1
+        ftmo_state["daily_losses"]         += 1
+        if ftmo_state["weekly_consec_losses"] >= FTMO_MAX_WEEKLY_LOSSES:
+            ftmo_state["killed"] = True
     _save_state()
