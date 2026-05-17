@@ -1199,32 +1199,13 @@ function doKill() {
   setTimeout(() => { btn.innerHTML = '&#9211; EMERGENCY KILL'; btn.style.background = ''; }, 2500);
 }
 
-// ── News Feed — rss2json.com (free, no key, browser-side) ─
-const RSS_FEEDS = [
-  { url: 'https://finance.yahoo.com/rss/topstories',           cat: 'Markets'   },
-  { url: 'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines', cat: 'MarketWatch' },
-  { url: 'https://finance.yahoo.com/rss/industry?industry=gold', cat: 'Gold/Comm' },
-];
-
+// ── News Feed — via Railway /news proxy ────────────────────
 async function fetchNews() {
   try {
-    const results = await Promise.allSettled(RSS_FEEDS.map(f =>
-      fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(f.url)}&count=2`)
-        .then(r => r.json())
-        .then(d => (d.items || []).map(i => ({ title: i.title, link: i.link, pub: i.pubDate, category: f.cat })))
-    ));
-    const articles = [];
-    const seen = new Set();
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        for (const a of r.value) {
-          if (!seen.has(a.title) && articles.length < 6) {
-            seen.add(a.title);
-            articles.push(a);
-          }
-        }
-      }
-    }
+    const res = await fetch('/news');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const articles = data.articles || [];
     if (articles.length) renderNews(articles);
     else throw new Error('no articles');
   } catch(e) {
