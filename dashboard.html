@@ -183,7 +183,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="sep"></div>
     <div class="acct">
       <div class="acct-lbl">OANDA FTMO</div>
-      <div class="acct-val" style="color:var(--t2)" id="ftmo-bal">$100,000</div>
+      <div class="acct-val" style="color:var(--g)" id="ftmo-bal">$100,000</div>
     </div>
     <div class="sep"></div>
     <div style="font-size:9px;color:var(--a);border:1px solid var(--ab);background:var(--ad);padding:4px 10px;border-radius:2px;letter-spacing:.5px">Fed: 3.50–3.75%</div>
@@ -204,8 +204,6 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="row"><span class="rl">Maint. Window</span><span class="rv" id="maint-badge">--</span></div>
     <div class="row"><span class="rl">Weekend Mode</span><span class="bd" id="wknd-badge">--</span></div>
     <div class="row"><span class="rl">Railway State</span><span class="rv" style="color:var(--g)">Persistent</span></div>
-    <div class="row"><span class="rl">Drawdown Basis</span><span class="rv" style="color:var(--a)">$45,000</span></div>
-    <div class="row"><span class="rl">Contracts</span><span class="rv">2–5 MNQ</span></div>
     <div class="row"><span class="rl">Consec. Losses</span><span class="rv" id="consec-val">0 / 2</span></div>
     <div class="row"><span class="rl">Last Updated</span><span class="rv" style="color:var(--t3)" id="last-update">--</span></div>
   </div>
@@ -218,9 +216,16 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       <div class="sb"><div class="sl2">Signals</div><div class="sv2" id="tpt-sigs">0</div></div>
       <div class="sb"><div class="sl2">W / L</div><div class="sv2" id="tpt-wl" style="font-size:12px">0 / 0</div></div>
     </div>
-    <div class="row"><span class="rl">FTMO Daily P&L</span><span class="rv" id="ftmo-pnl">$0.00</span></div>
-    <div class="row"><span class="rl">FTMO Win Rate</span><span class="rv" id="ftmo-wr">0%</span></div>
-    <div class="row"><span class="rl">FTMO Signals</span><span class="rv" id="ftmo-sigs">0</span></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">FTMO Performance</div>
+    <div class="sg">
+      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="ftmo-pnl-col">+$0.00</div></div>
+      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="ftmo-wr-col">0%</div></div>
+      <div class="sb"><div class="sl2">Signals</div><div class="sv2" id="ftmo-sigs-col">0</div></div>
+      <div class="sb"><div class="sl2">W / L</div><div class="sv2" id="ftmo-wl-col" style="font-size:12px">0 / 0</div></div>
+    </div>
   </div>
 
   <div class="card">
@@ -486,38 +491,13 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 <div class="col">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Geopolitical Risk</span>
-      <span class="bd br">ELEVATED</span>
+      <span class="ct" style="margin:0">Market News</span>
+      <span class="live-badge"><span class="live-dot"></span>LIVE</span>
     </div>
-    <div class="geo">
-      <div class="geo-top"><span class="geo-name">&#128293; Middle East / Iran</span><span class="geo-score" style="color:var(--r)">92</span></div>
-      <div class="geo-bg"><div class="geo-fill" style="width:92%;background:var(--r)"></div></div>
-      <div class="geo-desc">Strait of Hormuz risk. US-Israel ops ongoing. Trump ceasefire Apr 7 fragile.</div>
-    </div>
-    <div class="geo">
-      <div class="geo-top"><span class="geo-name">&#9888; US–China Trade War</span><span class="geo-score" style="color:var(--a)">78</span></div>
-      <div class="geo-bg"><div class="geo-fill" style="width:78%;background:var(--a)"></div></div>
-      <div class="geo-desc">90-day tariff pause active. May Trump/Xi summit expected. Tech tariffs persist.</div>
-    </div>
-    <div class="geo">
-      <div class="geo-top"><span class="geo-name">&#9888; Russia–Ukraine</span><span class="geo-score" style="color:var(--a)">71</span></div>
-      <div class="geo-bg"><div class="geo-fill" style="width:71%;background:var(--a)"></div></div>
-      <div class="geo-desc">Year 4. Peace talks stalled. Energy infra attacks. EUR vol elevated.</div>
-    </div>
-    <div class="geo">
-      <div class="geo-top"><span class="geo-name">&#8505; IEEPA Tariff / Supreme Court</span><span class="geo-score" style="color:var(--b)">65</span></div>
-      <div class="geo-bg"><div class="geo-fill" style="width:65%;background:var(--b)"></div></div>
-      <div class="geo-desc">Ruling pending on exec tariff powers. Broad market uncertainty.</div>
-    </div>
-    <div class="geo">
-      <div class="geo-top"><span class="geo-name">&#8505; Fed Leadership Change</span><span class="geo-score" style="color:var(--b)">55</span></div>
-      <div class="geo-bg"><div class="geo-fill" style="width:55%;background:var(--b)"></div></div>
-      <div class="geo-desc">Powell term ends May 2026. Trump selecting successor. Policy uncertainty.</div>
-    </div>
-    <div class="geo">
-      <div class="geo-top"><span class="geo-name">&#128499; US Midterm Elections</span><span class="geo-score" style="color:var(--t2)">40</span></div>
-      <div class="geo-bg"><div class="geo-fill" style="width:40%;background:var(--t2)"></div></div>
-      <div class="geo-desc">Nov 2026. Fiscal/defense policy risk rising into H2.</div>
+    <div id="news-feed">
+      <div class="empty" style="padding:12px">
+        <div style="font-size:8px;color:var(--t3);letter-spacing:1px">FETCHING NEWS...</div>
+      </div>
     </div>
   </div>
 
@@ -671,10 +651,11 @@ function updateDashboard(d) {
   // ── FTMO ────────────────────────────────────────────────
   const fpnl = d.ftmo_daily_pnl || 0;
   const fpnlEl = document.getElementById('ftmo-pnl');
-  fpnlEl.textContent = fmt$(fpnl);
-  fpnlEl.style.color = fpnl >= 0 ? 'var(--g)' : 'var(--r)';
-  document.getElementById('ftmo-wr').textContent = (d.ftmo_win_rate || 0) + '%';
-  document.getElementById('ftmo-sigs').textContent = d.ftmo_daily_signals || 0;
+  if (fpnlEl) { fpnlEl.textContent = fmt$(fpnl); fpnlEl.style.color = fpnl >= 0 ? 'var(--g)' : 'var(--r)'; }
+  const fwrEl = document.getElementById('ftmo-wr');
+  if (fwrEl) fwrEl.textContent = (d.ftmo_win_rate || 0) + '%';
+  const fsigsEl = document.getElementById('ftmo-sigs');
+  if (fsigsEl) fsigsEl.textContent = d.ftmo_daily_signals || 0;
   document.getElementById('ftmo-wl').textContent = (d.ftmo_daily_wins||0) + ' / ' + (d.ftmo_daily_losses||0);
 
   // FTMO alert badge
@@ -682,6 +663,16 @@ function updateDashboard(d) {
   const fab = document.getElementById('ftmo-alert-badge');
   fab.textContent = fsigs + ' ALERT' + (fsigs !== 1 ? 'S' : '');
   fab.className = 'bd ' + (fsigs > 0 ? 'bb2' : 'bdim');
+
+  // FTMO col1 performance mirror
+  const fpnlCol = document.getElementById('ftmo-pnl-col');
+  if (fpnlCol) { fpnlCol.textContent = fmt$(fpnl); fpnlCol.style.color = fpnl >= 0 ? 'var(--g)' : 'var(--r)'; }
+  const fwrCol = document.getElementById('ftmo-wr-col');
+  if (fwrCol) fwrCol.textContent = (d.ftmo_win_rate || 0) + '%';
+  const fsigsCol = document.getElementById('ftmo-sigs-col');
+  if (fsigsCol) fsigsCol.textContent = fsigs;
+  const fwlCol = document.getElementById('ftmo-wl-col');
+  if (fwlCol) fwlCol.textContent = (d.ftmo_daily_wins||0) + ' / ' + (d.ftmo_daily_losses||0);
 
   // FTMO challenge progress bars
   const ftmoBal = d.ftmo_account_balance || FTMO_START;
@@ -970,7 +961,7 @@ function renderTodayEvents(events, todayStr) {
   badge.textContent = hasHigh ? 'HIGH IMPACT' : hasMed ? 'MEDIUM' : events.length ? 'LOW ACTIVITY' : 'NO EVENTS';
   badge.className = 'bd ' + (hasHigh ? 'br' : hasMed ? 'ba' : 'bdim');
 
-  // Update card title
+  // Update card title with today's date
   const titleEl = el.closest('.card').querySelector('.ct');
   if (titleEl) {
     const d = new Date(todayStr + 'T12:00:00');
@@ -981,9 +972,21 @@ function renderTodayEvents(events, todayStr) {
     el.innerHTML = '<div class="ni"><div class="ntime">No US events today</div></div>';
     return;
   }
-  el.innerHTML = events.slice(0,6).map(e => `
+
+  // Sort by time
+  const sorted = [...events].sort((a,b) => (a.time||'').localeCompare(b.time||''));
+
+  el.innerHTML = sorted.map(e => {
+    const timeStr = fmtEventTime(e.time);
+    const now = new Date();
+    const evTime = e.time ? new Date(e.time.replace(' ','T') + 'Z') : null;
+    const isPast = evTime && evTime < now;
+    const isNext = !isPast && evTime && (evTime - now) < 3600000; // within 1hr
+    const timeColor = isPast ? 'var(--t3)' : isNext ? 'var(--a)' : 'var(--t2)';
+    const timeLabel = isPast ? timeStr + ' — RELEASED' : isNext ? timeStr + ' — NEXT ⚡' : timeStr;
+    return `
     <div class="ni">
-      <div class="ntime">${fmtEventTime(e.time)}</div>
+      <div class="ntime" style="color:${timeColor}">${timeLabel}</div>
       <div class="ntitle">${e.event || e.name || 'Economic Event'}</div>
       <div class="ntags">
         <span class="ntag ${impactClass(e.impact)}">${impactLabel(e.impact)}</span>
@@ -993,9 +996,10 @@ function renderTodayEvents(events, todayStr) {
       <div class="ndata">
         ${e.prev != null ? `Prev: <span>${e.prev}</span>&nbsp;` : ''}
         ${e.estimate != null ? `Est: <span>${e.estimate}</span>&nbsp;` : ''}
-        ${e.actual != null ? `Act: <span style="color:var(--g)">${e.actual}</span>` : ''}
+        ${e.actual != null ? `Act: <span style="color:${parseFloat(e.actual) >= 0 ? 'var(--g)' : 'var(--r)'}">${e.actual}</span>` : ''}
       </div>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderWeekEvents(events) {
@@ -1009,16 +1013,33 @@ function renderWeekEvents(events) {
     el.innerHTML = '<div class="ni"><div class="ntime">No major US events this week</div></div>';
     return;
   }
-  el.innerHTML = events.slice(0,6).map(e => `
+
+  // Sort by time, show HIGH impact only with date + time
+  const highOnly = events.filter(e => String(e.impact||'').toLowerCase() === 'high' || e.impact === '3');
+  const sorted = [...highOnly].sort((a,b) => (a.time||'').localeCompare(b.time||''));
+
+  if (!sorted.length) {
+    el.innerHTML = '<div class="ni"><div class="ntime" style="color:var(--t3)">No high impact events this week</div></div>';
+    return;
+  }
+
+  el.innerHTML = sorted.map(e => {
+    const dateStr = fmtEventDate(e.time);
+    const timeStr = fmtEventTime(e.time);
+    return `
     <div class="ni">
-      <div class="ntime">${fmtEventDate(e.time)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div class="ntime">${dateStr}</div>
+        <div style="font-size:8px;font-weight:700;color:var(--t2)">${timeStr}</div>
+      </div>
       <div class="ntitle">${e.event || e.name || 'Economic Event'}</div>
       <div class="ntags">
         <span class="ntag ${impactClass(e.impact)}">${impactLabel(e.impact)}</span>
         <span class="ntag nmed">USD</span>
       </div>
       ${e.estimate != null ? `<div class="ndata">Est: <span>${e.estimate}</span></div>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderCalendarFallback() {
@@ -1160,6 +1181,47 @@ function doKill() {
   setTimeout(() => { btn.innerHTML = '&#9211; EMERGENCY KILL'; btn.style.background = ''; }, 2500);
 }
 
+// ── News Feed ──────────────────────────────────────────────
+async function fetchNews() {
+  try {
+    const res = await fetch(RAILWAY_URL + '/news', {cache:'no-store'});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderNews(data.articles || []);
+  } catch(e) {
+    console.warn('News fetch failed:', e);
+    document.getElementById('news-feed').innerHTML =
+      '<div class="ni"><div class="ntime" style="color:var(--t3)">News unavailable</div></div>';
+  }
+}
+
+function fmtNewsAge(pubStr) {
+  if (!pubStr) return '';
+  try {
+    const diff = Math.round((Date.now() - new Date(pubStr)) / 60000);
+    if (diff < 60) return diff + 'm ago';
+    if (diff < 1440) return Math.round(diff/60) + 'h ago';
+    return Math.round(diff/1440) + 'd ago';
+  } catch { return ''; }
+}
+
+function renderNews(articles) {
+  const el = document.getElementById('news-feed');
+  if (!articles.length) {
+    el.innerHTML = '<div class="ni"><div class="ntime" style="color:var(--t3)">No articles found</div></div>';
+    return;
+  }
+  const catColor = { 'Markets':'var(--g)', 'Gold/Comm':'var(--a)', 'US Indices':'var(--b)' };
+  el.innerHTML = articles.map(a => `
+    <div class="ni">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <span style="font-size:7px;padding:1px 5px;border-radius:2px;font-weight:800;background:rgba(255,255,255,.05);color:${catColor[a.category]||'var(--t2)'};">${a.category}</span>
+        <span class="ntime" style="margin:0">${fmtNewsAge(a.pub)}</span>
+      </div>
+      <div class="ntitle"><a href="${a.link}" target="_blank" style="color:var(--t1);text-decoration:none">${a.title}</a></div>
+    </div>`).join('');
+}
+
 // ── Boot ───────────────────────────────────────────────────
 initChart();
 initFtmoChart();
@@ -1167,10 +1229,12 @@ fetchState();
 fetchTrades();
 fetchCalendar();
 fetchCOT();
+fetchNews();
 setInterval(fetchState, 5000);
 setInterval(fetchTrades, 30000);
 setInterval(fetchCalendar, 3600000);
 setInterval(fetchCOT, 3600000);
+setInterval(fetchNews, 900000); // 15 min
 </script>
 </body>
 </html>
