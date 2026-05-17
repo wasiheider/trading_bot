@@ -95,7 +95,6 @@ def webhook_tpt():
         "tp1":        tp1,
         "tp2":        tp2,
         "contracts":  contracts,
-        "session":    data.get("session", ""),
         "result":     "OPEN",
         "pnl":        0,
     })
@@ -165,7 +164,6 @@ def handle_ftmo_lifecycle(data, event):
             "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
             "instrument": instrument,
             "direction":  direction,
-            "session":    data.get("session", ""),
             "result":     "SL",
             "pnl":        pnl or 0,
             "lot_size":   lot_size,
@@ -177,7 +175,6 @@ def handle_ftmo_lifecycle(data, event):
             "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
             "instrument": instrument,
             "direction":  direction,
-            "session":    data.get("session", ""),
             "result":     "TP1" if event == "tp1_hit" else "TP2",
             "pnl":        pnl or 0,
             "lot_size":   lot_size,
@@ -228,7 +225,7 @@ def state():
     return jsonify({
         # Meta
         "time_ct":              now.strftime("%Y-%m-%d %H:%M:%S"),
-        "is_weekend":           now.weekday() in (5, 6),
+        "is_weekend":           now.weekday() == 5 or (now.weekday() == 6 and now.hour < 17) or (now.weekday() == 4 and now.hour >= 16),
         "is_maintenance":       is_maintenance_window(),
         # TPT
         "tpt_killed":           tpt_state["killed"],
