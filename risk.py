@@ -11,7 +11,8 @@ from config import (
 )
 
 # ── Persistent state file ───────────────────────────────────
-STATE_FILE = "state.json"
+STATE_FILE  = "state.json"
+TRADES_FILE = "trades.json"
 
 def _load_state():
     """Load state from disk on startup. Falls back to defaults if file missing."""
@@ -20,8 +21,21 @@ def _load_state():
             with open(STATE_FILE, "r") as f:
                 return json.load(f)
         except Exception:
-            pass  # Corrupted file — fall back to defaults
+            pass
     return {}
+
+def _load_balance_from_trades(account: str, start_balance: float) -> float:
+    """Compute real account balance by summing all closed trade P&L from trades.json."""
+    if not os.path.exists(TRADES_FILE):
+        return start_balance
+    try:
+        with open(TRADES_FILE, "r") as f:
+            data = json.load(f)
+        trades = data.get(account, [])
+        total_pnl = sum(t.get("pnl", 0) for t in trades if t.get("result") != "OPEN")
+        return round(start_balance + total_pnl, 2)
+    except Exception:
+        return start_balance
 
 def _save_state():
     """Write current state to disk."""
@@ -50,7 +64,8 @@ tpt_state = {
 ftmo_state = {
     "daily_pnl":          _saved.get("ftmo", {}).get("daily_pnl", 0.0),
     "consecutive_losses": _saved.get("ftmo", {}).get("consecutive_losses", 0),
-    "account_balance":    _saved.get("ftmo", {}).get("account_balance", FTMO_ACCOUNT_SIZE),
+    "account_balance":    _saved.get("ftmo", {}).get("account_balance",
+                              _load_balance_from_trades("ftmo", FTMO_ACCOUNT_SIZE)),
     # Dashboard additions
     "daily_signals":      _saved.get("ftmo", {}).get("daily_signals", 0),
     "daily_wins":         _saved.get("ftmo", {}).get("daily_wins", 0),

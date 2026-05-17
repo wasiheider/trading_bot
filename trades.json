@@ -2,67 +2,67 @@
   "tpt": [],
   "ftmo": [
     {
-      "time": "09:00",
-      "date": "2026-05-06 09:00",
-      "instrument": "XAUUSD",
-      "direction": "LONG",
-      "result": "SL",
-      "pnl": -376.72,
-      "lot_size": 1.5
-    },
-    {
-      "time": "14:00",
-      "date": "2026-05-06 14:00",
-      "instrument": "XAUUSD",
+      "time": "01:52",
+      "date": "2026-05-06 01:52",
+      "instrument": "US100",
       "direction": "SHORT",
       "result": "SL",
-      "pnl": -376.72,
-      "lot_size": 1.5
+      "pnl": -252.01,
+      "lot_size": 1.0
     },
     {
-      "time": "10:00",
-      "date": "2026-05-14 10:00",
-      "instrument": "XAUUSD",
+      "time": "01:52",
+      "date": "2026-05-06 01:52",
+      "instrument": "US100",
+      "direction": "SHORT",
+      "result": "SL",
+      "pnl": -501.43,
+      "lot_size": 2.0
+    },
+    {
+      "time": "15:30",
+      "date": "2026-05-14 15:30",
+      "instrument": "US100",
       "direction": "SHORT",
       "result": "SL",
       "pnl": -997.46,
       "lot_size": 2.0
     },
     {
-      "time": "08:00",
-      "date": "2026-05-15 08:00",
+      "time": "07:52",
+      "date": "2026-05-15 07:52",
+      "instrument": "US100",
+      "direction": "SHORT",
+      "result": "TP2",
+      "pnl": 762.84,
+      "lot_size": 3.0
+    },
+    {
+      "time": "09:11",
+      "date": "2026-05-15 09:11",
       "instrument": "XAUUSD",
       "direction": "LONG",
       "result": "TP1",
-      "pnl": 350.93,
-      "lot_size": 0.88
+      "pnl": 490.96,
+      "lot_size": 0.3
     },
     {
-      "time": "09:30",
-      "date": "2026-05-15 09:30",
+      "time": "09:14",
+      "date": "2026-05-15 09:14",
+      "instrument": "XAUUSD",
+      "direction": "LONG",
+      "result": "SL",
+      "pnl": -80.64,
+      "lot_size": 0.1
+    },
+    {
+      "time": "09:16",
+      "date": "2026-05-15 09:16",
       "instrument": "XAUUSD",
       "direction": "LONG",
       "result": "TP2",
-      "pnl": 350.93,
-      "lot_size": 0.88
-    },
-    {
-      "time": "11:00",
-      "date": "2026-05-15 11:00",
-      "instrument": "XAUUSD",
-      "direction": "SHORT",
-      "result": "TP1",
-      "pnl": 350.93,
-      "lot_size": 0.87
-    },
-    {
-      "time": "13:00",
-      "date": "2026-05-15 13:00",
-      "instrument": "XAUUSD",
-      "direction": "SHORT",
-      "result": "TP2",
-      "pnl": 350.92,
-      "lot_size": 0.87
+      "pnl": 230.55,
+      "lot_size": 0.1
     }
   ]
 }

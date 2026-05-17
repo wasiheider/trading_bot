@@ -807,9 +807,10 @@ function renderFullTradeHistory(trades, account) {
     const result = t.result || '';
     const resultClass = result.includes('TP') ? 'bd bg' : result.includes('SL') ? 'bd br' : 'bd bdim';
     const qty = t[qtyLabel] || t.contracts || t.lot_size || '--';
+    const displayTime = t.date ? t.date.slice(5,16).replace(' ',' ') : t.time || '--';
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td style="color:var(--t3)">${t.time||'--'}</td>
+      <td style="color:var(--t3);font-size:9px">${displayTime}</td>
       <td style="font-weight:700">${t.instrument||'--'}</td>
       <td style="color:${t.direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${t.direction||'--'}</td>
       <td style="text-align:center">${qty}</td>
