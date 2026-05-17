@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_file, Response
 from datetime import datetime
 import os
+import json
 import pytz
 
 from config import TPT_WEBHOOK_TOKEN, FTMO_WEBHOOK_TOKEN
@@ -83,6 +84,20 @@ def webhook_tpt():
         f"{rr_line}"
     )
     record_tpt_signal(data)
+    # Log signal entry to trades.json (result/pnl filled in on close)
+    _append_trade_log("tpt", {
+        "time":       ct_now().strftime("%H:%M"),
+        "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
+        "instrument": instrument,
+        "direction":  direction,
+        "price":      price,
+        "sl":         sl,
+        "tp1":        tp1,
+        "tp2":        tp2,
+        "contracts":  contracts,
+        "result":     "OPEN",
+        "pnl":        0,
+    })
     send_telegram(msg)
     return jsonify({"status": "approved", "contracts": contracts}), 200
 
@@ -144,8 +159,26 @@ def handle_ftmo_lifecycle(data, event):
 
     if event == "sl_hit":
         update_ftmo_outcome(won=False, pnl=pnl)
+        _append_trade_log("ftmo", {
+            "time":       ct_now().strftime("%H:%M"),
+            "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
+            "instrument": instrument,
+            "direction":  direction,
+            "result":     "SL",
+            "pnl":        pnl or 0,
+            "lot_size":   lot_size,
+        })
     elif event in ("tp1_hit", "tp2_hit"):
         update_ftmo_outcome(won=True, pnl=pnl)
+        _append_trade_log("ftmo", {
+            "time":       ct_now().strftime("%H:%M"),
+            "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
+            "instrument": instrument,
+            "direction":  direction,
+            "result":     "TP1" if event == "tp1_hit" else "TP2",
+            "pnl":        pnl or 0,
+            "lot_size":   lot_size,
+        })
 
     emoji_map  = {"entry_filled":"📥","tp1_hit":"✅","tp2_hit":"🏆","sl_hit":"❌"}
     label_map  = {"entry_filled":"Entry Filled","tp1_hit":"TP1 Hit","tp2_hit":"TP2 Hit","sl_hit":"Stop Loss Hit"}
@@ -219,11 +252,33 @@ def state():
 
 
 # ── Trades Endpoint ────────────────────────────────────────
+TRADES_FILE = os.path.join(os.path.dirname(__file__), "trades.json")
+
+def _load_trades_log():
+    if os.path.exists(TRADES_FILE):
+        try:
+            with open(TRADES_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"tpt": [], "ftmo": []}
+
+def _append_trade_log(account: str, trade: dict):
+    """Append a trade to trades.json (persistent across restarts, unlimited history)."""
+    log = _load_trades_log()
+    log.setdefault(account, []).append(trade)
+    try:
+        with open(TRADES_FILE, "w") as f:
+            json.dump(log, f, indent=2)
+    except Exception as e:
+        print(f"[trades] WARNING: could not write trades.json: {e}", flush=True)
+
 @app.route("/trades", methods=["GET"])
 def trades():
+    log = _load_trades_log()
     return jsonify({
-        "tpt":  tpt_state.get("trades", []),
-        "ftmo": ftmo_state.get("trades", []),
+        "tpt":  log.get("tpt", []),
+        "ftmo": log.get("ftmo", []),
     }), 200
 
 

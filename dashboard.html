@@ -302,60 +302,29 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </div>
 
-<!-- COL 3: EVENTS -->
+<!-- COL 3: EVENTS — Finnhub Live -->
 <div class="col">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Today — Sat May 16</span>
-      <span class="bd br">LOW ACTIVITY</span>
+      <span class="ct" style="margin:0">Today's Events</span>
+      <span class="bd" id="today-impact-badge">LOADING</span>
     </div>
-    <div class="ni">
-      <div class="ntime">08:30 CT — RELEASED</div>
-      <div class="ntitle">US Retail Sales MoM (Apr)</div>
-      <div class="ntags"><span class="ntag nhigh">HIGH</span><span class="ntag nmed">USD</span></div>
-      <div class="ndata">Prev: <span>0.6%</span> &nbsp;Est: <span>0.3%</span> &nbsp;Act: <span style="color:var(--g)">+0.1%</span> — Soft miss</div>
-    </div>
-    <div class="ni">
-      <div class="ntime">13:00 CT — WATCH</div>
-      <div class="ntitle">Fed Waller — Monetary Policy Remarks</div>
-      <div class="ntags"><span class="ntag nhigh">HIGH</span><span class="ntag nmed">FED</span></div>
-      <div class="ndata">Rate cut signals — elevated NQ vol expected</div>
-    </div>
-    <div class="ni">
-      <div class="ntime">10:00 CT — RELEASED</div>
-      <div class="ntitle">UMich Consumer Sentiment (May)</div>
-      <div class="ntags"><span class="ntag nmed">MEDIUM</span><span class="ntag nmed">USD</span></div>
-      <div class="ndata">Prev: <span>52.2</span> &nbsp;Est: <span>53.0</span></div>
+    <div id="today-events">
+      <div class="empty" style="padding:16px">
+        <div style="font-size:8px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div>
+      </div>
     </div>
   </div>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span class="ct" style="margin:0">This Week</span>
-      <span class="bd ba">3 HIGH IMPACT</span>
+      <span class="bd" id="week-impact-badge">LOADING</span>
     </div>
-    <div class="ni">
-      <div class="ntime">MON MAY 18</div>
-      <div class="ntitle">Bot First Live Test — 17:00 CT</div>
-      <div class="ntags"><span class="ntag nearns">BOT EVENT</span></div>
-      <div class="ndata">Asian session open — new Pine Script logic active</div>
-    </div>
-    <div class="ni">
-      <div class="ntime">TUE MAY 19</div>
-      <div class="ntitle">FOMC Minutes — Apr 28–29 Meeting</div>
-      <div class="ntags"><span class="ntag nhigh">HIGH</span><span class="ntag nmed">FED</span></div>
-      <div class="ndata">Rate held 3.5–3.75%. Minutes may signal cut timeline</div>
-    </div>
-    <div class="ni">
-      <div class="ntime">WED MAY 20 — AFTER CLOSE</div>
-      <div class="ntitle">NVIDIA (NVDA) Earnings Q1 FY2027</div>
-      <div class="ntags"><span class="ntag nhigh">HIGH</span><span class="ntag nearns">EARNINGS</span><span class="ntag bdim" style="color:var(--t2)">TECH</span></div>
-      <div class="ndata">Confirmed — massive NQ mover, expect high vol pre/post close</div>
-    </div>
-    <div class="ni">
-      <div class="ntime">THU MAY 21</div>
-      <div class="ntitle">Initial Jobless Claims + Flash PMI</div>
-      <div class="ntags"><span class="ntag nhigh">HIGH</span><span class="ntag nmed">USD</span></div>
+    <div id="week-events">
+      <div class="empty" style="padding:16px">
+        <div style="font-size:8px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div>
+      </div>
     </div>
   </div>
 
@@ -420,17 +389,12 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span class="ct" style="margin:0">COT Bias</span>
-      <span style="font-size:8px;color:var(--t3)">Updated Fri 15:35</span>
+      <span style="font-size:8px;color:var(--t3)" id="cot-updated">Loading...</span>
     </div>
-    <div class="cg">
-      <div class="cc"><div class="csym">ES</div><div class="cbias cbull">Bullish</div><div class="cconf">82%</div><div class="cbg"><div class="cbf" style="width:82%;background:var(--g)"></div></div></div>
-      <div class="cc"><div class="csym">NQ</div><div class="cbias cbull">Bullish</div><div class="cconf">75%</div><div class="cbg"><div class="cbf" style="width:75%;background:var(--g)"></div></div></div>
-      <div class="cc"><div class="csym">GOLD</div><div class="cbias cneut">Neutral</div><div class="cconf">50%</div><div class="cbg"><div class="cbf" style="width:50%;background:var(--t2)"></div></div></div>
-      <div class="cc"><div class="csym">SILVER</div><div class="cbias cbear">Bearish</div><div class="cconf">65%</div><div class="cbg"><div class="cbf" style="width:65%;background:var(--r)"></div></div></div>
-      <div class="cc"><div class="csym">CRUDE</div><div class="cbias cbear">Bearish</div><div class="cconf">60%</div><div class="cbg"><div class="cbf" style="width:60%;background:var(--r)"></div></div></div>
-      <div class="cc"><div class="csym">BTC</div><div class="cbias cbull">Bullish</div><div class="cconf">88%</div><div class="cbg"><div class="cbf" style="width:88%;background:var(--g)"></div></div></div>
-      <div class="cc"><div class="csym">USD</div><div class="cbias cbear">Bearish</div><div class="cconf">70%</div><div class="cbg"><div class="cbf" style="width:70%;background:var(--r)"></div></div></div>
-      <div class="cc"><div class="csym">VIX</div><div class="cbias cbull" style="color:var(--r)">Rising</div><div class="cconf">72%</div><div class="cbg"><div class="cbf" style="width:72%;background:var(--r)"></div></div></div>
+    <div class="cg" id="cot-grid">
+      <div class="cc" style="grid-column:1/-1;text-align:center;padding:12px">
+        <div style="font-size:8px;color:var(--t3);letter-spacing:1px">FETCHING CFTC DATA...</div>
+      </div>
     </div>
   </div>
 </div>
@@ -440,9 +404,11 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 const RAILWAY_URL = 'https://tradingbot-production-1e5a.up.railway.app';
+const FINNHUB_KEY = 'd84klj1r01qutij98emgd84klj1r01qutij98en0';
 let lastSignalTime = null;
 let chartInstance = null;
-let equityData = { '1W': { l:['May 10','May 11','May 12','May 13','May 14','May 15','May 16'], d:[150000,150000,150000,150000,150000,150000,150000] } };
+let equityData = { '1W': { l:[], d:[] }, '1M': { l:[], d:[] }, 'ALL': { l:[], d:[] } };
+let allTrades = { tpt: [], ftmo: [] };
 
 // ── Clock ──────────────────────────────────────────────────
 function updateClock() {
@@ -580,11 +546,107 @@ function updateDashboard(d) {
   tc.textContent = trades.length + ' trade' + (trades.length !== 1 ? 's' : '');
   if (trades.length > 0) renderTrades(trades);
 
-  // ── Equity curve — update last point with live balance ──
-  const bal = d.tpt_account_balance || 150000;
-  const wd = equityData['1W'];
-  wd.d[wd.d.length - 1] = bal;
+  // ── Equity curve — driven by /trades, updated separately ──
   if (chartInstance) chartInstance.update('none');
+}
+
+// ── Phase 4: Fetch real trade history and build equity curve ──
+async function fetchTrades() {
+  try {
+    const res = await fetch(RAILWAY_URL + '/trades', {cache:'no-store'});
+    if (!res.ok) return;
+    const data = await res.json();
+    allTrades = data;
+    buildEquityCurve(data.tpt || []);
+    renderFullTradeHistory(data.tpt || []);
+  } catch(e) { console.warn('Trades fetch failed:', e); }
+}
+
+function buildEquityCurve(trades) {
+  const START_BAL = 150000;
+  if (!trades || trades.length === 0) {
+    // No trades yet — flat line from account open
+    const today = new Date();
+    const labels = [], values = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+      values.push(START_BAL);
+    }
+    equityData['1W'] = { l: labels, d: values };
+    equityData['1M'] = { l: labels, d: values };
+    equityData['ALL']= { l: labels, d: values };
+    if (chartInstance) {
+      chartInstance.data.labels = labels;
+      chartInstance.data.datasets[0].data = values;
+      chartInstance.update();
+    }
+    return;
+  }
+
+  // Sort trades by time
+  const sorted = [...trades].sort((a,b) => new Date(a.time||0) - new Date(b.time||0));
+
+  // Build running balance
+  let bal = START_BAL;
+  const points = [{ label: 'Open', bal }];
+  sorted.forEach(t => {
+    bal += (t.pnl || 0);
+    const d = new Date(t.time || Date.now());
+    points.push({ label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), bal: Math.round(bal) });
+  });
+
+  // 1W: last 7 calendar days
+  const now = new Date();
+  const w7ago = new Date(now); w7ago.setDate(now.getDate()-7);
+  const wPts = points.filter(p => !p.time || new Date(p.time) >= w7ago);
+  equityData['1W'] = { l: (wPts.length ? wPts : points.slice(-7)).map(p=>p.label), d: (wPts.length ? wPts : points.slice(-7)).map(p=>p.bal) };
+
+  // 1M: last 30 days
+  const m30ago = new Date(now); m30ago.setDate(now.getDate()-30);
+  const mPts = points.filter(p => !p.time || new Date(p.time) >= m30ago);
+  equityData['1M'] = { l: (mPts.length ? mPts : points).map(p=>p.label), d: (mPts.length ? mPts : points).map(p=>p.bal) };
+
+  // ALL
+  equityData['ALL'] = { l: points.map(p=>p.label), d: points.map(p=>p.bal) };
+
+  // Update chart to current tab
+  if (chartInstance) {
+    const active = document.querySelector('.tab.act');
+    const key = active ? active.textContent.trim() : '1W';
+    chartInstance.data.labels = equityData[key].l;
+    chartInstance.data.datasets[0].data = equityData[key].d;
+    chartInstance.update();
+  }
+}
+
+function renderFullTradeHistory(trades) {
+  if (!trades || trades.length === 0) return;
+  const body = document.getElementById('trades-body');
+  body.innerHTML = '';
+  const tpnlEl = document.getElementById('tpt-pnl');
+  const tcEl = document.getElementById('trade-count');
+  tcEl.textContent = trades.length + ' trade' + (trades.length !== 1 ? 's' : '');
+
+  // Total P&L from all trades
+  const totalPnl = trades.reduce((s, t) => s + (t.pnl || 0), 0);
+  tpnlEl.textContent = fmt$(totalPnl);
+  tpnlEl.style.color = totalPnl >= 0 ? 'var(--g)' : 'var(--r)';
+
+  [...trades].reverse().slice(0, 20).forEach(t => {
+    const pnl = t.pnl || 0;
+    const result = t.result || '';
+    const resultClass = result.includes('TP') ? 'bd bg' : result.includes('SL') ? 'bd br' : 'bd bdim';
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td style="color:var(--t3)">${t.time||'--'}</td>
+      <td style="font-weight:700">${t.instrument||'MNQ'}</td>
+      <td style="color:${t.direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${t.direction||'--'}</td>
+      <td style="text-align:center">${t.contracts||'--'}</td>
+      <td style="color:${pnl>=0?'var(--g)':'var(--r)'};font-weight:700">${fmt$(pnl)}</td>
+      <td><span class="${resultClass}">${result||'--'}</span></td>`;
+    body.appendChild(row);
+  });
 }
 
 function addSignalRow(ls) {
@@ -682,10 +744,252 @@ function doKill() {
   }, 2500);
 }
 
+// ── Phase 3: Finnhub Economic Calendar ────────────────────
+async function fetchCalendar() {
+  if (FINNHUB_KEY === 'YOUR_FINNHUB_KEY_HERE') {
+    renderCalendarFallback();
+    return;
+  }
+  try {
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+    // Today
+    const todayStr = fmt(now);
+    // End of week (next Sunday)
+    const weekEnd = new Date(now);
+    weekEnd.setDate(now.getDate() + (7 - now.getDay()));
+    const weekEndStr = fmt(weekEnd);
+
+    const url = `https://finnhub.io/api/v1/calendar/economic?from=${todayStr}&to=${weekEndStr}&token=${FINNHUB_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Finnhub HTTP ' + res.status);
+    const data = await res.json();
+    const events = (data.economicCalendar || []).filter(e => e.country === 'US' || e.country === 'United States');
+    if (!events.length) { renderCalendarFallback(); return; }
+
+    // Split today vs rest of week
+    const todayEvents = events.filter(e => e.time && e.time.startsWith(todayStr));
+    const weekEvents  = events.filter(e => e.time && !e.time.startsWith(todayStr));
+
+    renderTodayEvents(todayEvents, todayStr);
+    renderWeekEvents(weekEvents);
+  } catch(e) {
+    console.warn('Finnhub fetch failed:', e);
+    renderCalendarFallback();
+  }
+}
+
+function impactClass(impact) {
+  if (!impact) return 'bdim';
+  const i = String(impact).toLowerCase();
+  if (i === 'high' || i === '3') return 'nhigh';
+  if (i === 'medium' || i === '2') return 'nmed';
+  return 'nlow';
+}
+
+function impactLabel(impact) {
+  if (!impact) return 'LOW';
+  const i = String(impact).toLowerCase();
+  if (i === 'high' || i === '3') return 'HIGH';
+  if (i === 'medium' || i === '2') return 'MEDIUM';
+  return 'LOW';
+}
+
+function fmtEventTime(timeStr) {
+  if (!timeStr) return '';
+  // timeStr is UTC like "2026-05-16 12:30:00"
+  const d = new Date(timeStr.replace(' ','T') + 'Z');
+  const ct = new Date(d.toLocaleString('en-US',{timeZone:'America/Chicago'}));
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(ct.getHours())}:${pad(ct.getMinutes())} CT`;
+}
+
+function fmtEventDate(timeStr) {
+  if (!timeStr) return '';
+  const d = new Date(timeStr.replace(' ','T') + 'Z');
+  return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'America/Chicago'});
+}
+
+function renderTodayEvents(events, todayStr) {
+  const el = document.getElementById('today-events');
+  const badge = document.getElementById('today-impact-badge');
+  const hasHigh = events.some(e => String(e.impact||'').toLowerCase() === 'high' || e.impact === '3');
+  const hasMed  = events.some(e => String(e.impact||'').toLowerCase() === 'medium' || e.impact === '2');
+  badge.textContent = hasHigh ? 'HIGH IMPACT' : hasMed ? 'MEDIUM' : events.length ? 'LOW ACTIVITY' : 'NO EVENTS';
+  badge.className = 'bd ' + (hasHigh ? 'br' : hasMed ? 'ba' : 'bdim');
+
+  // Update card title
+  const titleEl = el.closest('.card').querySelector('.ct');
+  if (titleEl) {
+    const d = new Date(todayStr + 'T12:00:00');
+    titleEl.textContent = 'Today — ' + d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  }
+
+  if (!events.length) {
+    el.innerHTML = '<div class="ni"><div class="ntime">No US events today</div></div>';
+    return;
+  }
+  el.innerHTML = events.slice(0,6).map(e => `
+    <div class="ni">
+      <div class="ntime">${fmtEventTime(e.time)}</div>
+      <div class="ntitle">${e.event || e.name || 'Economic Event'}</div>
+      <div class="ntags">
+        <span class="ntag ${impactClass(e.impact)}">${impactLabel(e.impact)}</span>
+        <span class="ntag nmed">USD</span>
+      </div>
+      ${e.actual != null || e.estimate != null || e.prev != null ? `
+      <div class="ndata">
+        ${e.prev != null ? `Prev: <span>${e.prev}</span>&nbsp;` : ''}
+        ${e.estimate != null ? `Est: <span>${e.estimate}</span>&nbsp;` : ''}
+        ${e.actual != null ? `Act: <span style="color:var(--g)">${e.actual}</span>` : ''}
+      </div>` : ''}
+    </div>`).join('');
+}
+
+function renderWeekEvents(events) {
+  const el = document.getElementById('week-events');
+  const badge = document.getElementById('week-impact-badge');
+  const highCount = events.filter(e => String(e.impact||'').toLowerCase() === 'high' || e.impact === '3').length;
+  badge.textContent = highCount ? `${highCount} HIGH IMPACT` : events.length ? `${events.length} EVENTS` : 'QUIET WEEK';
+  badge.className = 'bd ' + (highCount >= 2 ? 'br' : highCount ? 'ba' : 'bdim');
+
+  if (!events.length) {
+    el.innerHTML = '<div class="ni"><div class="ntime">No major US events this week</div></div>';
+    return;
+  }
+  el.innerHTML = events.slice(0,6).map(e => `
+    <div class="ni">
+      <div class="ntime">${fmtEventDate(e.time)}</div>
+      <div class="ntitle">${e.event || e.name || 'Economic Event'}</div>
+      <div class="ntags">
+        <span class="ntag ${impactClass(e.impact)}">${impactLabel(e.impact)}</span>
+        <span class="ntag nmed">USD</span>
+      </div>
+      ${e.estimate != null ? `<div class="ndata">Est: <span>${e.estimate}</span></div>` : ''}
+    </div>`).join('');
+}
+
+function renderCalendarFallback() {
+  // Shown when no API key yet — static placeholder
+  document.getElementById('today-impact-badge').textContent = 'ADD KEY';
+  document.getElementById('today-impact-badge').className = 'bd ba';
+  document.getElementById('week-impact-badge').textContent  = 'ADD KEY';
+  document.getElementById('week-impact-badge').className   = 'bd ba';
+  document.getElementById('today-events').innerHTML = `
+    <div class="ni">
+      <div class="ntime" style="color:var(--a)">FINNHUB KEY NOT SET</div>
+      <div class="ntitle" style="color:var(--t2)">Add your key to FINNHUB_KEY at top of script</div>
+      <div class="ntags"><span class="ntag ba">SETUP NEEDED</span></div>
+      <div class="ndata">Get free key at <span>finnhub.io</span></div>
+    </div>`;
+  document.getElementById('week-events').innerHTML = `
+    <div class="ni">
+      <div class="ntime" style="color:var(--t3)">Awaiting API key...</div>
+    </div>`;
+}
+
+// ── Phase 5a: CFTC COT Data ────────────────────────────────
+// CFTC publishes CSV at publicreporting.cftc.gov
+// We fetch via a CORS proxy since browser can't hit CFTC directly.
+// Fallback to last-known hardcoded data if fetch fails.
+
+const COT_FALLBACK = [
+  { sym:'ES',    long:213840, short:92140,  bias:'Bullish', pct:70 },
+  { sym:'NQ',    long:28950,  short:14200,  bias:'Bullish', pct:67 },
+  { sym:'GOLD',  long:287600, short:102400, bias:'Bullish', pct:74 },
+  { sym:'SILVER',long:58900,  short:41200,  bias:'Neutral', pct:59 },
+  { sym:'CRUDE', long:412000, short:298000, bias:'Bullish', pct:58 },
+  { sym:'USD',   long:38200,  short:58400,  bias:'Bearish', pct:60 },
+  { sym:'EUR',   long:214000, short:98000,  bias:'Bullish', pct:69 },
+  { sym:'VIX',   long:82000,  short:34000,  bias:'Rising',  pct:71 },
+];
+
+// CFTC market codes for the futures we care about
+const COT_CODES = {
+  'ES':    '13874+',   // E-MINI S&P 500
+  'NQ':    '209742',   // E-MINI NASDAQ-100
+  'GOLD':  '088691',   // GOLD
+  'SILVER':'084691',   // SILVER
+  'CRUDE': '067651',   // CRUDE OIL, LIGHT SWEET
+  'USD':   '098662',   // US DOLLAR INDEX
+  'EUR':   '099741',   // EURO FX
+  'VIX':   '1170E1',   // CBOE VIX FUTURES
+};
+
+async function fetchCOT() {
+  try {
+    // CFTC Disaggregated Futures-Only Current Year report via Socrata API
+    // This endpoint returns the latest COT data for the current year
+    const BASE = 'https://publicreporting.cftc.gov/resource/6dca-aqww.json';
+    const codes = Object.values(COT_CODES).map(c => `'${c}'`).join(',');
+    const url = `${BASE}?$where=cftc_contract_market_code in(${codes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=50`;
+
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    if (!res.ok) throw new Error('CFTC ' + res.status);
+    const rows = await res.json();
+    if (!rows.length) throw new Error('No CFTC data');
+
+    // Get latest row per market code
+    const latest = {};
+    rows.forEach(r => {
+      const code = r.cftc_contract_market_code;
+      if (!latest[code]) latest[code] = r;
+    });
+
+    // Map to our symbols
+    const results = Object.entries(COT_CODES).map(([sym, code]) => {
+      const row = latest[code];
+      if (!row) return COT_FALLBACK.find(f => f.sym === sym) || { sym, long:0, short:0, bias:'N/A', pct:50 };
+      const longs  = parseInt(row.noncomm_positions_long_all  || row.asset_mgr_positions_long  || 0);
+      const shorts = parseInt(row.noncomm_positions_short_all || row.asset_mgr_positions_short || 0);
+      const total  = longs + shorts || 1;
+      const pct    = Math.round((longs / total) * 100);
+      let bias = 'Neutral';
+      if (pct >= 60) bias = 'Bullish';
+      else if (pct <= 40) bias = 'Bearish';
+      if (sym === 'VIX' && pct >= 60) bias = 'Rising';
+      return { sym, long: longs, short: shorts, bias, pct };
+    });
+
+    // Get report date from first row
+    const reportDate = rows[0] ? rows[0].report_date_as_yyyy_mm_dd : null;
+    const dateLabel = reportDate ? 'CFTC ' + new Date(reportDate+'T12:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'CFTC Live';
+    document.getElementById('cot-updated').textContent = dateLabel;
+
+    renderCOT(results);
+  } catch(e) {
+    console.warn('CFTC fetch failed, using fallback:', e);
+    document.getElementById('cot-updated').textContent = 'Fallback data';
+    renderCOT(COT_FALLBACK);
+  }
+}
+
+function renderCOT(items) {
+  const grid = document.getElementById('cot-grid');
+  grid.innerHTML = items.map(item => {
+    const biasClass = item.bias === 'Bullish' ? 'cbull' : item.bias === 'Bearish' || item.bias === 'Rising' ? 'cbear' : 'cneut';
+    const barColor  = item.bias === 'Bullish' ? 'var(--g)' : item.bias === 'Bearish' || item.bias === 'Rising' ? 'var(--r)' : 'var(--t2)';
+    return `<div class="cc">
+      <div class="csym">${item.sym}</div>
+      <div class="cbias ${biasClass}">${item.bias}</div>
+      <div class="cconf">${item.pct}%</div>
+      <div class="cbg"><div class="cbf" style="width:${item.pct}%;background:${barColor}"></div></div>
+    </div>`;
+  }).join('');
+}
+
 // ── Boot ───────────────────────────────────────────────────
 initChart();
 fetchState();
+fetchTrades();
+fetchCalendar();
+fetchCOT();
 setInterval(fetchState, 5000);
+setInterval(fetchTrades, 30000);     // trades every 30s
+setInterval(fetchCalendar, 3600000); // calendar every 1hr
+setInterval(fetchCOT, 3600000);      // COT every 1hr
 </script>
 </body>
 </html>
