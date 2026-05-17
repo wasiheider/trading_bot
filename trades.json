@@ -1,0 +1,68 @@
+{
+  "tpt": [],
+  "ftmo": [
+    {
+      "time": "09:00",
+      "date": "2026-05-06 09:00",
+      "instrument": "XAUUSD",
+      "direction": "LONG",
+      "result": "SL",
+      "pnl": -376.72,
+      "lot_size": 1.5
+    },
+    {
+      "time": "14:00",
+      "date": "2026-05-06 14:00",
+      "instrument": "XAUUSD",
+      "direction": "SHORT",
+      "result": "SL",
+      "pnl": -376.72,
+      "lot_size": 1.5
+    },
+    {
+      "time": "10:00",
+      "date": "2026-05-14 10:00",
+      "instrument": "XAUUSD",
+      "direction": "SHORT",
+      "result": "SL",
+      "pnl": -997.46,
+      "lot_size": 2.0
+    },
+    {
+      "time": "08:00",
+      "date": "2026-05-15 08:00",
+      "instrument": "XAUUSD",
+      "direction": "LONG",
+      "result": "TP1",
+      "pnl": 350.93,
+      "lot_size": 0.88
+    },
+    {
+      "time": "09:30",
+      "date": "2026-05-15 09:30",
+      "instrument": "XAUUSD",
+      "direction": "LONG",
+      "result": "TP2",
+      "pnl": 350.93,
+      "lot_size": 0.88
+    },
+    {
+      "time": "11:00",
+      "date": "2026-05-15 11:00",
+      "instrument": "XAUUSD",
+      "direction": "SHORT",
+      "result": "TP1",
+      "pnl": 350.93,
+      "lot_size": 0.87
+    },
+    {
+      "time": "13:00",
+      "date": "2026-05-15 13:00",
+      "instrument": "XAUUSD",
+      "direction": "SHORT",
+      "result": "TP2",
+      "pnl": 350.92,
+      "lot_size": 0.87
+    }
+  ]
+}
