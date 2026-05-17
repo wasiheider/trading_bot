@@ -44,7 +44,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .status-pill{font-size:9px;padding:3px 10px;border-radius:2px;font-weight:700;letter-spacing:1px}
 
 /* LAYOUT */
-.layout{display:grid;grid-template-columns:210px 1fr 210px 220px;min-height:calc(100vh - 52px);gap:0}
+.layout{display:grid;grid-template-columns:210px 1fr 1fr 210px 220px;min-height:calc(100vh - 52px);gap:0}
 .col{border-right:1px solid var(--bo);padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
 .col:last-child{border-right:none}
 
@@ -244,19 +244,57 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </div>
 
-<!-- COL 2: SIGNALS + CHART + TRADES -->
+<!-- COL 2a: TPT -->
 <div class="col">
 
+  <!-- TPT Challenge Tracker -->
   <div class="card" style="flex:0">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Live Signal Feed</span>
+      <span class="ct" style="margin:0">TPT — 150K Challenge</span>
+      <span class="bd ba">INTRADAY · MONTHLY</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px">
+      <div class="sb"><div class="sl2">Profit Target</div><div class="sv2" style="color:var(--g)">$9,000</div></div>
+      <div class="sb"><div class="sl2">Max Drawdown</div><div class="sv2" style="color:var(--r)">$4,500</div></div>
+      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="tpt-pnl">+$0.00</div></div>
+      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="tpt-wr">0%</div></div>
+    </div>
+    <!-- Profit progress bar -->
+    <div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
+        <span>Profit Progress</span><span id="tpt-profit-pct">0%</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:2px;height:5px">
+        <div id="tpt-profit-bar" style="height:5px;border-radius:2px;background:var(--g);width:0%;transition:width 1s ease"></div>
+      </div>
+    </div>
+    <!-- Drawdown bar -->
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
+        <span>Drawdown Used</span><span id="tpt-dd-pct">0%</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:2px;height:5px">
+        <div id="tpt-dd-bar" style="height:5px;border-radius:2px;background:var(--r);width:0%;transition:width 1s ease"></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:8px;color:var(--t3)">
+      <span>Signals today: <span style="color:var(--t2)" id="tpt-sigs">0</span></span>
+      <span>W/L: <span style="color:var(--t2)" id="tpt-wl">0 / 0</span></span>
+      <span>Consec. L: <span id="consec-val" style="color:var(--t1)">0/2</span></span>
+    </div>
+  </div>
+
+  <!-- TPT Signal Feed -->
+  <div class="card" style="flex:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="ct" style="margin:0">TPT Signal Feed</span>
       <span class="bd" id="alert-count-badge">0 ALERTS</span>
     </div>
     <table class="tbl">
-      <colgroup><col style="width:42px"><col style="width:42px"><col style="width:48px"><col style="width:40px"><col style="width:55px"><col style="width:40px"><col style="width:45px"></colgroup>
+      <colgroup><col style="width:36px"><col style="width:38px"><col style="width:40px"><col style="width:30px"><col style="width:48px"><col style="width:35px"><col style="width:38px"></colgroup>
       <thead><tr><th>Time</th><th>Asset</th><th>Action</th><th>Qty</th><th>Retrace</th><th>ATR</th><th>R:R</th></tr></thead>
       <tbody id="signal-body">
-        <tr><td colspan="7"><div class="empty"><div class="empty-icon">&#9685;</div><div style="font-size:8px;letter-spacing:1px">WAITING FOR WEBHOOKS</div><div style="font-size:8px;color:var(--t3)">Bot live Sunday 17:00 CT</div></div></td></tr>
+        <tr><td colspan="7"><div class="empty"><div class="empty-icon">&#9685;</div><div style="font-size:8px;letter-spacing:1px">WAITING FOR SIGNAL</div></div></td></tr>
       </tbody>
     </table>
     <div id="last-signal-levels" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--bo)">
@@ -275,6 +313,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     </div>
   </div>
 
+  <!-- TPT Equity Curve -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span class="ct" style="margin:0">Equity Curve — TPT</span>
@@ -287,16 +326,112 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="chart-wrap"><canvas id="ec" role="img" aria-label="TPT equity curve">Equity data</canvas></div>
   </div>
 
+  <!-- TPT Recent Trades -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span class="ct" style="margin:0">Recent Trades — TPT</span>
       <span style="font-size:8px;color:var(--t3)" id="trade-count">0 trades</span>
     </div>
-    <table class="tbl" id="trades-tbl">
-      <colgroup><col style="width:38px"><col style="width:38px"><col style="width:44px"><col style="width:32px"><col style="width:60px"><col style="width:55px"></colgroup>
+    <table class="tbl">
+      <colgroup><col style="width:36px"><col style="width:38px"><col style="width:40px"><col style="width:28px"><col style="width:55px"><col style="width:50px"></colgroup>
       <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Qty</th><th>P&L</th><th>Result</th></tr></thead>
       <tbody id="trades-body">
-        <tr><td colspan="6"><div class="empty" style="padding:16px"><div style="font-size:8px;letter-spacing:1px;color:var(--t3)">No trades yet this session</div></div></td></tr>
+        <tr><td colspan="6"><div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No trades yet</div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- COL 2b: FTMO -->
+<div class="col">
+
+  <!-- FTMO Challenge Tracker -->
+  <div class="card" style="flex:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="ct" style="margin:0">FTMO — 100K Challenge</span>
+      <span class="bd bb2">SWING · STEP 1</span>
+    </div>
+    <!-- Step 1 / Step 2 tabs -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+      <div style="background:var(--bg3);border:1px solid var(--bb);border-radius:3px;padding:6px 8px">
+        <div style="font-size:7px;color:var(--b);letter-spacing:1.5px;font-weight:700;margin-bottom:3px">STEP 1 — ACTIVE</div>
+        <div style="font-size:9px;color:var(--t2)">Target: <span style="color:var(--g);font-weight:700">$10,000</span></div>
+        <div style="font-size:9px;color:var(--t2)">Max DD: <span style="color:var(--r);font-weight:700">$10,000</span></div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--bo);border-radius:3px;padding:6px 8px;opacity:.5">
+        <div style="font-size:7px;color:var(--t3);letter-spacing:1.5px;font-weight:700;margin-bottom:3px">STEP 2 — LOCKED</div>
+        <div style="font-size:9px;color:var(--t3)">Target: $5,000</div>
+        <div style="font-size:9px;color:var(--t3)">Max DD: $10,000</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px">
+      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="ftmo-pnl">+$0.00</div></div>
+      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="ftmo-wr">0%</div></div>
+    </div>
+    <!-- Profit progress bar -->
+    <div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
+        <span>Profit Progress (Step 1)</span><span id="ftmo-profit-pct">0%</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:2px;height:5px">
+        <div id="ftmo-profit-bar" style="height:5px;border-radius:2px;background:var(--g);width:0%;transition:width 1s ease"></div>
+      </div>
+    </div>
+    <!-- Drawdown bar -->
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
+        <span>Drawdown Used</span><span id="ftmo-dd-pct">0%</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:2px;height:5px">
+        <div id="ftmo-dd-bar" style="height:5px;border-radius:2px;background:var(--r);width:0%;transition:width 1s ease"></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:8px;color:var(--t3)">
+      <span>Signals: <span style="color:var(--t2)" id="ftmo-sigs">0</span></span>
+      <span>W/L: <span style="color:var(--t2)" id="ftmo-wl">0 / 0</span></span>
+      <span>One-time fee ✓</span>
+    </div>
+  </div>
+
+  <!-- FTMO Signal Feed -->
+  <div class="card" style="flex:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="ct" style="margin:0">FTMO Signal Feed</span>
+      <span class="bd" id="ftmo-alert-badge">0 ALERTS</span>
+    </div>
+    <table class="tbl">
+      <colgroup><col style="width:36px"><col style="width:44px"><col style="width:40px"><col style="width:35px"><col style="width:48px"><col style="width:50px"></colgroup>
+      <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>Event</th><th>P&L</th></tr></thead>
+      <tbody id="ftmo-signal-body">
+        <tr><td colspan="6"><div class="empty"><div class="empty-icon">&#9685;</div><div style="font-size:8px;letter-spacing:1px">WAITING FOR SIGNAL</div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- FTMO Equity Curve -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="ct" style="margin:0">Equity Curve — FTMO</span>
+      <div class="tabrow" style="width:120px">
+        <div class="tab act" onclick="setRF('1W',this)">1W</div>
+        <div class="tab" onclick="setRF('1M',this)">1M</div>
+        <div class="tab" onclick="setRF('ALL',this)">All</div>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="ec-ftmo" role="img" aria-label="FTMO equity curve">FTMO Equity</canvas></div>
+  </div>
+
+  <!-- FTMO Recent Trades -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="ct" style="margin:0">Recent Trades — FTMO</span>
+      <span style="font-size:8px;color:var(--t3)" id="ftmo-trade-count">0 trades</span>
+    </div>
+    <table class="tbl">
+      <colgroup><col style="width:36px"><col style="width:44px"><col style="width:40px"><col style="width:32px"><col style="width:55px"><col style="width:45px"></colgroup>
+      <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>P&L</th><th>Result</th></tr></thead>
+      <tbody id="ftmo-trades-body">
+        <tr><td colspan="6"><div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No trades yet</div></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -407,8 +542,18 @@ const RAILWAY_URL = 'https://tradingbot-production-1e5a.up.railway.app';
 const FINNHUB_KEY = 'd84klj1r01qutij98emgd84klj1r01qutij98en0';
 let lastSignalTime = null;
 let chartInstance = null;
-let equityData = { '1W': { l:[], d:[] }, '1M': { l:[], d:[] }, 'ALL': { l:[], d:[] } };
+let ftmoChartInstance = null;
+let equityData     = { '1W': { l:[], d:[] }, '1M': { l:[], d:[] }, 'ALL': { l:[], d:[] } };
+let ftmoEquityData = { '1W': { l:[], d:[] }, '1M': { l:[], d:[] }, 'ALL': { l:[], d:[] } };
 let allTrades = { tpt: [], ftmo: [] };
+
+// Challenge constants
+const TPT_TARGET = 9000;
+const TPT_MAX_DD = 4500;
+const TPT_START  = 150000;
+const FTMO_TARGET = 10000; // Step 1
+const FTMO_MAX_DD = 10000;
+const FTMO_START  = 100000;
 
 // ── Clock ──────────────────────────────────────────────────
 function updateClock() {
@@ -505,6 +650,18 @@ function updateDashboard(d) {
   document.getElementById('tpt-sigs').textContent = d.tpt_daily_signals || 0;
   document.getElementById('tpt-wl').textContent = (d.tpt_daily_wins||0) + ' / ' + (d.tpt_daily_losses||0);
 
+  // TPT challenge progress bars
+  const tptBal = d.tpt_account_balance || TPT_START;
+  const tptProfit = Math.max(0, tptBal - TPT_START);
+  const tptProfitPct = Math.min(100, Math.round((tptProfit / TPT_TARGET) * 100));
+  const tptDDUsed = Math.max(0, TPT_START - tptBal);
+  const tptDDPct = Math.min(100, Math.round((tptDDUsed / TPT_MAX_DD) * 100));
+  document.getElementById('tpt-profit-pct').textContent = tptProfitPct + '%';
+  document.getElementById('tpt-profit-bar').style.width = tptProfitPct + '%';
+  document.getElementById('tpt-dd-pct').textContent = tptDDPct + '%';
+  document.getElementById('tpt-dd-bar').style.width = tptDDPct + '%';
+  document.getElementById('tpt-dd-bar').style.background = tptDDPct > 70 ? 'var(--r)' : tptDDPct > 40 ? 'var(--a)' : 'var(--r)';
+
   // ── Alert count badge ───────────────────────────────────
   const sigs = d.tpt_daily_signals || 0;
   const acb = document.getElementById('alert-count-badge');
@@ -518,6 +675,25 @@ function updateDashboard(d) {
   fpnlEl.style.color = fpnl >= 0 ? 'var(--g)' : 'var(--r)';
   document.getElementById('ftmo-wr').textContent = (d.ftmo_win_rate || 0) + '%';
   document.getElementById('ftmo-sigs').textContent = d.ftmo_daily_signals || 0;
+  document.getElementById('ftmo-wl').textContent = (d.ftmo_daily_wins||0) + ' / ' + (d.ftmo_daily_losses||0);
+
+  // FTMO alert badge
+  const fsigs = d.ftmo_daily_signals || 0;
+  const fab = document.getElementById('ftmo-alert-badge');
+  fab.textContent = fsigs + ' ALERT' + (fsigs !== 1 ? 'S' : '');
+  fab.className = 'bd ' + (fsigs > 0 ? 'bb2' : 'bdim');
+
+  // FTMO challenge progress bars
+  const ftmoBal = d.ftmo_account_balance || FTMO_START;
+  const ftmoProfit = Math.max(0, ftmoBal - FTMO_START);
+  const ftmoProfitPct = Math.min(100, Math.round((ftmoProfit / FTMO_TARGET) * 100));
+  const ftmoDDUsed = Math.max(0, FTMO_START - ftmoBal);
+  const ftmoDDPct = Math.min(100, Math.round((ftmoDDUsed / FTMO_MAX_DD) * 100));
+  document.getElementById('ftmo-profit-pct').textContent = ftmoProfitPct + '%';
+  document.getElementById('ftmo-profit-bar').style.width = ftmoProfitPct + '%';
+  document.getElementById('ftmo-dd-pct').textContent = ftmoDDPct + '%';
+  document.getElementById('ftmo-dd-bar').style.width = ftmoDDPct + '%';
+  document.getElementById('ftmo-dd-bar').style.background = ftmoDDPct > 70 ? 'var(--r)' : ftmoDDPct > 40 ? 'var(--a)' : 'var(--r)';
 
   // ── Last signal / key levels ────────────────────────────
   if (d.tpt_last_signal) {
@@ -540,32 +716,32 @@ function updateDashboard(d) {
     }
   }
 
-  // ── Trades ──────────────────────────────────────────────
-  const trades = d.tpt_trades || [];
-  const tc = document.getElementById('trade-count');
-  tc.textContent = trades.length + ' trade' + (trades.length !== 1 ? 's' : '');
-  if (trades.length > 0) renderTrades(trades);
+  // ── Trades handled by fetchTrades() every 30s ──────────
 
   // ── Equity curve — driven by /trades, updated separately ──
   if (chartInstance) chartInstance.update('none');
 }
 
-// ── Phase 4: Fetch real trade history and build equity curve ──
+// ── Phase 4: Fetch real trade history and build equity curves ──
 async function fetchTrades() {
   try {
     const res = await fetch(RAILWAY_URL + '/trades', {cache:'no-store'});
     if (!res.ok) return;
     const data = await res.json();
     allTrades = data;
-    buildEquityCurve(data.tpt || []);
-    renderFullTradeHistory(data.tpt || []);
+    buildEquityCurve(data.tpt || [], TPT_START, 'tpt');
+    buildEquityCurve(data.ftmo || [], FTMO_START, 'ftmo');
+    renderFullTradeHistory(data.tpt || [], 'tpt');
+    renderFullTradeHistory(data.ftmo || [], 'ftmo');
   } catch(e) { console.warn('Trades fetch failed:', e); }
 }
 
-function buildEquityCurve(trades) {
-  const START_BAL = 150000;
+function buildEquityCurve(trades, START_BAL, account) {
+  const isFtmo = account === 'ftmo';
+  const chartInst = isFtmo ? ftmoChartInstance : chartInstance;
+  const eqData = isFtmo ? ftmoEquityData : equityData;
+
   if (!trades || trades.length === 0) {
-    // No trades yet — flat line from account open
     const today = new Date();
     const labels = [], values = [];
     for (let i = 6; i >= 0; i--) {
@@ -573,76 +749,70 @@ function buildEquityCurve(trades) {
       labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
       values.push(START_BAL);
     }
-    equityData['1W'] = { l: labels, d: values };
-    equityData['1M'] = { l: labels, d: values };
-    equityData['ALL']= { l: labels, d: values };
-    if (chartInstance) {
-      chartInstance.data.labels = labels;
-      chartInstance.data.datasets[0].data = values;
-      chartInstance.update();
+    eqData['1W'] = { l: labels, d: values };
+    eqData['1M'] = { l: labels, d: values };
+    eqData['ALL']= { l: labels, d: values };
+    if (chartInst) {
+      chartInst.data.labels = labels;
+      chartInst.data.datasets[0].data = values;
+      chartInst.update();
     }
     return;
   }
 
-  // Sort trades by time
-  const sorted = [...trades].sort((a,b) => new Date(a.time||0) - new Date(b.time||0));
-
-  // Build running balance
+  const sorted = [...trades].sort((a,b) => new Date(a.date||a.time||0) - new Date(b.date||b.time||0));
   let bal = START_BAL;
   const points = [{ label: 'Open', bal }];
   sorted.forEach(t => {
     bal += (t.pnl || 0);
-    const d = new Date(t.time || Date.now());
+    const d = new Date(t.date || t.time || Date.now());
     points.push({ label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), bal: Math.round(bal) });
   });
 
-  // 1W: last 7 calendar days
   const now = new Date();
-  const w7ago = new Date(now); w7ago.setDate(now.getDate()-7);
-  const wPts = points.filter(p => !p.time || new Date(p.time) >= w7ago);
-  equityData['1W'] = { l: (wPts.length ? wPts : points.slice(-7)).map(p=>p.label), d: (wPts.length ? wPts : points.slice(-7)).map(p=>p.bal) };
-
-  // 1M: last 30 days
+  const w7ago  = new Date(now); w7ago.setDate(now.getDate()-7);
   const m30ago = new Date(now); m30ago.setDate(now.getDate()-30);
-  const mPts = points.filter(p => !p.time || new Date(p.time) >= m30ago);
-  equityData['1M'] = { l: (mPts.length ? mPts : points).map(p=>p.label), d: (mPts.length ? mPts : points).map(p=>p.bal) };
+  const wPts = points.slice(-Math.max(7, points.length));
+  const mPts = points.slice(-Math.max(30, points.length));
+  eqData['1W']  = { l: wPts.map(p=>p.label),  d: wPts.map(p=>p.bal) };
+  eqData['1M']  = { l: mPts.map(p=>p.label),  d: mPts.map(p=>p.bal) };
+  eqData['ALL'] = { l: points.map(p=>p.label), d: points.map(p=>p.bal) };
 
-  // ALL
-  equityData['ALL'] = { l: points.map(p=>p.label), d: points.map(p=>p.bal) };
-
-  // Update chart to current tab
-  if (chartInstance) {
-    const active = document.querySelector('.tab.act');
-    const key = active ? active.textContent.trim() : '1W';
-    chartInstance.data.labels = equityData[key].l;
-    chartInstance.data.datasets[0].data = equityData[key].d;
-    chartInstance.update();
+  if (chartInst) {
+    chartInst.data.labels = eqData['1W'].l;
+    chartInst.data.datasets[0].data = eqData['1W'].d;
+    chartInst.update();
   }
 }
 
-function renderFullTradeHistory(trades) {
+function renderFullTradeHistory(trades, account) {
+  const isFtmo = account === 'ftmo';
+  const bodyId  = isFtmo ? 'ftmo-trades-body' : 'trades-body';
+  const countId = isFtmo ? 'ftmo-trade-count' : 'trade-count';
+  const pnlId   = isFtmo ? 'ftmo-pnl' : 'tpt-pnl';
+  const qtyLabel = isFtmo ? 'lot_size' : 'contracts';
+
+  const body  = document.getElementById(bodyId);
+  const tcEl  = document.getElementById(countId);
   if (!trades || trades.length === 0) return;
-  const body = document.getElementById('trades-body');
-  body.innerHTML = '';
-  const tpnlEl = document.getElementById('tpt-pnl');
-  const tcEl = document.getElementById('trade-count');
+
   tcEl.textContent = trades.length + ' trade' + (trades.length !== 1 ? 's' : '');
-
-  // Total P&L from all trades
   const totalPnl = trades.reduce((s, t) => s + (t.pnl || 0), 0);
-  tpnlEl.textContent = fmt$(totalPnl);
-  tpnlEl.style.color = totalPnl >= 0 ? 'var(--g)' : 'var(--r)';
+  const pnlEl = document.getElementById(pnlId);
+  if (pnlEl) { pnlEl.textContent = fmt$(totalPnl); pnlEl.style.color = totalPnl >= 0 ? 'var(--g)' : 'var(--r)'; }
 
+  body.innerHTML = '';
   [...trades].reverse().slice(0, 20).forEach(t => {
     const pnl = t.pnl || 0;
     const result = t.result || '';
     const resultClass = result.includes('TP') ? 'bd bg' : result.includes('SL') ? 'bd br' : 'bd bdim';
+    const qty = t[qtyLabel] || t.contracts || t.lot_size || '--';
     const row = document.createElement('tr');
     row.innerHTML = `
       <td style="color:var(--t3)">${t.time||'--'}</td>
-      <td style="font-weight:700">${t.instrument||'MNQ'}</td>
+      <td style="font-weight:700">${t.instrument||'--'}</td>
       <td style="color:${t.direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${t.direction||'--'}</td>
-      <td style="text-align:center">${t.contracts||'--'}</td>
+      <td style="text-align:center">${qty}</td>
       <td style="color:${pnl>=0?'var(--g)':'var(--r)'};font-weight:700">${fmt$(pnl)}</td>
       <td><span class="${resultClass}">${result||'--'}</span></td>`;
     body.appendChild(row);
@@ -669,66 +839,45 @@ function addSignalRow(ls) {
   while (body.rows.length > 10) body.deleteRow(body.rows.length - 1);
 }
 
-function renderTrades(trades) {
-  const body = document.getElementById('trades-body');
-  body.innerHTML = '';
-  [...trades].reverse().forEach(t => {
-    const pnl = t.pnl || 0;
-    const result = t.result || '';
-    const resultClass = result.includes('TP') ? 'bd bg' : result.includes('SL') ? 'bd br' : 'bd bdim';
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td style="color:var(--t3)">${t.time||'--'}</td>
-      <td style="font-weight:700">${t.instrument||'MNQ'}</td>
-      <td style="color:${t.direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${t.direction||'--'}</td>
-      <td style="text-align:center">${t.contracts||'--'}</td>
-      <td style="color:${pnl>=0?'var(--g)':'var(--r)'};font-weight:700">${fmt$(pnl)}</td>
-      <td><span class="${resultClass}">${result||'--'}</span></td>`;
-    body.appendChild(row);
-  });
-}
 
-// ── Equity Chart ───────────────────────────────────────────
+// ── Equity Chart — TPT ────────────────────────────────────
 function initChart() {
   const ctx = document.getElementById('ec').getContext('2d');
   chartInstance = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: equityData['1W'].l,
-      datasets: [{
-        data: equityData['1W'].d,
-        borderColor: '#00e676',
-        borderWidth: 1.5,
-        pointRadius: 2,
-        pointBackgroundColor: '#00e676',
-        fill: true,
-        backgroundColor: (c) => {
-          const g = c.chart.ctx.createLinearGradient(0,0,0,140);
-          g.addColorStop(0,'rgba(0,230,118,.15)');
-          g.addColorStop(1,'rgba(0,230,118,0)');
-          return g;
-        },
-        tension: 0.4
-      }]
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2233',borderColor:'rgba(255,255,255,.1)',borderWidth:1,titleColor:'#5d7490',bodyColor:'#00e676',callbacks:{label:c=>' $'+Math.round(c.parsed.y).toLocaleString()}}},
-      scales:{
-        x:{ticks:{color:'#2e3d52',font:{size:9,family:"'JetBrains Mono',monospace"}},grid:{color:'rgba(255,255,255,.03)'}},
-        y:{ticks:{color:'#2e3d52',font:{size:9},callback:v=>'$'+(v/1000).toFixed(0)+'k'},grid:{color:'rgba(255,255,255,.03)'}}
-      }
-    }
+    data: { labels: [], datasets: [{ data: [], borderColor: '#00e676', borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: '#00e676', fill: true, backgroundColor: (c) => { const g = c.chart.ctx.createLinearGradient(0,0,0,140); g.addColorStop(0,'rgba(0,230,118,.15)'); g.addColorStop(1,'rgba(0,230,118,0)'); return g; }, tension: 0.4 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2233',borderColor:'rgba(255,255,255,.1)',borderWidth:1,titleColor:'#5d7490',bodyColor:'#00e676',callbacks:{label:c=>' $'+Math.round(c.parsed.y).toLocaleString()}}}, scales:{ x:{ticks:{color:'#2e3d52',font:{size:9,family:"'JetBrains Mono',monospace"}},grid:{color:'rgba(255,255,255,.03)'}}, y:{ticks:{color:'#2e3d52',font:{size:9},callback:v=>'$'+(v/1000).toFixed(0)+'k'},grid:{color:'rgba(255,255,255,.03)'}} } }
+  });
+}
+
+// ── Equity Chart — FTMO ───────────────────────────────────
+function initFtmoChart() {
+  const ctx = document.getElementById('ec-ftmo').getContext('2d');
+  ftmoChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets: [{ data: [], borderColor: '#4a9eff', borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: '#4a9eff', fill: true, backgroundColor: (c) => { const g = c.chart.ctx.createLinearGradient(0,0,0,140); g.addColorStop(0,'rgba(74,158,255,.15)'); g.addColorStop(1,'rgba(74,158,255,0)'); return g; }, tension: 0.4 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2233',borderColor:'rgba(255,255,255,.1)',borderWidth:1,titleColor:'#5d7490',bodyColor:'#4a9eff',callbacks:{label:c=>' $'+Math.round(c.parsed.y).toLocaleString()}}}, scales:{ x:{ticks:{color:'#2e3d52',font:{size:9,family:"'JetBrains Mono',monospace"}},grid:{color:'rgba(255,255,255,.03)'}}, y:{ticks:{color:'#2e3d52',font:{size:9},callback:v=>'$'+(v/1000).toFixed(0)+'k'},grid:{color:'rgba(255,255,255,.03)'}} } }
   });
 }
 
 function setR(k, el) {
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));
+  document.querySelectorAll('#ec').forEach(()=>{});
+  el.closest('.tabrow').querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));
   el.classList.add('act');
   if (equityData[k]) {
     chartInstance.data.labels = equityData[k].l;
     chartInstance.data.datasets[0].data = equityData[k].d;
     chartInstance.update();
+  }
+}
+
+function setRF(k, el) {
+  el.closest('.tabrow').querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));
+  el.classList.add('act');
+  if (ftmoEquityData[k]) {
+    ftmoChartInstance.data.labels = ftmoEquityData[k].l;
+    ftmoChartInstance.data.datasets[0].data = ftmoEquityData[k].d;
+    ftmoChartInstance.update();
   }
 }
 
@@ -980,16 +1129,47 @@ function renderCOT(items) {
   }).join('');
 }
 
+// ── FTMO Signal Feed renderer ──────────────────────────────
+function addFtmoSignalRow(event, instrument, direction, lotSize, pnl) {
+  const body = document.getElementById('ftmo-signal-body');
+  if (body.querySelector('.empty')) body.innerHTML = '';
+  const eventLabels = { entry_filled:'ENTRY', tp1_hit:'TP1', tp2_hit:'TP2', sl_hit:'SL' };
+  const eventColors = { entry_filled:'var(--b)', tp1_hit:'var(--g)', tp2_hit:'var(--g)', sl_hit:'var(--r)' };
+  const label = eventLabels[event] || event.toUpperCase();
+  const color = eventColors[event] || 'var(--t2)';
+  const now = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'});
+  const row = document.createElement('tr');
+  row.className = 'signal-new';
+  row.innerHTML = `
+    <td style="color:var(--t3)">${now}</td>
+    <td style="font-weight:700">${instrument||'--'}</td>
+    <td style="color:${direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${direction||'--'}</td>
+    <td>${lotSize||'--'}</td>
+    <td style="color:${color};font-weight:700">${label}</td>
+    <td style="color:${(pnl||0)>=0?'var(--g)':'var(--r)'};font-weight:700">${pnl!=null?fmt$(pnl):'--'}</td>`;
+  body.prepend(row);
+  while (body.rows.length > 10) body.deleteRow(body.rows.length - 1);
+}
+
+// ── Kill button ────────────────────────────────────────────
+function doKill() {
+  const btn = document.querySelector('.kbtn');
+  btn.textContent = 'SENDING...';
+  btn.style.background = 'rgba(255,68,68,.4)';
+  setTimeout(() => { btn.innerHTML = '&#9211; EMERGENCY KILL'; btn.style.background = ''; }, 2500);
+}
+
 // ── Boot ───────────────────────────────────────────────────
 initChart();
+initFtmoChart();
 fetchState();
 fetchTrades();
 fetchCalendar();
 fetchCOT();
 setInterval(fetchState, 5000);
-setInterval(fetchTrades, 30000);     // trades every 30s
-setInterval(fetchCalendar, 3600000); // calendar every 1hr
-setInterval(fetchCOT, 3600000);      // COT every 1hr
+setInterval(fetchTrades, 30000);
+setInterval(fetchCalendar, 3600000);
+setInterval(fetchCOT, 3600000);
 </script>
 </body>
 </html>
