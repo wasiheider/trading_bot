@@ -226,18 +226,18 @@ def heartbeat():
 # ── Scheduler setup ────────────────────────────────────────
 def run_scheduler():
     # ── Weekday cycle (Mon–Thu) ────────────────────────────
-    schedule.every().day.at("15:53").do(tpt_close_warning)
-    schedule.every().day.at("15:55").do(tpt_kill)
-    schedule.every().day.at("17:00").do(tpt_reopen)
+    schedule.every().day.at("20:53").do(tpt_close_warning)   # 15:53 CT
+    schedule.every().day.at("20:55").do(tpt_kill)             # 15:55 CT
+    schedule.every().day.at("22:00").do(tpt_reopen)           # 17:00 CT
 
     # ── Weekend cycle ──────────────────────────────────────
-    schedule.every().day.at("15:50").do(weekly_summary)           # Fri only — weekly report
-    schedule.every().day.at("15:58").do(tpt_weekend_kill_warning) # Fri only — 2-min warning
-    schedule.every().day.at("16:00").do(tpt_weekend_kill)         # Fri only — weekend shutdown
-    schedule.every().day.at("17:00").do(tpt_weekend_reopen)       # Sun only — Asian session open
+    schedule.every().day.at("20:50").do(weekly_summary)           # Fri 15:50 CT
+    schedule.every().day.at("20:58").do(tpt_weekend_kill_warning) # Fri 15:58 CT
+    schedule.every().day.at("21:00").do(tpt_weekend_kill)         # Fri 16:00 CT
+    schedule.every().day.at("22:00").do(tpt_weekend_reopen)       # Sun 17:00 CT
 
-    # ── Daily resets (both accounts) — midnight CT ─────────
-    schedule.every().day.at("00:00").do(midnight_reset)
+    # ── Daily resets (both accounts) — midnight CT = 05:00 UTC
+    schedule.every().day.at("05:00").do(midnight_reset)
 
     # ── Heartbeat (keeps Railway alive) ───────────────────
     schedule.every().hour.do(heartbeat)
