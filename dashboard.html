@@ -448,6 +448,20 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       </tbody>
     </table>
   </div>
+
+  <!-- Session Breakdown -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span class="ct" style="margin:0">Session Breakdown</span>
+      <div style="display:flex;gap:4px">
+        <span class="bd" id="sess-tab-tpt" style="cursor:pointer" onclick="setSessAccount('tpt')">TPT</span>
+        <span class="bd bb2" id="sess-tab-ftmo" style="cursor:pointer;opacity:0.4" onclick="setSessAccount('ftmo')">FTMO</span>
+      </div>
+    </div>
+    <div id="session-breakdown-body">
+      <div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">Waiting for trade data...</div></div>
+    </div>
+  </div>
 </div>
 
 <!-- COL 3: EVENTS — Finnhub Live -->
@@ -742,7 +756,125 @@ async function fetchTrades() {
     buildEquityCurve(data.ftmo || [], FTMO_START, 'ftmo');
     renderFullTradeHistory(data.tpt || [], 'tpt');
     renderFullTradeHistory(data.ftmo || [], 'ftmo');
+    renderSessionBreakdown(sessAccount);
   } catch(e) { console.warn('Trades fetch failed:', e); }
+}
+
+// ── Session Breakdown ──────────────────────────────────────
+let sessAccount = 'tpt';
+
+function setSessAccount(acct) {
+  sessAccount = acct;
+  document.getElementById('sess-tab-tpt').style.opacity  = acct === 'tpt'  ? '1' : '0.4';
+  document.getElementById('sess-tab-ftmo').style.opacity = acct === 'ftmo' ? '1' : '0.4';
+  renderSessionBreakdown(acct);
+}
+
+function inferSession(trade) {
+  // Use stored session field if present, otherwise infer from UTC hour in date string
+  if (trade.session) return trade.session;
+  const dateStr = trade.date || trade.time || '';
+  if (!dateStr) return 'Unknown';
+  try {
+    const d = new Date(dateStr);
+    const utcH = d.getUTCHours();
+    if (utcH >= 22 || utcH < 2)  return 'Asian-Early';
+    if (utcH >= 2  && utcH < 7)  return 'Asian';
+    if (utcH >= 7  && utcH < 12) return 'London';
+    if (utcH >= 12 && utcH < 17) return 'NewYork';
+    if (utcH >= 17 && utcH < 21) return 'NY-Close';
+    return 'Outside';
+  } catch { return 'Unknown'; }
+}
+
+function renderSessionBreakdown(acct) {
+  const el = document.getElementById('session-breakdown-body');
+  if (!el) return;
+  const trades = (allTrades[acct] || []).filter(t => t.result && t.result !== 'OPEN');
+  if (!trades.length) {
+    el.innerHTML = '<div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No closed trades yet</div></div>';
+    return;
+  }
+
+  const SESSION_ORDER = ['Asian-Early','Asian','London','NewYork','NY-Close'];
+  const buckets = {};
+  trades.forEach(t => {
+    const s = inferSession(t);
+    if (!buckets[s]) buckets[s] = { wins:0, losses:0, pnl:0 };
+    const won = (t.result||'').includes('TP');
+    buckets[s].wins   += won ? 1 : 0;
+    buckets[s].losses += won ? 0 : 1;
+    buckets[s].pnl    += (t.pnl || 0);
+  });
+
+  // Sort by SESSION_ORDER, then any unknown sessions after
+  const keys = [...SESSION_ORDER.filter(s => buckets[s]), ...Object.keys(buckets).filter(s => !SESSION_ORDER.includes(s))];
+
+  const totalTrades = trades.length;
+  const totalWins   = trades.filter(t => (t.result||'').includes('TP')).length;
+  const totalWR     = totalTrades ? Math.round((totalWins/totalTrades)*100) : 0;
+  const totalPnl    = trades.reduce((s,t) => s + (t.pnl||0), 0);
+
+  let html = `
+  <table class="tbl" style="margin-bottom:8px">
+    <thead><tr>
+      <th>Session</th><th style="text-align:center">Trades</th>
+      <th style="text-align:center">Win%</th><th style="text-align:right">P&L</th>
+    </tr></thead>
+    <tbody>`;
+
+  keys.forEach(s => {
+    const b = buckets[s];
+    const total = b.wins + b.losses;
+    const wr    = total ? Math.round((b.wins/total)*100) : 0;
+    const wrColor = wr >= 55 ? 'var(--g)' : wr >= 45 ? 'var(--a)' : 'var(--r)';
+    const pnlColor = b.pnl >= 0 ? 'var(--g)' : 'var(--r)';
+    const barW  = wr;
+    html += `
+      <tr>
+        <td style="font-weight:700;font-size:9px">${s}</td>
+        <td style="text-align:center;color:var(--t2)">${total}</td>
+        <td style="text-align:center">
+          <div style="display:flex;align-items:center;gap:4px;justify-content:center">
+            <div style="width:32px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden">
+              <div style="width:${barW}%;height:100%;background:${wrColor};border-radius:2px"></div>
+            </div>
+            <span style="color:${wrColor};font-weight:700;font-size:9px">${wr}%</span>
+          </div>
+        </td>
+        <td style="text-align:right;color:${pnlColor};font-weight:700;font-size:9px">${fmt$(b.pnl)}</td>
+      </tr>`;
+  });
+
+  const totalPnlColor = totalPnl >= 0 ? 'var(--g)' : 'var(--r)';
+  const totalWRColor  = totalWR >= 55 ? 'var(--g)' : totalWR >= 45 ? 'var(--a)' : 'var(--r)';
+  html += `
+    </tbody>
+    <tfoot>
+      <tr style="border-top:1px solid var(--bo2)">
+        <td style="font-weight:800;font-size:9px;color:var(--t1)">TOTAL</td>
+        <td style="text-align:center;font-weight:700;color:var(--t1)">${totalTrades}</td>
+        <td style="text-align:center;font-weight:800;color:${totalWRColor}">${totalWR}%</td>
+        <td style="text-align:right;font-weight:800;color:${totalPnlColor}">${fmt$(totalPnl)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div style="display:flex;gap:4px;flex-wrap:wrap">
+    <span style="font-size:8px;color:var(--t3)">Best session:</span>
+    <span style="font-size:8px;color:var(--g);font-weight:700">${
+      keys.length ? keys.reduce((best,s) => {
+        const b = buckets[s], total = b.wins+b.losses;
+        const wr = total ? b.wins/total : 0;
+        const bestB = buckets[best], bestTotal = bestB.wins+bestB.losses;
+        const bestWR = bestTotal ? bestB.wins/bestTotal : 0;
+        return wr > bestWR ? s : best;
+      }) : '--'
+    }</span>
+    <span style="font-size:8px;color:var(--t3);margin-left:8px">Min sample (20 trades):</span>
+    <span style="font-size:8px;color:${totalTrades>=20?'var(--g)':'var(--a)'};font-weight:700">${totalTrades}/20</span>
+  </div>`;
+
+  el.innerHTML = html;
 }
 
 function buildEquityCurve(trades, START_BAL, account) {
