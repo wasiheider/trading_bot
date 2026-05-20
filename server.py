@@ -351,6 +351,33 @@ def dashboard():
     return Response("<h1>dashboard.html not found</h1>", mimetype="text/html"), 404
 
 
+# ── Manual Balance Update ──────────────────────────────────
+@app.route("/admin/set_balance", methods=["POST"])
+def set_balance():
+    data = request.json or {}
+    # Reuse FTMO token as admin token
+    if data.get("token") not in (TPT_WEBHOOK_TOKEN, FTMO_WEBHOOK_TOKEN):
+        return jsonify({"status": "unauthorized"}), 401
+    changed = []
+    if "tpt_balance" in data:
+        tpt_state["account_balance"] = float(data["tpt_balance"])
+        changed.append(f"TPT → ${data['tpt_balance']:,.2f}")
+    if "ftmo_balance" in data:
+        ftmo_state["account_balance"] = float(data["ftmo_balance"])
+        changed.append(f"FTMO → ${data['ftmo_balance']:,.2f}")
+    if not changed:
+        return jsonify({"status": "error", "reason": "no balance fields provided"}), 400
+    from risk import _save_state
+    _save_state()
+    summary = " | ".join(changed)
+    send_telegram(f"💰 *Manual Balance Update*\n{summary}")
+    return jsonify({
+        "status": "updated",
+        "tpt_balance":  tpt_state.get("account_balance"),
+        "ftmo_balance": ftmo_state.get("account_balance"),
+    }), 200
+
+
 # ── Health ─────────────────────────────────────────────────
 @app.route("/", methods=["GET"])
 def health():

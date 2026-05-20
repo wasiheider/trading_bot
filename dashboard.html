@@ -158,6 +158,25 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 /* PULSE ANIMATION for new signals */
 @keyframes flash{0%{background:rgba(0,230,118,.15)}100%{background:transparent}}
 .signal-new{animation:flash .8s ease}
+
+/* BALANCE EDIT MODAL */
+.bal-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center}
+.bal-modal-overlay.open{display:flex}
+.bal-modal{background:var(--bg2);border:1px solid var(--bo2);border-radius:6px;padding:20px 24px;width:300px;display:flex;flex-direction:column;gap:12px}
+.bal-modal-title{font-family:var(--head);font-size:13px;font-weight:700;letter-spacing:1px;color:var(--t1)}
+.bal-modal-inputs{display:flex;flex-direction:column;gap:8px}
+.bal-input-row{display:flex;flex-direction:column;gap:4px}
+.bal-input-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--t3);font-weight:700}
+.bal-input{background:var(--bg3);border:1px solid var(--bo2);color:var(--t1);font-family:var(--mono);font-size:13px;padding:7px 10px;border-radius:3px;width:100%;outline:none}
+.bal-input:focus{border-color:var(--g)}
+.bal-modal-btns{display:flex;gap:8px;justify-content:flex-end}
+.bal-btn{padding:6px 16px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:1px;cursor:pointer;border:none;font-family:var(--mono)}
+.bal-btn-cancel{background:var(--bg3);color:var(--t2);border:1px solid var(--bo2)}
+.bal-btn-save{background:var(--gd);color:var(--g);border:1px solid var(--gb)}
+.bal-btn-save:hover{background:var(--gb)}
+.bal-edit-icon{font-size:9px;color:var(--t3);cursor:pointer;margin-left:4px;opacity:.6;transition:opacity .15s;vertical-align:middle}
+.bal-edit-icon:hover{opacity:1;color:var(--g)}
+.bal-saving{opacity:.5;pointer-events:none}
 </style>
 </head>
 <body>
@@ -178,17 +197,39 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="tb-accounts">
     <div class="acct">
       <div class="acct-lbl">Tradovate TPT</div>
-      <div class="acct-val" style="color:var(--g)" id="tpt-bal">$150,000</div>
+      <div class="acct-val" style="color:var(--g)" id="tpt-bal">$150,000<span class="bal-edit-icon" onclick="openBalModal('tpt')" title="Update balance">✎</span></div>
     </div>
     <div class="sep"></div>
     <div class="acct">
       <div class="acct-lbl">OANDA FTMO</div>
-      <div class="acct-val" style="color:var(--g)" id="ftmo-bal">$100,000</div>
+      <div class="acct-val" style="color:var(--g)" id="ftmo-bal">$100,000<span class="bal-edit-icon" onclick="openBalModal('ftmo')" title="Update balance">✎</span></div>
     </div>
     <div class="sep"></div>
     <div style="font-size:9px;color:var(--a);border:1px solid var(--ab);background:var(--ad);padding:4px 10px;border-radius:2px;letter-spacing:.5px">Fed: 3.50–3.75%</div>
     <div class="sep"></div>
     <button class="kbtn" onclick="doKill()">&#9211; EMERGENCY KILL</button>
+  </div>
+</div>
+
+<!-- BALANCE UPDATE MODAL -->
+<div class="bal-modal-overlay" id="bal-modal-overlay" onclick="if(event.target===this)closeBalModal()">
+  <div class="bal-modal">
+    <div class="bal-modal-title">UPDATE BALANCE</div>
+    <div class="bal-modal-inputs">
+      <div class="bal-input-row" id="bal-tpt-row">
+        <div class="bal-input-label">TPT Account Balance ($)</div>
+        <input class="bal-input" id="bal-tpt-input" type="number" placeholder="150000" step="0.01"/>
+      </div>
+      <div class="bal-input-row" id="bal-ftmo-row">
+        <div class="bal-input-label">FTMO Account Balance ($)</div>
+        <input class="bal-input" id="bal-ftmo-input" type="number" placeholder="100000" step="0.01"/>
+      </div>
+    </div>
+    <div id="bal-modal-status" style="font-size:9px;color:var(--t3);min-height:14px"></div>
+    <div class="bal-modal-btns">
+      <button class="bal-btn bal-btn-cancel" onclick="closeBalModal()">CANCEL</button>
+      <button class="bal-btn bal-btn-save" id="bal-save-btn" onclick="saveBalance()">SAVE</button>
+    </div>
   </div>
 </div>
 
@@ -1075,6 +1116,82 @@ function doKill() {
     btn.textContent = '&#9211; EMERGENCY KILL';
     btn.style.background = '';
   }, 2500);
+}
+
+// ── Balance Update Modal ───────────────────────────────────
+let _balMode = 'both'; // 'tpt', 'ftmo', or 'both'
+
+function openBalModal(mode) {
+  _balMode = mode || 'both';
+  const overlay = document.getElementById('bal-modal-overlay');
+  const tptRow  = document.getElementById('bal-tpt-row');
+  const ftmoRow = document.getElementById('bal-ftmo-row');
+  const tptIn   = document.getElementById('bal-tpt-input');
+  const ftmoIn  = document.getElementById('bal-ftmo-input');
+
+  // Pre-fill current values
+  const tptRaw  = document.getElementById('tpt-bal').textContent.replace(/[^0-9.]/g,'');
+  const ftmoRaw = document.getElementById('ftmo-bal').textContent.replace(/[^0-9.]/g,'');
+  tptIn.value  = tptRaw  || '';
+  ftmoIn.value = ftmoRaw || '';
+
+  // Show only relevant row if single account clicked
+  tptRow.style.display  = (mode === 'ftmo') ? 'none' : 'flex';
+  ftmoRow.style.display = (mode === 'tpt')  ? 'none' : 'flex';
+
+  document.getElementById('bal-modal-status').textContent = '';
+  overlay.classList.add('open');
+  (mode === 'ftmo' ? ftmoIn : tptIn).focus();
+}
+
+function closeBalModal() {
+  document.getElementById('bal-modal-overlay').classList.remove('open');
+}
+
+async function saveBalance() {
+  const tptVal  = parseFloat(document.getElementById('bal-tpt-input').value);
+  const ftmoVal = parseFloat(document.getElementById('bal-ftmo-input').value);
+  const status  = document.getElementById('bal-modal-status');
+  const btn     = document.getElementById('bal-save-btn');
+
+  const payload = { token: 'ftmo_xK9mP2qL8nR4vT7w' };
+  if (_balMode !== 'ftmo' && !isNaN(tptVal))  payload.tpt_balance  = tptVal;
+  if (_balMode !== 'tpt'  && !isNaN(ftmoVal)) payload.ftmo_balance = ftmoVal;
+
+  if (!payload.tpt_balance && !payload.ftmo_balance) {
+    status.style.color = 'var(--r)';
+    status.textContent = 'Enter a valid balance amount.';
+    return;
+  }
+
+  btn.classList.add('bal-saving');
+  btn.textContent = 'SAVING...';
+  status.style.color = 'var(--t3)';
+  status.textContent = 'Sending to Railway...';
+
+  try {
+    const res = await fetch(RAILWAY_URL + '/admin/set_balance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.status === 'updated') {
+      status.style.color = 'var(--g)';
+      status.textContent = '✓ Balance updated successfully';
+      setTimeout(closeBalModal, 900);
+      fetchState(); // refresh dashboard immediately
+    } else {
+      status.style.color = 'var(--r)';
+      status.textContent = data.reason || 'Update failed';
+    }
+  } catch(e) {
+    status.style.color = 'var(--r)';
+    status.textContent = 'Network error — check Railway connection';
+  } finally {
+    btn.classList.remove('bal-saving');
+    btn.textContent = 'SAVE';
+  }
 }
 
 // ── Phase 3: Finnhub Economic Calendar ────────────────────
