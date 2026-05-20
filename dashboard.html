@@ -174,7 +174,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .bal-btn-cancel{background:var(--bg3);color:var(--t2);border:1px solid var(--bo2)}
 .bal-btn-save{background:var(--gd);color:var(--g);border:1px solid var(--gb)}
 .bal-btn-save:hover{background:var(--gb)}
-.bal-edit-icon{font-size:9px;color:var(--t3);cursor:pointer;margin-left:4px;opacity:.6;transition:opacity .15s;vertical-align:middle}
+.bal-edit-icon{font-size:11px;color:var(--t2);cursor:pointer;margin-left:6px;opacity:0.7;transition:opacity .15s,color .15s;vertical-align:middle}
 .bal-edit-icon:hover{opacity:1;color:var(--g)}
 .bal-saving{opacity:.5;pointer-events:none}
 </style>
@@ -197,12 +197,12 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="tb-accounts">
     <div class="acct">
       <div class="acct-lbl">Tradovate TPT</div>
-      <div class="acct-val" style="color:var(--g)" id="tpt-bal">$150,000<span class="bal-edit-icon" onclick="openBalModal('tpt')" title="Update balance">✎</span></div>
+      <div class="acct-val" style="color:var(--g)"><span id="tpt-bal">$150,000</span><span class="bal-edit-icon" onclick="openBalModal('tpt')" title="Update balance">✎</span></div>
     </div>
     <div class="sep"></div>
     <div class="acct">
       <div class="acct-lbl">OANDA FTMO</div>
-      <div class="acct-val" style="color:var(--g)" id="ftmo-bal">$100,000<span class="bal-edit-icon" onclick="openBalModal('ftmo')" title="Update balance">✎</span></div>
+      <div class="acct-val" style="color:var(--g)"><span id="ftmo-bal">$100,000</span><span class="bal-edit-icon" onclick="openBalModal('ftmo')" title="Update balance">✎</span></div>
     </div>
     <div class="sep"></div>
     <div style="font-size:9px;color:var(--a);border:1px solid var(--ab);background:var(--ad);padding:4px 10px;border-radius:2px;letter-spacing:.5px">Fed: 3.50–3.75%</div>
@@ -1129,9 +1129,9 @@ function openBalModal(mode) {
   const tptIn   = document.getElementById('bal-tpt-input');
   const ftmoIn  = document.getElementById('bal-ftmo-input');
 
-  // Pre-fill current values
-  const tptRaw  = document.getElementById('tpt-bal').textContent.replace(/[^0-9.]/g,'');
-  const ftmoRaw = document.getElementById('ftmo-bal').textContent.replace(/[^0-9.]/g,'');
+  // Pre-fill current values (strip $ and commas)
+  const tptRaw  = (document.getElementById('tpt-bal').textContent  || '').replace(/[^0-9.]/g,'');
+  const ftmoRaw = (document.getElementById('ftmo-bal').textContent || '').replace(/[^0-9.]/g,'');
   tptIn.value  = tptRaw  || '';
   ftmoIn.value = ftmoRaw || '';
 
