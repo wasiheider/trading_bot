@@ -24,6 +24,17 @@ def _load_state():
             pass
     return {}
 
+def _is_today(date_str: str) -> bool:
+    """Check if a stored date string matches today's CT date."""
+    try:
+        import pytz
+        from datetime import datetime
+        ct = pytz.timezone("America/Chicago")
+        today = datetime.now(ct).strftime("%Y-%m-%d")
+        return date_str == today
+    except Exception:
+        return False
+
 def _load_balance_from_trades(account: str, start_balance: float) -> float:
     """Compute real account balance by summing all closed trade P&L from trades.json."""
     if not os.path.exists(TRADES_FILE):
@@ -38,8 +49,14 @@ def _load_balance_from_trades(account: str, start_balance: float) -> float:
         return start_balance
 
 def _save_state():
-    """Write current state to disk."""
+    """Write current state to disk — always include today's date for daily fields."""
     try:
+        import pytz
+        from datetime import datetime
+        ct = pytz.timezone("America/Chicago")
+        today = datetime.now(ct).strftime("%Y-%m-%d")
+        tpt_state["_date"] = today
+        ftmo_state["_date"] = today
         with open(STATE_FILE, "w") as f:
             json.dump({"tpt": tpt_state, "ftmo": ftmo_state}, f, indent=2)
     except Exception as e:
@@ -48,31 +65,35 @@ def _save_state():
 # ── State tracking (loaded from disk on startup) ────────────
 _saved = _load_state()
 
+# If saved state is from a previous day, zero out daily fields on startup
+_tpt_date  = _saved.get("tpt",  {}).get("_date", "")
+_ftmo_date = _saved.get("ftmo", {}).get("_date", "")
+_tpt_fresh  = not _tpt_date  or not _is_today(_tpt_date)
+_ftmo_fresh = not _ftmo_date or not _is_today(_ftmo_date)
+
 tpt_state = {
     "consecutive_losses": _saved.get("tpt", {}).get("consecutive_losses", 0),
     "killed":             _saved.get("tpt", {}).get("killed", False),
-    "daily_pnl":          _saved.get("tpt", {}).get("daily_pnl", 0.0),
+    "daily_pnl":          0.0 if _tpt_fresh else _saved.get("tpt", {}).get("daily_pnl", 0.0),
     "account_balance":    _saved.get("tpt", {}).get("account_balance", TPT_ACCOUNT_SIZE),
-    # Dashboard additions
-    "daily_signals":      _saved.get("tpt", {}).get("daily_signals", 0),
-    "daily_wins":         _saved.get("tpt", {}).get("daily_wins", 0),
-    "daily_losses":       _saved.get("tpt", {}).get("daily_losses", 0),
-    "last_signal":        _saved.get("tpt", {}).get("last_signal", None),   # full payload from Pine Script
-    "trades":             _saved.get("tpt", {}).get("trades", []),           # last 20 trades
+    "daily_signals":      0   if _tpt_fresh else _saved.get("tpt", {}).get("daily_signals", 0),
+    "daily_wins":         0   if _tpt_fresh else _saved.get("tpt", {}).get("daily_wins", 0),
+    "daily_losses":       0   if _tpt_fresh else _saved.get("tpt", {}).get("daily_losses", 0),
+    "last_signal":        _saved.get("tpt", {}).get("last_signal", None),
+    "trades":             _saved.get("tpt", {}).get("trades", []),
 }
 
 ftmo_state = {
-    "daily_pnl":              _saved.get("ftmo", {}).get("daily_pnl", 0.0),
-    "consecutive_losses":     _saved.get("ftmo", {}).get("consecutive_losses", 0),
-    "weekly_consec_losses":   _saved.get("ftmo", {}).get("weekly_consec_losses", 0),
-    "killed":                 _saved.get("ftmo", {}).get("killed", False),
-    "account_balance":        _saved.get("ftmo", {}).get("account_balance",
-                                  _load_balance_from_trades("ftmo", FTMO_ACCOUNT_SIZE)),
-    # Dashboard additions
-    "daily_signals":          _saved.get("ftmo", {}).get("daily_signals", 0),
-    "daily_wins":             _saved.get("ftmo", {}).get("daily_wins", 0),
-    "daily_losses":           _saved.get("ftmo", {}).get("daily_losses", 0),
-    "trades":                 _saved.get("ftmo", {}).get("trades", []),
+    "daily_pnl":            0.0 if _ftmo_fresh else _saved.get("ftmo", {}).get("daily_pnl", 0.0),
+    "consecutive_losses":   _saved.get("ftmo", {}).get("consecutive_losses", 0),
+    "weekly_consec_losses": _saved.get("ftmo", {}).get("weekly_consec_losses", 0),
+    "killed":               _saved.get("ftmo", {}).get("killed", False),
+    "account_balance":      _saved.get("ftmo", {}).get("account_balance",
+                                _load_balance_from_trades("ftmo", FTMO_ACCOUNT_SIZE)),
+    "daily_signals":        0   if _ftmo_fresh else _saved.get("ftmo", {}).get("daily_signals", 0),
+    "daily_wins":           0   if _ftmo_fresh else _saved.get("ftmo", {}).get("daily_wins", 0),
+    "daily_losses":         0   if _ftmo_fresh else _saved.get("ftmo", {}).get("daily_losses", 0),
+    "trades":               _saved.get("ftmo", {}).get("trades", []),
 }
 
 # Save immediately so file always exists after first startup
