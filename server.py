@@ -51,6 +51,13 @@ def webhook_tpt():
     if data.get("token") != TPT_WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
 
+    # ── Route lifecycle events (tp1_hit, tp2_hit, sl_hit, range_break) ──────
+    event = data.get("event", "").lower()
+    if event in ("tp1_hit", "tp2_hit", "sl_hit"):
+        return handle_tpt_lifecycle(data, event)
+    if event == "range_break":
+        return handle_tpt_range_break(data)
+
     instrument = data.get("instrument", data.get("symbol", "")).upper().replace("1!", "").replace("!", "")
     direction  = data.get("direction", "").upper()
     price      = data.get("price", data.get("entry_price"))
@@ -100,6 +107,77 @@ def webhook_tpt():
     })
     send_telegram(msg)
     return jsonify({"status": "approved", "contracts": contracts}), 200
+
+
+# ── TPT Lifecycle Handler (tp1_hit, tp2_hit, sl_hit from Pine Script) ──────────
+def handle_tpt_lifecycle(data, event):
+    from risk import record_tpt_result, record_tpt_trade
+    instrument = data.get("symbol", "").upper().replace("1!", "").replace("!", "")
+    direction  = data.get("direction", "").upper()
+    price      = data.get("price")
+    pnl        = data.get("pnl")
+    contracts  = data.get("contracts")
+
+    won = event in ("tp1_hit", "tp2_hit")
+    record_tpt_result(won=won)
+    record_tpt_trade({
+        "time":       ct_now().strftime("%H:%M"),
+        "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
+        "instrument": instrument,
+        "direction":  direction,
+        "result":     "TP1" if event == "tp1_hit" else "TP2" if event == "tp2_hit" else "SL",
+        "pnl":        pnl or 0,
+        "contracts":  contracts,
+    })
+    # Update OPEN trade in trades.json to closed result
+    _update_open_tpt_trade(instrument, direction, event, pnl)
+
+    emoji_map = {"tp1_hit": "✅", "tp2_hit": "🏆", "sl_hit": "❌"}
+    label_map = {"tp1_hit": "TP1 Hit", "tp2_hit": "TP2 Hit", "sl_hit": "Stop Loss Hit"}
+    dir_emoji = "🟢" if direction == "LONG" else "🔴"
+    pnl_line  = f"\nP&L: `${pnl:+.2f}`" if pnl is not None else ""
+    msg = (f"{emoji_map.get(event, '📊')} *TPT {label_map.get(event, event.upper())}*\n"
+           f"{dir_emoji} `{instrument} {direction}`\n"
+           f"Price: `{price}`{pnl_line}")
+    send_telegram(msg)
+    return jsonify({"status": "logged", "event": event, "symbol": instrument}), 200
+
+
+def handle_tpt_range_break(data):
+    symbol    = data.get("symbol", "")
+    direction = data.get("direction", "")
+    price     = data.get("price")
+    rh        = data.get("range_high")
+    rl        = data.get("range_low")
+    msg = (f"⚠️ *TPT Range Break — {symbol}*\n"
+           f"Direction: `{direction}`\n"
+           f"Price: `{price}`\n"
+           f"Old range: `{rl}` – `{rh}`\n"
+           f"Update range levels in Pine Script.")
+    send_telegram(msg)
+    return jsonify({"status": "logged", "event": "range_break", "symbol": symbol}), 200
+
+
+def _update_open_tpt_trade(instrument: str, direction: str, event: str, pnl):
+    """Find the most recent OPEN TPT trade for this instrument/direction and close it."""
+    try:
+        log_data = _load_trades_log()
+        trades = log_data.get("tpt", [])
+        result_map = {"tp1_hit": "TP1", "tp2_hit": "TP2", "sl_hit": "SL"}
+        result = result_map.get(event, event.upper())
+        # Walk backwards to find the most recent OPEN match
+        for t in reversed(trades):
+            if (t.get("instrument", "").upper() == instrument.upper() and
+                    t.get("direction", "").upper() == direction.upper() and
+                    t.get("result") == "OPEN"):
+                t["result"] = result
+                t["pnl"]    = pnl or 0
+                break
+        with open(TRADES_FILE, "w") as f:
+            import json as _json
+            _json.dump(log_data, f, indent=2)
+    except Exception as e:
+        print(f"[trades] WARNING: could not update open trade: {e}", flush=True)
 
 
 # ── FTMO Webhook ───────────────────────────────────────────

@@ -9,6 +9,7 @@ TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID")
 
 # ── Anthropic ─────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+CLAUDE_MODEL      = "claude-sonnet-4-20250514"   # update when model changes
 
 # ── TPT (Take Profit Trader) ───────────────────────────────
 TPT_WEBHOOK_TOKEN = os.getenv("TPT_WEBHOOK_TOKEN")

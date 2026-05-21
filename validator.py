@@ -135,7 +135,8 @@ async def validate_signal(signal) -> dict:
     """
 
     # Pick the correct system prompt
-    system_prompt = APEX_SYSTEM_PROMPT if signal.account == "APEX" else FTMO_SYSTEM_PROMPT
+    # Pine Script sends account="TPT"; APEX is a legacy label — handle both
+    system_prompt = APEX_SYSTEM_PROMPT if signal.account in ("APEX", "TPT") else FTMO_SYSTEM_PROMPT
 
     # Build the user message with all signal details
     user_message = f"""

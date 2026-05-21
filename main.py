@@ -8,7 +8,7 @@ import json
 import os
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-from risk import reset_tpt_daily, reset_ftmo_daily, tpt_state, ftmo_state
+from risk import reset_tpt_daily, reset_ftmo_daily, reset_tpt_intraday, tpt_state, ftmo_state
 from notifier import send_telegram
 
 CT = pytz.timezone("America/Chicago")
@@ -42,6 +42,7 @@ def tpt_reopen():
     if ct_now().weekday() in (5, 6):  # Sat/Sun — skip, weekend handles it
         return
     tpt_state["killed"] = False
+    reset_tpt_intraday()        # clear last_signal so dashboard doesn't show stale trade
     from risk import _save_state
     _save_state()
     log("TPT market reopen — signals active (full futures session)")
@@ -69,6 +70,7 @@ def tpt_weekend_reopen():
     if ct_now().weekday() != 6:  # Only Sunday (6=Sun)
         return
     tpt_state["killed"] = False
+    reset_tpt_intraday()        # clear last_signal / stale state from Friday
     from risk import _save_state
     _save_state()
     log("TPT weekend reopen — Asian session live, signals active")

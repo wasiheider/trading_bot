@@ -224,6 +224,18 @@ def reset_tpt_daily():
     tpt_state["daily_signals"]      = 0
     tpt_state["daily_wins"]         = 0
     tpt_state["daily_losses"]       = 0
+    tpt_state["last_signal"]        = None   # clear stale signal from dashboard
+    _save_state()
+
+
+def reset_tpt_intraday():
+    """
+    Called at 5 PM CT session open (tpt_reopen / tpt_weekend_reopen).
+    Clears stale last_signal so the dashboard shows no carry-over from
+    yesterday's trade. Does NOT reset daily P&L or loss counters
+    (those belong to the midnight reset).
+    """
+    tpt_state["last_signal"] = None
     _save_state()
 
 
