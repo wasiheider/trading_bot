@@ -1402,7 +1402,7 @@ async function fetchCOT() {
   try {
     // CFTC Disaggregated Futures-Only Current Year report via Socrata API
     // This endpoint returns the latest COT data for the current year
-    const BASE = 'https://publicreporting.cftc.gov/resource/6dca-aqww.json';
+    const BASE = 'https://publicreporting.cftc.gov/resource/gpe5-46if.json';
     const codes = Object.values(COT_CODES).map(c => `'${c}'`).join(',');
     const url = `${BASE}?$where=cftc_contract_market_code in(${codes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=50`;
 
@@ -1435,7 +1435,7 @@ async function fetchCOT() {
 
     // Get report date from first row
     const reportDate = rows[0] ? rows[0].report_date_as_yyyy_mm_dd : null;
-    const dateLabel = reportDate ? 'CFTC ' + new Date(reportDate+'T12:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'CFTC Live';
+    const dateLabel = reportDate ? 'CFTC ' + reportDate.slice(5).replace('-','/') : 'CFTC Live';
     document.getElementById('cot-updated').textContent = dateLabel;
 
     renderCOT(results);
