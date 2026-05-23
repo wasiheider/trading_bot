@@ -108,13 +108,22 @@ TPT_INSTRUMENT_CONFIG = {
 
 # ── FTMO pip values ────────────────────────────────────────
 FTMO_INSTRUMENT_CONFIG = {
+    # Metals
     "XAUUSD": {"pip_value": 1.00,  "default_sl_pips": 20},
-    "USOIL":  {"pip_value": 1.00,  "default_sl_pips": 20},
+    "XAGUSD": {"pip_value": 0.50,  "default_sl_pips": 20},
+    # Indices
     "US100":  {"pip_value": 1.00,  "default_sl_pips": 20},
+    "US30":   {"pip_value": 1.00,  "default_sl_pips": 20},
+    "US500":  {"pip_value": 1.00,  "default_sl_pips": 20},
+    # Commodities
+    "USOIL":  {"pip_value": 1.00,  "default_sl_pips": 20},
+    # Forex
+    "EURUSD": {"pip_value": 10.00, "default_sl_pips": 20},
     "GBPUSD": {"pip_value": 10.00, "default_sl_pips": 20},
     "USDJPY": {"pip_value": 9.00,  "default_sl_pips": 20},
     "EURNZD": {"pip_value": 10.00, "default_sl_pips": 20},
-    "EURUSD": {"pip_value": 10.00, "default_sl_pips": 20},
+    # Crypto
+    "BTCUSD": {"pip_value": 1.00,  "default_sl_pips": 20},
 }
 
 
