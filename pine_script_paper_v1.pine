@@ -183,7 +183,7 @@ if (range_broken_up or range_broken_down) and not prev_range_broken and after_st
          '","range_high":' + str.tostring(htf_struct_high, price_format) +
          ',"range_low":'  + str.tostring(htf_struct_low,  price_format) +
          ',"price":'      + str.tostring(close, price_format) +
-         ',"token":"PAPER_TOKEN_PLACEHOLDER"}',
+         ',"token":"paper_wasirizvi_wyckoffstrategy"}',
          alert.freq_once_per_bar_close)
 else if not range_broken_up and not range_broken_down
     prev_range_broken := false
@@ -380,7 +380,7 @@ if short_signal and no_position
          ',"htf_range_low":' + str.tostring(htf_struct_low, price_format) +
          ',"htf_mid":' + str.tostring(htf_mid, price_format) +
          ',"bos_level":' + str.tostring(bos_bear_level, price_format) +
-         ',"token":"PAPER_TOKEN_PLACEHOLDER"}',
+         ',"token":"paper_wasirizvi_wyckoffstrategy"}',
          alert.freq_once_per_bar_close)
     bos_bear_entry_bar := bar_index
     bos_bear_active  := false
@@ -407,7 +407,7 @@ if long_signal and no_position
          ',"htf_range_low":' + str.tostring(htf_struct_low, price_format) +
          ',"htf_mid":' + str.tostring(htf_mid, price_format) +
          ',"bos_level":' + str.tostring(bos_bull_level, price_format) +
-         ',"token":"PAPER_TOKEN_PLACEHOLDER"}',
+         ',"token":"paper_wasirizvi_wyckoffstrategy"}',
          alert.freq_once_per_bar_close)
     bos_bull_entry_bar := bar_index
     bos_bear_active  := false
@@ -455,19 +455,19 @@ last_pnl        = _n >= 0 ? strategy.closedtrades.profit(_n) : 0.0
 last_exit_price = _n >= 0 ? strategy.closedtrades.exit_price(_n) : close
 
 if tp1_short_hit
-    alert('{"event":"tp1_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"SHORT","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos - strategy.position_size)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"PAPER_TOKEN_PLACEHOLDER"}', alert.freq_once_per_bar_close)
+    alert('{"event":"tp1_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"SHORT","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos - strategy.position_size)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
 if tp1_long_hit
-    alert('{"event":"tp1_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"LONG","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos - strategy.position_size)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"PAPER_TOKEN_PLACEHOLDER"}', alert.freq_once_per_bar_close)
+    alert('{"event":"tp1_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"LONG","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos - strategy.position_size)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
 if tp2_short_hit
-    alert('{"event":"tp2_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"SHORT","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"PAPER_TOKEN_PLACEHOLDER"}', alert.freq_once_per_bar_close)
+    alert('{"event":"tp2_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"SHORT","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
 if tp2_long_hit
-    alert('{"event":"tp2_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"LONG","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"PAPER_TOKEN_PLACEHOLDER"}', alert.freq_once_per_bar_close)
+    alert('{"event":"tp2_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"LONG","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
 if sl_short_hit
-    alert('{"event":"sl_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"SHORT","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"PAPER_TOKEN_PLACEHOLDER"}', alert.freq_once_per_bar_close)
+    alert('{"event":"sl_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"SHORT","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
     waiting_for_low  := true
     armed_side       := "none"
 if sl_long_hit
-    alert('{"event":"sl_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"LONG","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"PAPER_TOKEN_PLACEHOLDER"}', alert.freq_once_per_bar_close)
+    alert('{"event":"sl_hit","account":"PAPER","symbol":"' + symbol_name + '","direction":"LONG","price":' + str.tostring(last_exit_price, price_format) + ',"lot_size":' + str.tostring(math.abs(prev_pos)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
     waiting_for_high := true
     armed_side       := "none"
 
@@ -599,7 +599,7 @@ if show_info
 // 1. In TradingView → bottom broker panel → connect Paper Trading (free)
 // 2. Load this script on XAUUSD 15M chart
 // 3. Create alert: webhook URL = https://tradingbot-production-1e5a.up.railway.app/webhook/paper
-// 4. Replace PAPER_TOKEN_PLACEHOLDER in all alert() calls with your actual PAPER_WEBHOOK_TOKEN
+// 4. Token is already set to paper_wasirizvi_wyckoffstrategy in all alert() calls
 // 5. Verify first order appears in broker panel → Positions tab
 // 6. Roll out additional instruments one at a time after XAUUSD confirms
 // =============================================================================
