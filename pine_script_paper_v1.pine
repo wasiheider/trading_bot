@@ -63,7 +63,7 @@ clean_ticker = str.replace(str.replace(raw_ticker, ".SIM", ""), "SIM", "")
 symbol_name  = str.replace(str.replace(clean_ticker, "1!", ""), "!", "")
 
 is_xauusd = str.contains(raw_ticker, "XAU")
-is_usoil  = str.contains(raw_ticker, "OIL") or str.contains(raw_ticker, "WTI")
+is_usoil  = str.contains(raw_ticker, "OIL") or str.contains(raw_ticker, "WTI") or str.contains(raw_ticker, "CL")
 is_us100  = str.contains(raw_ticker, "US100") or str.contains(raw_ticker, "NAS") or str.contains(raw_ticker, "NQ")
 
 pip_value_per_001 = is_xauusd ? 0.01 : is_usoil ? 0.10 : is_us100 ? 0.01 : 0.10
