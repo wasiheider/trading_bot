@@ -174,13 +174,57 @@ if long_condition and no_position
     strategy.entry("LONG", strategy.long, qty=long_lots, comment="BOS LONG " + str.tostring(long_lots) + "L")
     strategy.exit("LONG_TP1", from_entry="LONG", qty=long_tp1_lots, limit=tp1_long,  stop=sl_long,  comment="TP1")
     strategy.exit("LONG_TP2", from_entry="LONG",                    limit=tp2_long,  stop=sl_long,  comment="TP2+SL")
-    alert('{"account":"FTMO","symbol":"' + syminfo.tickerid + '","direction":"LONG","lots":' + str.tostring(long_lots) + ',"entry_price":' + str.tostring(close) + ',"stop_loss":' + str.tostring(sl_long) + ',"tp1":' + str.tostring(tp1_long) + ',"tp2":' + str.tostring(tp2_long) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+    alert('{"event":"entry_filled","account":"FTMO","instrument":"' + syminfo.tickerid + '","direction":"LONG","lot_size":' + str.tostring(long_lots) + ',"price":' + str.tostring(close) + ',"stop_loss":' + str.tostring(sl_long) + ',"tp1":' + str.tostring(tp1_long) + ',"tp2":' + str.tostring(tp2_long) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
 
 if short_condition and no_position
     strategy.entry("SHORT", strategy.short, qty=short_lots, comment="BOS SHORT " + str.tostring(short_lots) + "L")
     strategy.exit("SHORT_TP1", from_entry="SHORT", qty=short_tp1_lots, limit=tp1_short, stop=sl_short, comment="TP1")
     strategy.exit("SHORT_TP2", from_entry="SHORT",                     limit=tp2_short, stop=sl_short, comment="TP2+SL")
-    alert('{"account":"FTMO","symbol":"' + syminfo.tickerid + '","direction":"SHORT","lots":' + str.tostring(short_lots) + ',"entry_price":' + str.tostring(close) + ',"stop_loss":' + str.tostring(sl_short) + ',"tp1":' + str.tostring(tp1_short) + ',"tp2":' + str.tostring(tp2_short) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+    alert('{"event":"entry_filled","account":"FTMO","instrument":"' + syminfo.tickerid + '","direction":"SHORT","lot_size":' + str.tostring(short_lots) + ',"price":' + str.tostring(close) + ',"stop_loss":' + str.tostring(sl_short) + ',"tp1":' + str.tostring(tp1_short) + ',"tp2":' + str.tostring(tp2_short) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+// ── Lifecycle alerts — TP1, TP2, SL hit ───────────────────
+// Track previous position to detect exits
+var float prev_position = 0.0
+position_changed = strategy.position_size != prev_position
+
+// TP1 hit — partial close (position reduced but not zero)
+tp1_long_hit  = prev_position > 0 and strategy.position_size > 0 and strategy.position_size < prev_position and position_changed
+tp1_short_hit = prev_position < 0 and strategy.position_size < 0 and strategy.position_size > prev_position and position_changed
+
+// Helper — index of last closed trade
+_n  = strategy.closedtrades - 1
+
+// TP2 / Full close — position goes to zero at a profit
+tp2_long_hit  = prev_position > 0 and strategy.position_size == 0 and _n >= 0 and strategy.closedtrades.exit_price(_n) >= strategy.closedtrades.entry_price(_n)
+tp2_short_hit = prev_position < 0 and strategy.position_size == 0 and _n >= 0 and strategy.closedtrades.exit_price(_n) <= strategy.closedtrades.entry_price(_n)
+
+// SL hit — position goes to zero at a loss
+sl_long_hit   = prev_position > 0 and strategy.position_size == 0 and _n >= 0 and strategy.closedtrades.exit_price(_n) < strategy.closedtrades.entry_price(_n)
+sl_short_hit  = prev_position < 0 and strategy.position_size == 0 and _n >= 0 and strategy.closedtrades.exit_price(_n) > strategy.closedtrades.entry_price(_n)
+
+// Get last closed trade P&L for lifecycle alerts
+last_pnl        = _n >= 0 ? strategy.closedtrades.profit(_n)     : 0.0
+last_exit_price = _n >= 0 ? strategy.closedtrades.exit_price(_n) : close
+
+if tp1_long_hit
+    alert('{"event":"tp1_hit","account":"FTMO","instrument":"' + syminfo.tickerid + '","direction":"LONG","price":' + str.tostring(last_exit_price) + ',"lot_size":' + str.tostring(math.abs(prev_position - strategy.position_size)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+if tp1_short_hit
+    alert('{"event":"tp1_hit","account":"FTMO","instrument":"' + syminfo.tickerid + '","direction":"SHORT","price":' + str.tostring(last_exit_price) + ',"lot_size":' + str.tostring(math.abs(prev_position - strategy.position_size)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+if tp2_long_hit
+    alert('{"event":"tp2_hit","account":"FTMO","instrument":"' + syminfo.tickerid + '","direction":"LONG","price":' + str.tostring(last_exit_price) + ',"lot_size":' + str.tostring(math.abs(prev_position)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+if tp2_short_hit
+    alert('{"event":"tp2_hit","account":"FTMO","instrument":"' + syminfo.tickerid + '","direction":"SHORT","price":' + str.tostring(last_exit_price) + ',"lot_size":' + str.tostring(math.abs(prev_position)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+if sl_long_hit
+    alert('{"event":"sl_hit","account":"FTMO","instrument":"' + syminfo.tickerid + '","direction":"LONG","price":' + str.tostring(last_exit_price) + ',"lot_size":' + str.tostring(math.abs(prev_position)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+if sl_short_hit
+    alert('{"event":"sl_hit","account":"FTMO","instrument":"' + syminfo.tickerid + '","direction":"SHORT","price":' + str.tostring(last_exit_price) + ',"lot_size":' + str.tostring(math.abs(prev_position)) + ',"pnl":' + str.tostring(last_pnl) + ',"token":"ftmo_xK9mP2qL8nR4vT7w"}', alert.freq_once_per_bar_close)
+
+prev_position := strategy.position_size
 
 // =============================================================================
 // HIDDEN PLOTS — for {{plot_X}} in alert messages

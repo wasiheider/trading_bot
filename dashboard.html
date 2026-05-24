@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Trading Bot V2.4 — Live Dashboard</title>
+<title>Trading Bot — Paper Trading POC</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@600;700;800&display=swap');
 
@@ -17,13 +17,10 @@
   --bg0:#060810;--bg1:#0b0f1a;--bg2:#101520;--bg3:#161d2e;--bg4:#1e2840;
   --bo:rgba(255,255,255,.06);--bo2:rgba(255,255,255,.11);--bo3:rgba(255,255,255,.18);
   --t1:#e2eaf6;--t2:#5d7490;--t3:#2e3d52;
-  --mono:'JetBrains Mono',monospace;
-  --head:'Syne',sans-serif;
+  --mono:'JetBrains Mono',monospace;--head:'Syne',sans-serif;
 }
 
 html,body{height:100%;background:var(--bg0);color:var(--t1);font-family:var(--mono);font-size:12px;overflow-x:hidden}
-
-/* SCANLINE EFFECT */
 body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none;z-index:9999}
 
 /* TOPBAR */
@@ -34,17 +31,16 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .tb-name{font-family:var(--head);font-size:15px;font-weight:800;letter-spacing:1px;color:var(--t1)}
 .tb-tag{font-size:9px;color:var(--t3);letter-spacing:2px;font-weight:600;margin-left:2px}
 .tb-clock{font-size:11px;color:var(--t2);letter-spacing:.5px}
-.tb-accounts{display:flex;align-items:center;gap:12px}
+.sep{width:1px;height:36px;background:var(--bo2)}
 .acct{text-align:right}
 .acct-lbl{font-size:8px;letter-spacing:2px;color:var(--t3);text-transform:uppercase}
 .acct-val{font-size:16px;font-weight:700;letter-spacing:-1px;margin-top:1px}
-.sep{width:1px;height:36px;background:var(--bo2)}
-.kbtn{background:var(--rd);border:1px solid var(--rb);color:var(--r);padding:6px 14px;border-radius:3px;font-size:9px;font-weight:700;cursor:pointer;letter-spacing:1.5px;font-family:var(--mono);display:flex;align-items:center;gap:6px;transition:background .15s}
-.kbtn:hover{background:rgba(255,68,68,.28)}
-.status-pill{font-size:9px;padding:3px 10px;border-radius:2px;font-weight:700;letter-spacing:1px}
+.poc-badge{font-size:9px;font-weight:700;letter-spacing:1.5px;padding:5px 14px;border-radius:3px;background:var(--ad);border:1px solid var(--ab);color:var(--a)}
+.live-badge{display:inline-flex;align-items:center;gap:4px;font-size:8px;color:var(--g);letter-spacing:1px}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--g);animation:blink 1.5s infinite}
 
 /* LAYOUT */
-.layout{display:grid;grid-template-columns:210px 1fr 1fr 210px 220px;min-height:calc(100vh - 52px);gap:0}
+.layout{display:grid;grid-template-columns:210px 1fr 220px 220px;min-height:calc(100vh - 52px);gap:0}
 .col{border-right:1px solid var(--bo);padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
 .col:last-child{border-right:none}
 
@@ -59,11 +55,11 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .rv{font-size:10px;font-weight:600}
 
 /* BADGES */
-.bd{padding:1px 7px;border-radius:2px;font-size:8px;font-weight:800;letter-spacing:.8px}
-.bg{background:var(--gd);color:var(--g);border:1px solid var(--gb)}
-.br{background:var(--rd);color:var(--r);border:1px solid var(--rb)}
-.ba{background:var(--ad);color:var(--a);border:1px solid var(--ab)}
-.bb2{background:var(--bd);color:var(--b);border:1px solid var(--bb)}
+.bd2{padding:1px 7px;border-radius:2px;font-size:8px;font-weight:800;letter-spacing:.8px}
+.bg2{background:var(--gd);color:var(--g);border:1px solid var(--gb)}
+.br2{background:var(--rd);color:var(--r);border:1px solid var(--rb)}
+.ba2{background:var(--ad);color:var(--a);border:1px solid var(--ab)}
+.bb3{background:var(--bd);color:var(--b);border:1px solid var(--bb)}
 .bdim{background:rgba(255,255,255,.05);color:var(--t2);border:1px solid var(--bo2)}
 
 /* STAT GRID */
@@ -88,7 +84,6 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .ir:last-child{border-bottom:none}
 .il{display:flex;align-items:center;gap:6px;color:var(--t2);font-size:10px}
 .dlv{width:5px;height:5px;border-radius:50%;background:var(--g);box-shadow:0 0 4px var(--g)}
-.doff{width:5px;height:5px;border-radius:50%;background:var(--r)}
 
 /* NEWS */
 .ni{padding:7px 0;border-bottom:1px solid var(--bo)}
@@ -100,20 +95,8 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .nhigh{background:rgba(255,68,68,.15);color:#ff8888;border:1px solid rgba(255,68,68,.3)}
 .nmed{background:rgba(245,166,35,.13);color:var(--a);border:1px solid rgba(245,166,35,.25)}
 .nlow{background:var(--bd);color:var(--b);border:1px solid var(--bb)}
-.ngeo{background:rgba(167,139,250,.12);color:var(--pu);border:1px solid rgba(167,139,250,.2)}
-.nearns{background:var(--gd);color:var(--g);border:1px solid var(--gb)}
 .ndata{font-size:8px;color:var(--t3);margin-top:2px}
 .ndata span{color:var(--t2);font-weight:600}
-
-/* GEO */
-.geo{margin-bottom:8px}
-.geo:last-child{margin-bottom:0}
-.geo-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px}
-.geo-name{font-size:9px;color:var(--t2)}
-.geo-score{font-size:10px;font-weight:700}
-.geo-bg{background:var(--bg3);border-radius:1px;height:3px}
-.geo-fill{height:3px;border-radius:1px;transition:width 1s ease}
-.geo-desc{font-size:8px;color:var(--t3);margin-top:3px;line-height:1.4}
 
 /* COT */
 .cg{display:grid;grid-template-columns:1fr 1fr;gap:5px}
@@ -138,45 +121,18 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .st{font-size:9px;text-align:right;line-height:1.5}
 .sd{font-size:7px;color:var(--t3)}
 
-/* LIVE BADGE */
-.live-badge{display:inline-flex;align-items:center;gap:4px;font-size:8px;color:var(--g);letter-spacing:1px}
-.live-dot{width:5px;height:5px;border-radius:50%;background:var(--g);animation:blink 1.5s infinite}
-
-/* WEEKEND OVERLAY */
-.wknd-bar{background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.2);border-radius:3px;padding:6px 10px;display:flex;align-items:center;justify-content:space-between}
-.wknd-txt{font-size:9px;color:var(--a);letter-spacing:.5px}
-
-/* KEY LEVELS */
-.kl-price{font-size:22px;font-weight:700;letter-spacing:-1px;color:var(--t1);margin-bottom:2px;text-align:center}
-.kl-change{font-size:10px;text-align:center;margin-bottom:8px}
-
 /* TABS */
 .tabrow{display:flex;gap:1px;background:var(--bg2);border-radius:2px;padding:2px}
 .tab{flex:1;text-align:center;padding:4px;font-size:8px;letter-spacing:.5px;cursor:pointer;border-radius:1px;color:var(--t3);font-weight:700;transition:all .15s}
 .tab.act{background:var(--bg3);color:var(--t1)}
 
-/* PULSE ANIMATION for new signals */
+/* EXECUTION BANNER */
+.exec-banner{background:var(--gd);border:1px solid var(--gb);border-radius:4px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+.exec-mode{font-size:10px;font-weight:700;color:var(--g);letter-spacing:.5px}
+.exec-sub{font-size:8px;color:var(--t2);margin-top:2px}
+
 @keyframes flash{0%{background:rgba(0,230,118,.15)}100%{background:transparent}}
 .signal-new{animation:flash .8s ease}
-
-/* BALANCE EDIT MODAL */
-.bal-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center}
-.bal-modal-overlay.open{display:flex}
-.bal-modal{background:var(--bg2);border:1px solid var(--bo2);border-radius:6px;padding:20px 24px;width:300px;display:flex;flex-direction:column;gap:12px}
-.bal-modal-title{font-family:var(--head);font-size:13px;font-weight:700;letter-spacing:1px;color:var(--t1)}
-.bal-modal-inputs{display:flex;flex-direction:column;gap:8px}
-.bal-input-row{display:flex;flex-direction:column;gap:4px}
-.bal-input-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--t3);font-weight:700}
-.bal-input{background:var(--bg3);border:1px solid var(--bo2);color:var(--t1);font-family:var(--mono);font-size:13px;padding:7px 10px;border-radius:3px;width:100%;outline:none}
-.bal-input:focus{border-color:var(--g)}
-.bal-modal-btns{display:flex;gap:8px;justify-content:flex-end}
-.bal-btn{padding:6px 16px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:1px;cursor:pointer;border:none;font-family:var(--mono)}
-.bal-btn-cancel{background:var(--bg3);color:var(--t2);border:1px solid var(--bo2)}
-.bal-btn-save{background:var(--gd);color:var(--g);border:1px solid var(--gb)}
-.bal-btn-save:hover{background:var(--gb)}
-.bal-edit-icon{font-size:11px;color:var(--t2);cursor:pointer;margin-left:6px;opacity:0.7;transition:opacity .15s,color .15s;vertical-align:middle}
-.bal-edit-icon:hover{opacity:1;color:var(--g)}
-.bal-saving{opacity:.5;pointer-events:none}
 </style>
 </head>
 <body>
@@ -186,50 +142,18 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="tb-brand">
     <div class="tb-dot" id="conn-dot"></div>
     <div>
-      <div class="tb-name">TRADING BOT V2.4 <span class="tb-tag">QUANTFLOW_LIVE</span></div>
-      <div class="tb-clock" id="clock-line">Connecting to Railway...</div>
+      <div class="tb-name">TRADING BOT V2.4 <span class="tb-tag">WYCKOFF_MTF</span></div>
+      <div class="tb-clock" id="clock-line">Connecting...</div>
     </div>
   </div>
-  <div style="display:flex;align-items:center;gap:10px">
-    <span id="weekend-pill"></span>
+  <div class="poc-badge">PAPER TRADING — PROOF OF CONCEPT</div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="acct">
+      <div class="acct-lbl">Paper Balance</div>
+      <div class="acct-val" style="color:var(--g)" id="paper-bal">$10,000</div>
+    </div>
+    <div class="sep"></div>
     <span class="live-badge"><span class="live-dot"></span>LIVE</span>
-  </div>
-  <div class="tb-accounts">
-    <div class="acct">
-      <div class="acct-lbl">Tradovate TPT</div>
-      <div class="acct-val" style="color:var(--g)"><span id="tpt-bal">$150,000</span><span class="bal-edit-icon" onclick="openBalModal('tpt')" title="Update balance">✎</span></div>
-    </div>
-    <div class="sep"></div>
-    <div class="acct">
-      <div class="acct-lbl">OANDA FTMO</div>
-      <div class="acct-val" style="color:var(--g)"><span id="ftmo-bal">$100,000</span><span class="bal-edit-icon" onclick="openBalModal('ftmo')" title="Update balance">✎</span></div>
-    </div>
-    <div class="sep"></div>
-    <div style="font-size:9px;color:var(--a);border:1px solid var(--ab);background:var(--ad);padding:4px 10px;border-radius:2px;letter-spacing:.5px">Fed: 3.50–3.75%</div>
-    <div class="sep"></div>
-    <button class="kbtn" onclick="doKill()">&#9211; EMERGENCY KILL</button>
-  </div>
-</div>
-
-<!-- BALANCE UPDATE MODAL -->
-<div class="bal-modal-overlay" id="bal-modal-overlay" onclick="if(event.target===this)closeBalModal()">
-  <div class="bal-modal">
-    <div class="bal-modal-title">UPDATE BALANCE</div>
-    <div class="bal-modal-inputs">
-      <div class="bal-input-row" id="bal-tpt-row">
-        <div class="bal-input-label">TPT Account Balance ($)</div>
-        <input class="bal-input" id="bal-tpt-input" type="number" placeholder="150000" step="0.01"/>
-      </div>
-      <div class="bal-input-row" id="bal-ftmo-row">
-        <div class="bal-input-label">FTMO Account Balance ($)</div>
-        <input class="bal-input" id="bal-ftmo-input" type="number" placeholder="100000" step="0.01"/>
-      </div>
-    </div>
-    <div id="bal-modal-status" style="font-size:9px;color:var(--t3);min-height:14px"></div>
-    <div class="bal-modal-btns">
-      <button class="bal-btn bal-btn-cancel" onclick="closeBalModal()">CANCEL</button>
-      <button class="bal-btn bal-btn-save" id="bal-save-btn" onclick="saveBalance()">SAVE</button>
-    </div>
   </div>
 </div>
 
@@ -240,31 +164,19 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 <div class="col">
   <div class="card">
     <div class="ct">System Health</div>
-    <div class="row"><span class="rl">Bot Status</span><span class="bd" id="bot-status-badge">--</span></div>
-    <div class="row"><span class="rl">TPT Kill Switch</span><span class="bd" id="tpt-kill-badge">--</span></div>
-    <div class="row"><span class="rl">Maint. Window</span><span class="rv" id="maint-badge">--</span></div>
-    <div class="row"><span class="rl">Weekend Mode</span><span class="bd" id="wknd-badge">--</span></div>
+    <div class="row"><span class="rl">Bot Status</span><span class="bd2" id="bot-status-badge">--</span></div>
+    <div class="row"><span class="rl">Mode</span><span class="bd2 ba2">PAPER</span></div>
     <div class="row"><span class="rl">Railway State</span><span class="rv" style="color:var(--g)">Persistent</span></div>
     <div class="row"><span class="rl">Last Updated</span><span class="rv" style="color:var(--t3)" id="last-update">--</span></div>
   </div>
 
   <div class="card">
-    <div class="ct">TPT Performance</div>
+    <div class="ct">Paper Performance</div>
     <div class="sg">
-      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="tpt-pnl">$0</div></div>
-      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="tpt-wr">0%</div></div>
-      <div class="sb"><div class="sl2">Signals</div><div class="sv2" id="tpt-sigs">0</div></div>
-      <div class="sb"><div class="sl2">W / L</div><div class="sv2" id="tpt-wl" style="font-size:12px">0 / 0</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="ct">FTMO Performance</div>
-    <div class="sg">
-      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="ftmo-pnl-col">+$0.00</div></div>
-      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="ftmo-wr-col">0%</div></div>
-      <div class="sb"><div class="sl2">Signals</div><div class="sv2" id="ftmo-sigs-col">0</div></div>
-      <div class="sb"><div class="sl2">W / L</div><div class="sv2" id="ftmo-wl-col" style="font-size:12px">0 / 0</div></div>
+      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl-side">$0</div></div>
+      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="paper-wr-side">0%</div></div>
+      <div class="sb"><div class="sl2">Signals</div><div class="sv2" id="paper-sigs-side">0</div></div>
+      <div class="sb"><div class="sl2">W / L</div><div class="sv2" id="paper-wl-side" style="font-size:12px">0 / 0</div></div>
     </div>
   </div>
 
@@ -272,76 +184,64 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="ct">Infrastructure</div>
     <div class="ir"><div class="il"><div class="dlv" id="dot-railway"></div>Railway Cluster</div><span style="font-size:8px;color:var(--t3)" id="railway-status">connecting</span></div>
     <div class="ir"><div class="il"><div class="dlv"></div>TradingView Webhook</div><span style="font-size:8px;color:var(--t3)">live</span></div>
-    <div class="ir"><div class="il"><div class="dlv"></div>Claude AI Pipeline</div><span style="font-size:8px;color:var(--t3)">live</span></div>
     <div class="ir"><div class="il"><div class="dlv"></div>Telegram Notifier</div><span style="font-size:8px;color:var(--t3)">live</span></div>
     <div class="ir"><div class="il"><div class="dlv"></div>VPS Vultr Dallas</div><span style="font-size:8px;color:var(--t3)">$5/mo</span></div>
-    <div class="ir"><div class="il"><div class="dlv"></div>state.json Sync</div><span style="font-size:8px;color:var(--t3)">live</span></div>
+    <div class="ir"><div class="il"><div class="dlv"></div>Paper Account</div><span style="font-size:8px;color:var(--g)">TradingView</span></div>
   </div>
 
   <div class="card">
     <div class="ct">Schedule</div>
-    <div class="sr2"><span class="sl3">&#9651; 2-min warn</span><div class="st">15:53<div class="sd">Mon–Thu</div></div></div>
-    <div class="sr2"><span class="sl3">&#9632; Daily Kill</span><div class="st">15:55<div class="sd">Mon–Thu</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; Daily Open</span><div class="st">17:00<div class="sd">Tue–Fri</div></div></div>
-    <div class="sr2"><span class="sl3">&#9790; Wknd Kill</span><div class="st">16:00<div class="sd">Friday</div></div></div>
-    <div class="sr2"><span class="sl3">&#9728; Wknd Open</span><div class="st">17:00<div class="sd">Sunday</div></div></div>
-    <div class="sr2"><span class="sl3">&#8635; Reset</span><div class="st">00:00<div class="sd">Daily</div></div></div>
+    <div class="sr2"><span class="sl3">&#8635; Daily Reset</span><div class="st">00:00<div class="sd">Daily CT</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; Session Filter</span><div class="st">Weekdays<div class="sd">only</div></div></div>
+    <div class="sr2"><span class="sl3">&#128240; News Block</span><div class="st">08–09 ET<div class="sd">13:30 ET</div></div></div>
+    <div class="sr2"><span class="sl3">&#9825; Heartbeat</span><div class="st">Hourly<div class="sd">Railway keepalive</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; POC Window</span><div class="st">2 weeks<div class="sd">then review</div></div></div>
   </div>
 </div>
 
-<!-- COL 2a: TPT -->
+<!-- COL 2: PAPER TRADING PANEL -->
 <div class="col">
 
-  <!-- TPT Challenge Tracker -->
+  <!-- Execution banner -->
+  <div class="exec-banner">
+    <div>
+      <div class="exec-mode">&#9654; Auto-Executing — TradingView Paper Trading</div>
+      <div class="exec-sub">strategy.entry() places orders in broker panel · 15M MTF Wyckoff · XAUUSD, NQ, YM, CL, Forex</div>
+    </div>
+    <span class="bd2 bg2">PAPER</span>
+  </div>
+
+  <!-- Performance stats -->
   <div class="card" style="flex:0">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">TPT — 150K Challenge</span>
-      <span class="bd ba">INTRADAY · MONTHLY</span>
+      <span class="ct" style="margin:0">Paper Account — POC</span>
+      <span class="bd2" id="paper-alert-badge">0 ALERTS</span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px">
-      <div class="sb"><div class="sl2">Profit Target</div><div class="sv2" style="color:var(--g)">$9,000</div></div>
-      <div class="sb"><div class="sl2">Max Drawdown</div><div class="sv2" style="color:var(--r)">$4,500</div></div>
-      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="tpt-pnl">+$0.00</div></div>
-      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="tpt-wr">0%</div></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px">
+      <div class="sb"><div class="sl2">Balance</div><div class="sv2" style="color:var(--g)" id="paper-bal-card">$10,000</div></div>
+      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl">+$0.00</div></div>
+      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="paper-wr">0%</div></div>
+      <div class="sb"><div class="sl2">W / L</div><div class="sv2" style="font-size:12px" id="paper-wl">0 / 0</div></div>
     </div>
-    <!-- Profit progress bar -->
-    <div style="margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
-        <span>Profit Progress</span><span id="tpt-profit-pct">0%</span>
-      </div>
-      <div style="background:var(--bg3);border-radius:2px;height:5px">
-        <div id="tpt-profit-bar" style="height:5px;border-radius:2px;background:var(--g);width:0%;transition:width 1s ease"></div>
-      </div>
-    </div>
-    <!-- Drawdown bar -->
-    <div>
-      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
-        <span>Drawdown Used</span><span id="tpt-dd-pct">0%</span>
-      </div>
-      <div style="background:var(--bg3);border-radius:2px;height:5px">
-        <div id="tpt-dd-bar" style="height:5px;border-radius:2px;background:var(--r);width:0%;transition:width 1s ease"></div>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:8px;color:var(--t3)">
-      <span>Signals today: <span style="color:var(--t2)" id="tpt-sigs">0</span></span>
-      <span>W/L: <span style="color:var(--t2)" id="tpt-wl">0 / 0</span></span>
-      <span>Consec L: <span id="consec-val" style="color:var(--t1)">0/2</span></span>
+    <div style="display:flex;gap:16px;font-size:8px;color:var(--t3)">
+      <span>Signals today: <span style="color:var(--t2)" id="paper-sigs">0</span></span>
     </div>
   </div>
 
-  <!-- TPT Signal Feed -->
+  <!-- Signal Feed -->
   <div class="card" style="flex:0">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">TPT Signal Feed</span>
-      <span class="bd" id="alert-count-badge">0 ALERTS</span>
+      <span class="ct" style="margin:0">Signal Feed</span>
+      <span class="live-badge"><span class="live-dot"></span>LIVE</span>
     </div>
     <table class="tbl">
-      <colgroup><col style="width:36px"><col style="width:38px"><col style="width:40px"><col style="width:30px"><col style="width:48px"><col style="width:35px"><col style="width:38px"></colgroup>
-      <thead><tr><th>Time</th><th>Asset</th><th>Action</th><th>Qty</th><th>Retrace</th><th>ATR</th><th>R:R</th></tr></thead>
+      <colgroup><col style="width:36px"><col style="width:44px"><col style="width:40px"><col style="width:35px"><col style="width:55px"><col style="width:55px"><col style="width:40px"></colgroup>
+      <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>Entry</th><th>SL / TP1</th><th>R:R</th></tr></thead>
       <tbody id="signal-body">
         <tr><td colspan="7"><div class="empty"><div class="empty-icon">&#9685;</div><div style="font-size:8px;letter-spacing:1px">WAITING FOR SIGNAL</div></div></td></tr>
       </tbody>
     </table>
+    <!-- Last signal key levels -->
     <div id="last-signal-levels" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--bo)">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
         <div class="sb"><div class="sl2">Entry</div><div style="font-size:11px;font-weight:700" id="ls-entry">--</div></div>
@@ -351,35 +251,34 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       </div>
       <div style="display:flex;gap:8px;margin-top:4px;font-size:8px;color:var(--t3)">
         <span>BOS: <span id="ls-bos" style="color:var(--t2)">--</span></span>
-        <span>ATR: <span id="ls-atr" style="color:var(--t2)">--</span></span>
-        <span>Retrace: <span id="ls-ret" style="color:var(--t2)">--</span> pts</span>
-        <span>Contracts: <span id="ls-con" style="color:var(--g)">--</span></span>
+        <span>Lots: <span id="ls-lots" style="color:var(--g)">--</span></span>
+        <span>R:R: <span id="ls-rr" style="color:var(--b)">--</span></span>
       </div>
     </div>
   </div>
 
-  <!-- TPT Equity Curve -->
+  <!-- Equity Curve -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Equity Curve — TPT</span>
+      <span class="ct" style="margin:0">Equity Curve — Paper</span>
       <div class="tabrow" style="width:120px">
         <div class="tab act" onclick="setR('1W',this)">1W</div>
         <div class="tab" onclick="setR('1M',this)">1M</div>
         <div class="tab" onclick="setR('ALL',this)">All</div>
       </div>
     </div>
-    <div class="chart-wrap"><canvas id="ec" role="img" aria-label="TPT equity curve">Equity data</canvas></div>
+    <div class="chart-wrap"><canvas id="ec"></canvas></div>
   </div>
 
-  <!-- TPT Recent Trades -->
+  <!-- Trade History -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Recent Trades — TPT</span>
+      <span class="ct" style="margin:0">Trade History — Paper</span>
       <span style="font-size:8px;color:var(--t3)" id="trade-count">0 trades</span>
     </div>
     <table class="tbl">
-      <colgroup><col style="width:36px"><col style="width:38px"><col style="width:40px"><col style="width:28px"><col style="width:55px"><col style="width:50px"></colgroup>
-      <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Qty</th><th>P&L</th><th>Result</th></tr></thead>
+      <colgroup><col style="width:60px"><col style="width:44px"><col style="width:40px"><col style="width:32px"><col style="width:55px"><col style="width:45px"></colgroup>
+      <thead><tr><th>Date/Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>P&L</th><th>Result</th></tr></thead>
       <tbody id="trades-body">
         <tr><td colspan="6"><div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No trades yet</div></div></td></tr>
       </tbody>
@@ -387,133 +286,25 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </div>
 
-<!-- COL 2b: FTMO -->
-<div class="col">
-
-  <!-- FTMO Challenge Tracker -->
-  <div class="card" style="flex:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">FTMO — 100K Challenge</span>
-      <span class="bd bb2">SWING · STEP 1</span>
-    </div>
-    <!-- Step 1 / Step 2 tabs -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
-      <div style="background:var(--bg3);border:1px solid var(--bb);border-radius:3px;padding:6px 8px">
-        <div style="font-size:7px;color:var(--b);letter-spacing:1.5px;font-weight:700;margin-bottom:3px">STEP 1 — ACTIVE</div>
-        <div style="font-size:9px;color:var(--t2)">Target: <span style="color:var(--g);font-weight:700">$10,000</span></div>
-        <div style="font-size:9px;color:var(--t2)">Max DD: <span style="color:var(--r);font-weight:700">$10,000</span></div>
-      </div>
-      <div style="background:var(--bg2);border:1px solid var(--bo);border-radius:3px;padding:6px 8px;opacity:.5">
-        <div style="font-size:7px;color:var(--t3);letter-spacing:1.5px;font-weight:700;margin-bottom:3px">STEP 2 — LOCKED</div>
-        <div style="font-size:9px;color:var(--t3)">Target: $5,000</div>
-        <div style="font-size:9px;color:var(--t3)">Max DD: $10,000</div>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px">
-      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="ftmo-pnl">+$0.00</div></div>
-      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="ftmo-wr">0%</div></div>
-    </div>
-    <!-- Profit progress bar -->
-    <div style="margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
-        <span>Profit Progress (Step 1)</span><span id="ftmo-profit-pct">0%</span>
-      </div>
-      <div style="background:var(--bg3);border-radius:2px;height:5px">
-        <div id="ftmo-profit-bar" style="height:5px;border-radius:2px;background:var(--g);width:0%;transition:width 1s ease"></div>
-      </div>
-    </div>
-    <!-- Max drawdown bar -->
-    <div style="margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
-        <span>Max Drawdown Used</span><span id="ftmo-dd-pct">0%</span>
-      </div>
-      <div style="background:var(--bg3);border-radius:2px;height:5px">
-        <div id="ftmo-dd-bar" style="height:5px;border-radius:2px;background:var(--r);width:0%;transition:width 1s ease"></div>
-      </div>
-    </div>
-    <!-- Daily hard loss bar -->
-    <div>
-      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-bottom:3px">
-        <span>Daily Loss Used <span style="color:var(--t3)">(limit $5,000)</span></span><span id="ftmo-dl-pct">0%</span>
-      </div>
-      <div style="background:var(--bg3);border-radius:2px;height:5px">
-        <div id="ftmo-dl-bar" style="height:5px;border-radius:2px;background:var(--a);width:0%;transition:width 1s ease"></div>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:8px;color:var(--t3)">
-      <span>Signals: <span style="color:var(--t2)" id="ftmo-sigs">0</span></span>
-      <span>W/L: <span style="color:var(--t2)" id="ftmo-wl">0 / 0</span></span>
-      <span>Wk Consec L: <span id="ftmo-wcl" style="color:var(--t1)">0/4</span></span>
-    </div>
-  </div>
-
-  <!-- FTMO Signal Feed -->
-  <div class="card" style="flex:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">FTMO Signal Feed</span>
-      <span class="bd" id="ftmo-alert-badge">0 ALERTS</span>
-    </div>
-    <table class="tbl">
-      <colgroup><col style="width:36px"><col style="width:44px"><col style="width:40px"><col style="width:35px"><col style="width:48px"><col style="width:50px"></colgroup>
-      <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>Event</th><th>P&L</th></tr></thead>
-      <tbody id="ftmo-signal-body">
-        <tr><td colspan="6"><div class="empty"><div class="empty-icon">&#9685;</div><div style="font-size:8px;letter-spacing:1px">WAITING FOR SIGNAL</div></div></td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- FTMO Equity Curve -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Equity Curve — FTMO</span>
-      <div class="tabrow" style="width:120px">
-        <div class="tab act" onclick="setRF('1W',this)">1W</div>
-        <div class="tab" onclick="setRF('1M',this)">1M</div>
-        <div class="tab" onclick="setRF('ALL',this)">All</div>
-      </div>
-    </div>
-    <div class="chart-wrap"><canvas id="ec-ftmo" role="img" aria-label="FTMO equity curve">FTMO Equity</canvas></div>
-  </div>
-
-  <!-- FTMO Recent Trades -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Recent Trades — FTMO</span>
-      <span style="font-size:8px;color:var(--t3)" id="ftmo-trade-count">0 trades</span>
-    </div>
-    <table class="tbl">
-      <colgroup><col style="width:36px"><col style="width:44px"><col style="width:40px"><col style="width:32px"><col style="width:55px"><col style="width:45px"></colgroup>
-      <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>P&L</th><th>Result</th></tr></thead>
-      <tbody id="ftmo-trades-body">
-        <tr><td colspan="6"><div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No trades yet</div></div></td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- COL 3: EVENTS — Finnhub Live -->
+<!-- COL 3: EVENTS -->
 <div class="col">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span class="ct" style="margin:0">Today's Events</span>
-      <span class="bd" id="today-impact-badge">LOADING</span>
+      <span class="bd2" id="today-impact-badge">LOADING</span>
     </div>
     <div id="today-events">
-      <div class="empty" style="padding:16px">
-        <div style="font-size:8px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div>
-      </div>
+      <div class="empty" style="padding:16px"><div style="font-size:8px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div></div>
     </div>
   </div>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span class="ct" style="margin:0">This Week</span>
-      <span class="bd" id="week-impact-badge">LOADING</span>
+      <span class="bd2" id="week-impact-badge">LOADING</span>
     </div>
     <div id="week-events">
-      <div class="empty" style="padding:16px">
-        <div style="font-size:8px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div>
-      </div>
+      <div class="empty" style="padding:16px"><div style="font-size:8px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div></div>
     </div>
   </div>
 
@@ -528,7 +319,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       <div class="row"><span class="rl">Jan 27–28</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
       <div class="row"><span class="rl">Mar 17–18</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
       <div class="row"><span class="rl">Apr 28–29</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
-      <div class="row"><span class="rl" style="color:var(--a)">Jun 16–17</span><span class="bd ba">NEXT</span></div>
+      <div class="row"><span class="rl" style="color:var(--a)">Jun 16–17</span><span class="bd2 ba2">NEXT</span></div>
       <div class="row"><span class="rl">Sep 15–16 ✦</span><span class="rv" style="color:var(--t3)">—</span></div>
       <div class="row"><span class="rl">Dec 8–9 ✦</span><span class="rv" style="color:var(--t3)">—</span></div>
     </div>
@@ -536,7 +327,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </div>
 
-<!-- COL 4: GEO + COT -->
+<!-- COL 4: NEWS + COT -->
 <div class="col">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -544,9 +335,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       <span class="live-badge"><span class="live-dot"></span>LIVE</span>
     </div>
     <div id="news-feed">
-      <div class="empty" style="padding:12px">
-        <div style="font-size:8px;color:var(--t3);letter-spacing:1px">FETCHING NEWS...</div>
-      </div>
+      <div class="empty" style="padding:12px"><div style="font-size:8px;color:var(--t3);letter-spacing:1px">FETCHING NEWS...</div></div>
     </div>
   </div>
 
@@ -565,16 +354,12 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 
 </div><!-- /layout -->
 
-<!-- SESSION BREAKDOWN ROW — full width -->
+<!-- SESSION + INSTRUMENT BREAKDOWN -->
 <div style="padding:0 12px 12px 12px">
   <div class="card" style="padding:12px 16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <span class="ct" style="margin:0">Session Breakdown</span>
-      <div style="display:flex;gap:4px;align-items:center">
-        <span style="font-size:8px;color:var(--t3);margin-right:4px">Account:</span>
-        <span class="bd" id="sess-tab-tpt" style="cursor:pointer" onclick="setSessAccount('tpt')">TPT</span>
-        <span class="bd bb2" id="sess-tab-ftmo" style="cursor:pointer;opacity:0.4" onclick="setSessAccount('ftmo')">FTMO</span>
-      </div>
+      <span class="ct" style="margin:0">Session &amp; Instrument Breakdown — Paper</span>
+      <span class="bd2 ba2">POC</span>
     </div>
     <div id="session-breakdown-body">
       <div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">Waiting for trade data...</div></div>
@@ -586,20 +371,12 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 <script>
 const RAILWAY_URL = 'https://tradingbot-production-1e5a.up.railway.app';
 const FINNHUB_KEY = 'd84klj1r01qutij98emgd84klj1r01qutij98en0';
-let lastSignalTime = null;
-let chartInstance = null;
-let ftmoChartInstance = null;
-let equityData     = { '1W': { l:[], d:[] }, '1M': { l:[], d:[] }, 'ALL': { l:[], d:[] } };
-let ftmoEquityData = { '1W': { l:[], d:[] }, '1M': { l:[], d:[] }, 'ALL': { l:[], d:[] } };
-let allTrades = { tpt: [], ftmo: [] };
+const PAPER_START = 10000;
 
-// Challenge constants
-const TPT_TARGET = 9000;
-const TPT_MAX_DD = 4500;
-const TPT_START  = 150000;
-const FTMO_TARGET = 10000; // Step 1
-const FTMO_MAX_DD = 10000;
-const FTMO_START  = 100000;
+let chartInstance = null;
+let equityData = { '1W': { l:[], d:[] }, '1M': { l:[], d:[] }, 'ALL': { l:[], d:[] } };
+let allTrades = [];
+let lastSignalTime = null;
 
 // ── Clock ──────────────────────────────────────────────────
 function updateClock() {
@@ -611,7 +388,7 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-// ── FOMC Countdown ─────────────────────────────────────────
+// ── FOMC countdown ─────────────────────────────────────────
 function updateFOMC() {
   const days = Math.ceil((new Date('2026-06-16') - new Date()) / 86400000);
   document.getElementById('fomc-days').textContent = days + ' days';
@@ -629,194 +406,184 @@ async function fetchState() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const d = await res.json();
     updateDashboard(d);
-    // Railway connected
-    document.getElementById('dot-railway').style.background = 'var(--g)';
-    document.getElementById('dot-railway').style.boxShadow = '0 0 4px var(--g)';
-    document.getElementById('railway-status').textContent = 'live';
-    document.getElementById('conn-dot').style.background = 'var(--g)';
-    document.getElementById('conn-dot').style.boxShadow = '0 0 8px var(--g)';
+    setConnected(true);
   } catch(e) {
-    document.getElementById('dot-railway').style.background = 'var(--r)';
-    document.getElementById('dot-railway').style.boxShadow = 'none';
-    document.getElementById('railway-status').textContent = 'error';
-    document.getElementById('conn-dot').style.background = 'var(--r)';
-    document.getElementById('conn-dot').style.boxShadow = 'none';
+    setConnected(false);
     console.warn('State fetch failed:', e);
   }
 }
 
+function setConnected(ok) {
+  const dot = document.getElementById('dot-railway');
+  const status = document.getElementById('railway-status');
+  const connDot = document.getElementById('conn-dot');
+  dot.style.background = ok ? 'var(--g)' : 'var(--r)';
+  dot.style.boxShadow  = ok ? '0 0 4px var(--g)' : 'none';
+  status.textContent   = ok ? 'live' : 'error';
+  connDot.style.background = ok ? 'var(--g)' : 'var(--r)';
+  connDot.style.boxShadow  = ok ? '0 0 8px var(--g)' : 'none';
+}
+
 function updateDashboard(d) {
-  // ── Meta ────────────────────────────────────────────────
   document.getElementById('last-update').textContent = d.time_ct ? d.time_ct.slice(11) : '--';
 
-  // ── Weekend pill ────────────────────────────────────────
-  const wp = document.getElementById('weekend-pill');
-  if (d.is_weekend) {
-    wp.className = 'bd ba';
-    wp.textContent = 'WEEKEND — BOT OFFLINE';
-  } else { wp.textContent = ''; }
-
-  // ── Bot / Kill status ───────────────────────────────────
-  const killed = d.is_tpt_killed;
+  // Bot status
   const bsb = document.getElementById('bot-status-badge');
-  bsb.textContent = killed ? 'KILLED' : 'TRADING';
-  bsb.className = 'bd ' + (killed ? 'br' : 'bg');
+  bsb.textContent = 'TRADING';
+  bsb.className = 'bd2 bg2';
 
-  const tkb = document.getElementById('tpt-kill-badge');
-  if (d.tpt_killed) { tkb.textContent='TRIGGERED'; tkb.className='bd br'; }
-  else if (d.is_maintenance) { tkb.textContent='MAINTENANCE'; tkb.className='bd ba'; }
-  else if (d.is_weekend) { tkb.textContent='WEEKEND'; tkb.className='bd ba'; }
-  else { tkb.textContent='ARMED'; tkb.className='bd bg'; }
+  // Paper balance
+  const bal = d.paper_account_balance || PAPER_START;
+  document.getElementById('paper-bal').textContent = fmtBal(bal);
+  document.getElementById('paper-bal-card').textContent = fmtBal(bal);
 
-  const mb = document.getElementById('maint-badge');
-  mb.textContent = d.is_maintenance ? 'ACTIVE 15:55–17:00' : '15:55–17:00 CT';
-  mb.style.color = d.is_maintenance ? 'var(--a)' : 'var(--t2)';
+  // Paper P&L
+  const pnl = d.paper_daily_pnl || 0;
+  const pnlEl = document.getElementById('paper-pnl');
+  pnlEl.textContent = fmt$(pnl);
+  pnlEl.style.color = pnl >= 0 ? 'var(--g)' : 'var(--r)';
+  const pnlSide = document.getElementById('paper-pnl-side');
+  pnlSide.textContent = fmt$(pnl);
+  pnlSide.style.color = pnl >= 0 ? 'var(--g)' : 'var(--r)';
 
-  const wb = document.getElementById('wknd-badge');
-  wb.textContent = d.is_weekend ? 'YES' : 'NO';
-  wb.className = 'bd ' + (d.is_weekend ? 'ba' : 'bdim');
+  // Win rate + W/L
+  const wr = d.paper_win_rate || 0;
+  document.getElementById('paper-wr').textContent = wr + '%';
+  document.getElementById('paper-wr-side').textContent = wr + '%';
+  const wl = (d.paper_daily_wins||0) + ' / ' + (d.paper_daily_losses||0);
+  document.getElementById('paper-wl').textContent = wl;
+  document.getElementById('paper-wl-side').textContent = wl;
 
-  // ── Balances ────────────────────────────────────────────
-  document.getElementById('tpt-bal').textContent = fmtBal(d.tpt_account_balance || 150000);
-  document.getElementById('ftmo-bal').textContent = fmtBal(d.ftmo_account_balance || 100000);
+  // Signals
+  const sigs = d.paper_daily_signals || 0;
+  document.getElementById('paper-sigs').textContent = sigs;
+  document.getElementById('paper-sigs-side').textContent = sigs;
+  const alertBadge = document.getElementById('paper-alert-badge');
+  alertBadge.textContent = sigs + ' ALERT' + (sigs !== 1 ? 'S' : '');
+  alertBadge.className = 'bd2 ' + (sigs > 0 ? 'bg2' : 'bdim');
 
-  // ── TPT Performance ─────────────────────────────────────
-  const tpnl = d.tpt_daily_pnl || 0;
-  const tpnlEl = document.getElementById('tpt-pnl');
-  tpnlEl.textContent = fmt$(tpnl);
-  tpnlEl.style.color = tpnl >= 0 ? 'var(--g)' : 'var(--r)';
-
-  document.getElementById('tpt-wr').textContent = (d.tpt_win_rate || 0) + '%';
-  document.getElementById('tpt-sigs').textContent = d.tpt_daily_signals || 0;
-  document.getElementById('tpt-wl').textContent = (d.tpt_daily_wins||0) + ' / ' + (d.tpt_daily_losses||0);
-
-  // TPT challenge progress bars
-  const tptBal = d.tpt_account_balance || TPT_START;
-  const tptProfit = Math.max(0, tptBal - TPT_START);
-  const tptProfitPct = Math.min(100, Math.round((tptProfit / TPT_TARGET) * 100));
-  const tptDDUsed = Math.max(0, TPT_START - tptBal);
-  const tptDDPct = Math.min(100, Math.round((tptDDUsed / TPT_MAX_DD) * 100));
-  document.getElementById('tpt-profit-pct').textContent = tptProfitPct + '%';
-  document.getElementById('tpt-profit-bar').style.width = tptProfitPct + '%';
-  document.getElementById('tpt-dd-pct').textContent = tptDDPct + '%';
-  document.getElementById('tpt-dd-bar').style.width = tptDDPct + '%';
-  document.getElementById('tpt-dd-bar').style.background = tptDDPct > 70 ? 'var(--r)' : tptDDPct > 40 ? 'var(--a)' : 'var(--r)';
-
-  // ── Alert count badge ───────────────────────────────────
-  const sigs = d.tpt_daily_signals || 0;
-  const acb = document.getElementById('alert-count-badge');
-  acb.textContent = sigs + ' ALERT' + (sigs !== 1 ? 'S' : '');
-  acb.className = 'bd ' + (sigs > 0 ? 'bg' : 'bdim');
-
-  // ── FTMO ────────────────────────────────────────────────
-  const fpnl = d.ftmo_daily_pnl || 0;
-  const fpnlEl = document.getElementById('ftmo-pnl');
-  if (fpnlEl) { fpnlEl.textContent = fmt$(fpnl); fpnlEl.style.color = fpnl >= 0 ? 'var(--g)' : 'var(--r)'; }
-  const fwrEl = document.getElementById('ftmo-wr');
-  if (fwrEl) fwrEl.textContent = (d.ftmo_win_rate || 0) + '%';
-  const fsigsEl = document.getElementById('ftmo-sigs');
-  if (fsigsEl) fsigsEl.textContent = d.ftmo_daily_signals || 0;
-  document.getElementById('ftmo-wl').textContent = (d.ftmo_daily_wins||0) + ' / ' + (d.ftmo_daily_losses||0);
-
-  // FTMO alert badge
-  const fsigs = d.ftmo_daily_signals || 0;
-  const fab = document.getElementById('ftmo-alert-badge');
-  fab.textContent = fsigs + ' ALERT' + (fsigs !== 1 ? 'S' : '');
-  fab.className = 'bd ' + (fsigs > 0 ? 'bb2' : 'bdim');
-
-  // FTMO col1 performance mirror
-  const fpnlCol = document.getElementById('ftmo-pnl-col');
-  if (fpnlCol) { fpnlCol.textContent = fmt$(fpnl); fpnlCol.style.color = fpnl >= 0 ? 'var(--g)' : 'var(--r)'; }
-  const fwrCol = document.getElementById('ftmo-wr-col');
-  if (fwrCol) fwrCol.textContent = (d.ftmo_win_rate || 0) + '%';
-  const fsigsCol = document.getElementById('ftmo-sigs-col');
-  if (fsigsCol) fsigsCol.textContent = fsigs;
-  const fwlCol = document.getElementById('ftmo-wl-col');
-  if (fwlCol) fwlCol.textContent = (d.ftmo_daily_wins||0) + ' / ' + (d.ftmo_daily_losses||0);
-
-  // FTMO challenge progress bars
-  const ftmoBal = d.ftmo_account_balance || FTMO_START;
-  const ftmoProfit = Math.max(0, ftmoBal - FTMO_START);
-  const ftmoProfitPct = Math.min(100, Math.round((ftmoProfit / FTMO_TARGET) * 100));
-  const ftmoDDUsed = Math.max(0, FTMO_START - ftmoBal);
-  const ftmoDDPct = Math.min(100, Math.round((ftmoDDUsed / FTMO_MAX_DD) * 100));
-  const ftmoDailyLoss = Math.max(0, -(d.ftmo_daily_pnl || 0));
-  const ftmoDLPct = Math.min(100, Math.round((ftmoDailyLoss / 5000) * 100));
-
-  document.getElementById('ftmo-profit-pct').textContent = ftmoProfitPct + '%';
-  document.getElementById('ftmo-profit-bar').style.width = ftmoProfitPct + '%';
-  document.getElementById('ftmo-dd-pct').textContent = ftmoDDPct + '%';
-  document.getElementById('ftmo-dd-bar').style.width = ftmoDDPct + '%';
-  document.getElementById('ftmo-dd-bar').style.background = ftmoDDPct > 70 ? 'var(--r)' : ftmoDDPct > 40 ? 'var(--a)' : 'var(--r)';
-  document.getElementById('ftmo-dl-pct').textContent = ftmoDLPct + '%';
-  document.getElementById('ftmo-dl-bar').style.width = ftmoDLPct + '%';
-  document.getElementById('ftmo-dl-bar').style.background = ftmoDLPct > 80 ? 'var(--r)' : 'var(--a)';
-
-  // FTMO weekly consec losses
-  const fwcl = d.ftmo_weekly_consec_losses || 0;
-  const fwclEl = document.getElementById('ftmo-wcl');
-  if (fwclEl) { fwclEl.textContent = fwcl + '/4'; fwclEl.style.color = fwcl >= 3 ? 'var(--r)' : fwcl >= 2 ? 'var(--a)' : 'var(--t1)'; }
-
-  // TPT consec losses
-  const cl = d.tpt_consecutive_losses || 0;
-  const cv = document.getElementById('consec-val');
-  if (cv) { cv.textContent = cl + '/2'; cv.style.color = cl >= 2 ? 'var(--r)' : cl === 1 ? 'var(--a)' : 'var(--t1)'; }
-
-  // ── Last signal / key levels ────────────────────────────
-  if (d.tpt_last_signal) {
-    const ls = d.tpt_last_signal;
-    const levelsDiv = document.getElementById('last-signal-levels');
-    levelsDiv.style.display = 'block';
+  // Last signal key levels
+  if (d.paper_last_signal) {
+    const ls = d.paper_last_signal;
+    document.getElementById('last-signal-levels').style.display = 'block';
     document.getElementById('ls-entry').textContent = ls.price || '--';
     document.getElementById('ls-sl').textContent = ls.sl || '--';
     document.getElementById('ls-tp1').textContent = ls.tp1 || '--';
     document.getElementById('ls-tp2').textContent = ls.tp2 || '--';
     document.getElementById('ls-bos').textContent = ls.bos_level || '--';
-    document.getElementById('ls-atr').textContent = ls.atr || '--';
-    document.getElementById('ls-ret').textContent = ls.retrace_pts || '--';
-    document.getElementById('ls-con').textContent = ls.contracts || '--';
+    document.getElementById('ls-lots').textContent = ls.lot_size || '--';
+    document.getElementById('ls-rr').textContent = ls.rr || '--';
 
-    // Add to signal feed if new
     if (ls.time !== lastSignalTime) {
       lastSignalTime = ls.time;
       addSignalRow(ls);
     }
   }
-
-  // ── Trades handled by fetchTrades() every 30s ──────────
-
-  // ── Equity curve — driven by /trades, updated separately ──
-  if (chartInstance) chartInstance.update('none');
 }
 
-// ── Phase 4: Fetch real trade history and build equity curves ──
+// ── Poll /trades every 30s ─────────────────────────────────
 async function fetchTrades() {
   try {
     const res = await fetch(RAILWAY_URL + '/trades', {cache:'no-store'});
     if (!res.ok) return;
     const data = await res.json();
-    allTrades = data;
-    buildEquityCurve(data.tpt || [], TPT_START, 'tpt');
-    buildEquityCurve(data.ftmo || [], FTMO_START, 'ftmo');
-    renderFullTradeHistory(data.tpt || [], 'tpt');
-    renderFullTradeHistory(data.ftmo || [], 'ftmo');
-    renderSessionBreakdown(sessAccount);
+    allTrades = data.paper || [];
+    buildEquityCurve(allTrades);
+    renderTradeHistory(allTrades);
+    renderSessionBreakdown(allTrades);
   } catch(e) { console.warn('Trades fetch failed:', e); }
 }
 
-// ── Session Breakdown ──────────────────────────────────────
-let sessAccount = 'tpt';
+// ── Equity curve ───────────────────────────────────────────
+function buildEquityCurve(trades) {
+  if (!trades || !trades.length) {
+    const today = new Date();
+    const labels = [], values = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+      values.push(PAPER_START);
+    }
+    equityData['1W'] = equityData['1M'] = equityData['ALL'] = { l: labels, d: values };
+    if (chartInstance) { chartInstance.data.labels = labels; chartInstance.data.datasets[0].data = values; chartInstance.update(); }
+    return;
+  }
 
-function setSessAccount(acct) {
-  sessAccount = acct;
-  document.getElementById('sess-tab-tpt').style.opacity  = acct === 'tpt'  ? '1' : '0.4';
-  document.getElementById('sess-tab-ftmo').style.opacity = acct === 'ftmo' ? '1' : '0.4';
-  renderSessionBreakdown(acct);
+  const sorted = [...trades].sort((a,b) => new Date(a.date||a.time||0) - new Date(b.date||b.time||0));
+  let bal = PAPER_START;
+  const points = [{ label: 'Open', bal }];
+  sorted.forEach(t => {
+    bal += (t.pnl || 0);
+    const d = new Date(t.date || t.time || Date.now());
+    points.push({ label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), bal: Math.round(bal) });
+  });
+
+  equityData['1W']  = { l: points.slice(-7).map(p=>p.label),  d: points.slice(-7).map(p=>p.bal) };
+  equityData['1M']  = { l: points.slice(-30).map(p=>p.label), d: points.slice(-30).map(p=>p.bal) };
+  equityData['ALL'] = { l: points.map(p=>p.label),             d: points.map(p=>p.bal) };
+
+  if (chartInstance) {
+    chartInstance.data.labels = equityData['1W'].l;
+    chartInstance.data.datasets[0].data = equityData['1W'].d;
+    chartInstance.update();
+  }
 }
 
+function setR(k, el) {
+  el.closest('.tabrow').querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));
+  el.classList.add('act');
+  if (equityData[k] && chartInstance) {
+    chartInstance.data.labels = equityData[k].l;
+    chartInstance.data.datasets[0].data = equityData[k].d;
+    chartInstance.update();
+  }
+}
+
+// ── Trade history ──────────────────────────────────────────
+function renderTradeHistory(trades) {
+  const body  = document.getElementById('trades-body');
+  const tcEl  = document.getElementById('trade-count');
+  if (!trades || !trades.length) return;
+  tcEl.textContent = trades.length + ' trade' + (trades.length !== 1 ? 's' : '');
+  body.innerHTML = '';
+  [...trades].reverse().slice(0, 25).forEach(t => {
+    const pnl = t.pnl || 0;
+    const result = t.result || '';
+    const resultClass = result.includes('TP') ? 'bd2 bg2' : result.includes('SL') ? 'bd2 br2' : 'bd2 bdim';
+    const displayTime = t.date ? t.date.slice(5,16).replace(' ',' ') : t.time || '--';
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td style="color:var(--t3);font-size:9px">${displayTime}</td>
+      <td style="font-weight:700">${t.instrument||'--'}</td>
+      <td style="color:${t.direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${t.direction||'--'}</td>
+      <td style="text-align:center">${t.lot_size||'--'}</td>
+      <td style="color:${pnl>=0?'var(--g)':'var(--r)'};font-weight:700">${fmt$(pnl)}</td>
+      <td><span class="${resultClass}">${result||'OPEN'}</span></td>`;
+    body.appendChild(row);
+  });
+}
+
+// ── Signal feed ────────────────────────────────────────────
+function addSignalRow(ls) {
+  const body = document.getElementById('signal-body');
+  if (body.querySelector('.empty')) body.innerHTML = '';
+  const dir = ls.direction || '';
+  const row = document.createElement('tr');
+  row.className = 'signal-new';
+  row.innerHTML = `
+    <td style="color:var(--t3)">${ls.time||'--'}</td>
+    <td style="font-weight:700">${ls.instrument||'--'}</td>
+    <td style="color:${dir==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${dir}</td>
+    <td style="text-align:center">${ls.lot_size||'--'}</td>
+    <td>${ls.price||'--'}</td>
+    <td style="color:var(--r)">${ls.sl||'--'}</td>
+    <td style="color:var(--b)">${ls.rr||'--'}</td>`;
+  body.prepend(row);
+  while (body.rows.length > 10) body.deleteRow(body.rows.length - 1);
+}
+
+// ── Session & instrument breakdown ─────────────────────────
 function inferSession(trade) {
-  // Use stored session field if present, otherwise infer from UTC hour in date string
-  if (trade.session) return trade.session;
   const dateStr = trade.date || trade.time || '';
   if (!dateStr) return 'Unknown';
   try {
@@ -825,54 +592,44 @@ function inferSession(trade) {
     if (utcH >= 22 || utcH < 2)  return 'Asian-Early';
     if (utcH >= 2  && utcH < 7)  return 'Asian';
     if (utcH >= 7  && utcH < 12) return 'London';
-    if (utcH >= 12 && utcH < 17) return 'NewYork';
+    if (utcH >= 12 && utcH < 17) return 'New York';
     if (utcH >= 17 && utcH < 21) return 'NY-Close';
     return 'Outside';
   } catch { return 'Unknown'; }
 }
 
-function renderSessionBreakdown(acct) {
+function renderSessionBreakdown(trades) {
   const el = document.getElementById('session-breakdown-body');
   if (!el) return;
-  const trades = (allTrades[acct] || []).filter(t => t.result && t.result !== 'OPEN');
-  if (!trades.length) {
-    el.innerHTML = '<div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No closed trades yet — data populates automatically as trades close</div></div>';
+  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN');
+  if (!closed.length) {
+    el.innerHTML = '<div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No closed trades yet — populates automatically as trades close</div></div>';
     return;
   }
 
-  const SESSION_ORDER = ['Asian-Early','Asian','London','NewYork','NY-Close'];
+  const SESSION_ORDER = ['Asian-Early','Asian','London','New York','NY-Close'];
 
-  // Session buckets
-  const buckets = {};
-  trades.forEach(t => {
-    const s = inferSession(t);
-    if (!buckets[s]) buckets[s] = { wins:0, losses:0, pnl:0 };
-    const won = (t.result||'').includes('TP');
-    buckets[s].wins   += won ? 1 : 0;
-    buckets[s].losses += won ? 0 : 1;
-    buckets[s].pnl    += (t.pnl || 0);
-  });
+  function bucket(arr, key) {
+    const b = {};
+    arr.forEach(t => {
+      const k = key(t);
+      if (!b[k]) b[k] = { wins:0, losses:0, pnl:0 };
+      const won = (t.result||'').includes('TP');
+      b[k].wins   += won ? 1 : 0;
+      b[k].losses += won ? 0 : 1;
+      b[k].pnl    += (t.pnl || 0);
+    });
+    return b;
+  }
 
-  // Instrument buckets
-  const ibuckets = {};
-  trades.forEach(t => {
-    const inst = t.instrument || 'Unknown';
-    if (!ibuckets[inst]) ibuckets[inst] = { wins:0, losses:0, pnl:0 };
-    const won = (t.result||'').includes('TP');
-    ibuckets[inst].wins   += won ? 1 : 0;
-    ibuckets[inst].losses += won ? 0 : 1;
-    ibuckets[inst].pnl    += (t.pnl || 0);
-  });
+  const sBuckets = bucket(closed, t => inferSession(t));
+  const iBuckets = bucket(closed, t => t.instrument || 'Unknown');
 
-  const keys  = [...SESSION_ORDER.filter(s => buckets[s]),  ...Object.keys(buckets).filter(s => !SESSION_ORDER.includes(s))];
-  const ikeys = Object.keys(ibuckets).sort((a,b) => (ibuckets[b].wins+ibuckets[b].losses) - (ibuckets[a].wins+ibuckets[a].losses));
-
-  const totalTrades = trades.length;
-  const totalWins   = trades.filter(t => (t.result||'').includes('TP')).length;
+  const totalTrades = closed.length;
+  const totalWins   = closed.filter(t => (t.result||'').includes('TP')).length;
   const totalWR     = totalTrades ? Math.round((totalWins/totalTrades)*100) : 0;
-  const totalPnl    = trades.reduce((s,t) => s + (t.pnl||0), 0);
+  const totalPnl    = closed.reduce((s,t) => s + (t.pnl||0), 0);
 
-  // Build a reusable row renderer
   function mkRow(label, b) {
     const total = b.wins + b.losses;
     const wr = total ? Math.round((b.wins/total)*100) : 0;
@@ -894,419 +651,92 @@ function renderSessionBreakdown(acct) {
     </tr>`;
   }
 
-  // Two-column layout: session table left, instrument table right
-  let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">`;
+  const sKeys = [...SESSION_ORDER.filter(s => sBuckets[s]), ...Object.keys(sBuckets).filter(s => !SESSION_ORDER.includes(s))];
+  const iKeys = Object.keys(iBuckets).sort((a,b) => (iBuckets[b].wins+iBuckets[b].losses) - (iBuckets[a].wins+iBuckets[a].losses));
+  const tpnlColor = totalPnl >= 0 ? 'var(--g)' : 'var(--r)';
+  const twrColor  = totalWR >= 55 ? 'var(--g)' : totalWR >= 45 ? 'var(--a)' : 'var(--r)';
 
-  // LEFT — session breakdown
-  html += `<div>
-    <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Session</div>
-    <table class="tbl">
-      <thead><tr>
-        <th>Session</th><th style="text-align:center">Trades</th>
-        <th style="text-align:center">W/L</th>
-        <th style="text-align:center">Win%</th>
-        <th style="text-align:right">P&L</th>
-      </tr></thead>
-      <tbody>`;
-  keys.forEach(s => { html += mkRow(s, buckets[s]); });
+  const thead = `<thead><tr><th>Name</th><th style="text-align:center">Trades</th><th style="text-align:center">W/L</th><th style="text-align:center">Win%</th><th style="text-align:right">P&L</th></tr></thead>`;
+  const tfoot = `<tfoot><tr style="border-top:1px solid var(--bo2)">
+    <td style="font-weight:800;font-size:9px;color:var(--t1)">TOTAL</td>
+    <td style="text-align:center;font-weight:700;color:var(--t1)">${totalTrades}</td>
+    <td style="text-align:center;font-size:9px;color:var(--t2)">${totalWins}W / ${totalTrades-totalWins}L</td>
+    <td style="text-align:center;font-weight:800;color:${twrColor}">${totalWR}%</td>
+    <td style="text-align:right;font-weight:800;color:${tpnlColor}">${fmt$(totalPnl)}</td>
+  </tr></tfoot>`;
 
-  const totalPnlColor = totalPnl >= 0 ? 'var(--g)' : 'var(--r)';
-  const totalWRColor  = totalWR >= 55 ? 'var(--g)' : totalWR >= 45 ? 'var(--a)' : 'var(--r)';
-
-  // Close session table with totals row
-  html += `</tbody>
-      <tfoot>
-        <tr style="border-top:1px solid var(--bo2)">
-          <td style="font-weight:800;font-size:9px;color:var(--t1)">TOTAL</td>
-          <td style="text-align:center;font-weight:700;color:var(--t1)">${totalTrades}</td>
-          <td style="text-align:center;font-size:9px;color:var(--t2)">${totalWins}W / ${totalTrades-totalWins}L</td>
-          <td style="text-align:center;font-weight:800;color:${totalWRColor}">${totalWR}%</td>
-          <td style="text-align:right;font-weight:800;color:${totalPnlColor}">${fmt$(totalPnl)}</td>
-        </tr>
-      </tfoot>
-    </table>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-      <span style="font-size:8px;color:var(--t3)">Best session:</span>
-      <span style="font-size:8px;color:var(--g);font-weight:700">${
-        keys.length ? keys.reduce((best,s) => {
-          const b = buckets[s], tot = b.wins+b.losses;
-          const wr = tot ? b.wins/tot : 0;
-          const bb = buckets[best], bt = bb.wins+bb.losses;
-          return wr > (bt ? bb.wins/bt : 0) ? s : best;
-        }) : '--'
-      }</span>
-      <span style="font-size:8px;color:var(--t3);margin-left:8px">Sample:</span>
-      <span style="font-size:8px;color:${totalTrades>=20?'var(--g)':'var(--a)'};font-weight:700">${totalTrades}/20 trades</span>
+  el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div>
+      <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Session</div>
+      <table class="tbl">${thead}<tbody>${sKeys.map(s => mkRow(s, sBuckets[s])).join('')}</tbody>${tfoot}</table>
+    </div>
+    <div>
+      <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Instrument</div>
+      <table class="tbl">${thead}<tbody>${iKeys.map(i => mkRow(i, iBuckets[i])).join('')}</tbody>${tfoot}</table>
     </div>
   </div>`;
-
-  // RIGHT — instrument breakdown
-  html += `<div>
-    <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Instrument</div>
-    <table class="tbl">
-      <thead><tr>
-        <th>Instrument</th><th style="text-align:center">Trades</th>
-        <th style="text-align:center">W/L</th>
-        <th style="text-align:center">Win%</th>
-        <th style="text-align:right">P&L</th>
-      </tr></thead>
-      <tbody>`;
-  ikeys.forEach(inst => { html += mkRow(inst, ibuckets[inst]); });
-  html += `</tbody></table>
-  </div>`;
-
-  html += `</div>`; // close grid
-
-  el.innerHTML = html;
 }
 
-function buildEquityCurve(trades, START_BAL, account) {
-  const isFtmo = account === 'ftmo';
-  const chartInst = isFtmo ? ftmoChartInstance : chartInstance;
-  const eqData = isFtmo ? ftmoEquityData : equityData;
-
-  if (!trades || trades.length === 0) {
-    const today = new Date();
-    const labels = [], values = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(today); d.setDate(today.getDate() - i);
-      labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
-      values.push(START_BAL);
-    }
-    eqData['1W'] = { l: labels, d: values };
-    eqData['1M'] = { l: labels, d: values };
-    eqData['ALL']= { l: labels, d: values };
-    if (chartInst) {
-      chartInst.data.labels = labels;
-      chartInst.data.datasets[0].data = values;
-      chartInst.update();
-    }
-    return;
-  }
-
-  const sorted = [...trades].sort((a,b) => new Date(a.date||a.time||0) - new Date(b.date||b.time||0));
-  let bal = START_BAL;
-  const points = [{ label: 'Open', bal }];
-  sorted.forEach(t => {
-    bal += (t.pnl || 0);
-    const d = new Date(t.date || t.time || Date.now());
-    points.push({ label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), bal: Math.round(bal) });
-  });
-
-  const now = new Date();
-  const w7ago  = new Date(now); w7ago.setDate(now.getDate()-7);
-  const m30ago = new Date(now); m30ago.setDate(now.getDate()-30);
-  const wPts = points.slice(-Math.max(7, points.length));
-  const mPts = points.slice(-Math.max(30, points.length));
-  eqData['1W']  = { l: wPts.map(p=>p.label),  d: wPts.map(p=>p.bal) };
-  eqData['1M']  = { l: mPts.map(p=>p.label),  d: mPts.map(p=>p.bal) };
-  eqData['ALL'] = { l: points.map(p=>p.label), d: points.map(p=>p.bal) };
-
-  if (chartInst) {
-    chartInst.data.labels = eqData['1W'].l;
-    chartInst.data.datasets[0].data = eqData['1W'].d;
-    chartInst.update();
-  }
-}
-
-function renderFullTradeHistory(trades, account) {
-  const isFtmo = account === 'ftmo';
-  const bodyId  = isFtmo ? 'ftmo-trades-body' : 'trades-body';
-  const countId = isFtmo ? 'ftmo-trade-count' : 'trade-count';
-  const pnlId   = isFtmo ? 'ftmo-pnl' : 'tpt-pnl';
-  const qtyLabel = isFtmo ? 'lot_size' : 'contracts';
-
-  const body  = document.getElementById(bodyId);
-  const tcEl  = document.getElementById(countId);
-  if (!trades || trades.length === 0) return;
-
-  tcEl.textContent = trades.length + ' trade' + (trades.length !== 1 ? 's' : '');
-  const totalPnl = trades.reduce((s, t) => s + (t.pnl || 0), 0);
-  const pnlEl = document.getElementById(pnlId);
-  if (pnlEl) { pnlEl.textContent = fmt$(totalPnl); pnlEl.style.color = totalPnl >= 0 ? 'var(--g)' : 'var(--r)'; }
-
-  body.innerHTML = '';
-  [...trades].reverse().slice(0, 20).forEach(t => {
-    const pnl = t.pnl || 0;
-    const result = t.result || '';
-    const resultClass = result.includes('TP') ? 'bd bg' : result.includes('SL') ? 'bd br' : 'bd bdim';
-    const qty = t[qtyLabel] || t.contracts || t.lot_size || '--';
-    const displayTime = t.date ? t.date.slice(5,16).replace(' ',' ') : t.time || '--';
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td style="color:var(--t3);font-size:9px">${displayTime}</td>
-      <td style="font-weight:700">${t.instrument||'--'}</td>
-      <td style="color:${t.direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${t.direction||'--'}</td>
-      <td style="text-align:center">${qty}</td>
-      <td style="color:${pnl>=0?'var(--g)':'var(--r)'};font-weight:700">${fmt$(pnl)}</td>
-      <td><span class="${resultClass}">${result||'--'}</span></td>`;
-    body.appendChild(row);
-  });
-}
-
-function addSignalRow(ls) {
-  const body = document.getElementById('signal-body');
-  // Clear empty state
-  if (body.querySelector('.empty')) body.innerHTML = '';
-  const dir = ls.direction || '';
-  const row = document.createElement('tr');
-  row.className = 'signal-new';
-  row.innerHTML = `
-    <td style="color:var(--t3)">${ls.time||'--'}</td>
-    <td style="font-weight:700">${ls.instrument||'MNQ'}</td>
-    <td style="color:${dir==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${dir}</td>
-    <td style="text-align:center">${ls.contracts||'--'}</td>
-    <td>${ls.retrace_pts ? ls.retrace_pts+' pts' : '--'}</td>
-    <td>${ls.atr||'--'}</td>
-    <td style="color:var(--b)">${ls.rr||'--'}</td>`;
-  body.prepend(row);
-  // Keep max 10 rows
-  while (body.rows.length > 10) body.deleteRow(body.rows.length - 1);
-}
-
-
-// ── Equity Chart — TPT ────────────────────────────────────
+// ── Equity chart init ──────────────────────────────────────
 function initChart() {
   const ctx = document.getElementById('ec').getContext('2d');
   chartInstance = new Chart(ctx, {
     type: 'line',
-    data: { labels: [], datasets: [{ data: [], borderColor: '#00e676', borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: '#00e676', fill: true, backgroundColor: (c) => { const g = c.chart.ctx.createLinearGradient(0,0,0,140); g.addColorStop(0,'rgba(0,230,118,.15)'); g.addColorStop(1,'rgba(0,230,118,0)'); return g; }, tension: 0.4 }] },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2233',borderColor:'rgba(255,255,255,.1)',borderWidth:1,titleColor:'#5d7490',bodyColor:'#00e676',callbacks:{label:c=>' $'+Math.round(c.parsed.y).toLocaleString()}}}, scales:{ x:{ticks:{color:'#2e3d52',font:{size:9,family:"'JetBrains Mono',monospace"}},grid:{color:'rgba(255,255,255,.03)'}}, y:{ticks:{color:'#2e3d52',font:{size:9},callback:v=>'$'+(v/1000).toFixed(0)+'k'},grid:{color:'rgba(255,255,255,.03)'}} } }
+    data: { labels: [], datasets: [{ data: [], borderColor: '#00e676', borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: '#00e676', fill: true,
+      backgroundColor: (c) => { const g = c.chart.ctx.createLinearGradient(0,0,0,140); g.addColorStop(0,'rgba(0,230,118,.15)'); g.addColorStop(1,'rgba(0,230,118,0)'); return g; }, tension: 0.4 }] },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2233',borderColor:'rgba(255,255,255,.1)',borderWidth:1,titleColor:'#5d7490',bodyColor:'#00e676',callbacks:{label:c=>' $'+Math.round(c.parsed.y).toLocaleString()}}},
+      scales:{ x:{ticks:{color:'#2e3d52',font:{size:9,family:"'JetBrains Mono',monospace"}},grid:{color:'rgba(255,255,255,.03)'}}, y:{ticks:{color:'#2e3d52',font:{size:9},callback:v=>'$'+(v/1000).toFixed(1)+'k'},grid:{color:'rgba(255,255,255,.03)'}} } }
   });
 }
 
-// ── Equity Chart — FTMO ───────────────────────────────────
-function initFtmoChart() {
-  const ctx = document.getElementById('ec-ftmo').getContext('2d');
-  ftmoChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: { labels: [], datasets: [{ data: [], borderColor: '#4a9eff', borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: '#4a9eff', fill: true, backgroundColor: (c) => { const g = c.chart.ctx.createLinearGradient(0,0,0,140); g.addColorStop(0,'rgba(74,158,255,.15)'); g.addColorStop(1,'rgba(74,158,255,0)'); return g; }, tension: 0.4 }] },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2233',borderColor:'rgba(255,255,255,.1)',borderWidth:1,titleColor:'#5d7490',bodyColor:'#4a9eff',callbacks:{label:c=>' $'+Math.round(c.parsed.y).toLocaleString()}}}, scales:{ x:{ticks:{color:'#2e3d52',font:{size:9,family:"'JetBrains Mono',monospace"}},grid:{color:'rgba(255,255,255,.03)'}}, y:{ticks:{color:'#2e3d52',font:{size:9},callback:v=>'$'+(v/1000).toFixed(0)+'k'},grid:{color:'rgba(255,255,255,.03)'}} } }
-  });
-}
-
-function setR(k, el) {
-  document.querySelectorAll('#ec').forEach(()=>{});
-  el.closest('.tabrow').querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));
-  el.classList.add('act');
-  if (equityData[k]) {
-    chartInstance.data.labels = equityData[k].l;
-    chartInstance.data.datasets[0].data = equityData[k].d;
-    chartInstance.update();
-  }
-}
-
-function setRF(k, el) {
-  el.closest('.tabrow').querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));
-  el.classList.add('act');
-  if (ftmoEquityData[k]) {
-    ftmoChartInstance.data.labels = ftmoEquityData[k].l;
-    ftmoChartInstance.data.datasets[0].data = ftmoEquityData[k].d;
-    ftmoChartInstance.update();
-  }
-}
-
-// ── Kill button ────────────────────────────────────────────
-function doKill() {
-  const btn = document.querySelector('.kbtn');
-  btn.textContent = 'SENDING...';
-  btn.style.background = 'rgba(255,68,68,.4)';
-  // In production: POST to /reset/tpt with token
-  setTimeout(() => {
-    btn.textContent = '&#9211; EMERGENCY KILL';
-    btn.style.background = '';
-  }, 2500);
-}
-
-// ── Balance Update Modal ───────────────────────────────────
-let _balMode = 'both'; // 'tpt', 'ftmo', or 'both'
-
-function openBalModal(mode) {
-  _balMode = mode || 'both';
-  const overlay = document.getElementById('bal-modal-overlay');
-  const tptRow  = document.getElementById('bal-tpt-row');
-  const ftmoRow = document.getElementById('bal-ftmo-row');
-  const tptIn   = document.getElementById('bal-tpt-input');
-  const ftmoIn  = document.getElementById('bal-ftmo-input');
-
-  // Pre-fill current values (strip $ and commas)
-  const tptRaw  = (document.getElementById('tpt-bal').textContent  || '').replace(/[^0-9.]/g,'');
-  const ftmoRaw = (document.getElementById('ftmo-bal').textContent || '').replace(/[^0-9.]/g,'');
-  tptIn.value  = tptRaw  || '';
-  ftmoIn.value = ftmoRaw || '';
-
-  // Show only relevant row if single account clicked
-  tptRow.style.display  = (mode === 'ftmo') ? 'none' : 'flex';
-  ftmoRow.style.display = (mode === 'tpt')  ? 'none' : 'flex';
-
-  document.getElementById('bal-modal-status').textContent = '';
-  overlay.classList.add('open');
-  (mode === 'ftmo' ? ftmoIn : tptIn).focus();
-}
-
-function closeBalModal() {
-  document.getElementById('bal-modal-overlay').classList.remove('open');
-}
-
-async function saveBalance() {
-  const tptVal  = parseFloat(document.getElementById('bal-tpt-input').value);
-  const ftmoVal = parseFloat(document.getElementById('bal-ftmo-input').value);
-  const status  = document.getElementById('bal-modal-status');
-  const btn     = document.getElementById('bal-save-btn');
-
-  const payload = { token: 'ftmo_xK9mP2qL8nR4vT7w' };
-  if (_balMode !== 'ftmo' && !isNaN(tptVal))  payload.tpt_balance  = tptVal;
-  if (_balMode !== 'tpt'  && !isNaN(ftmoVal)) payload.ftmo_balance = ftmoVal;
-
-  if (!payload.tpt_balance && !payload.ftmo_balance) {
-    status.style.color = 'var(--r)';
-    status.textContent = 'Enter a valid balance amount.';
-    return;
-  }
-
-  btn.classList.add('bal-saving');
-  btn.textContent = 'SAVING...';
-  status.style.color = 'var(--t3)';
-  status.textContent = 'Sending to Railway...';
-
-  try {
-    const res = await fetch(RAILWAY_URL + '/admin/set_balance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (data.status === 'updated') {
-      status.style.color = 'var(--g)';
-      status.textContent = '✓ Balance updated successfully';
-      setTimeout(closeBalModal, 900);
-      fetchState(); // refresh dashboard immediately
-    } else {
-      status.style.color = 'var(--r)';
-      status.textContent = data.reason || 'Update failed';
-    }
-  } catch(e) {
-    status.style.color = 'var(--r)';
-    status.textContent = 'Network error — check Railway connection';
-  } finally {
-    btn.classList.remove('bal-saving');
-    btn.textContent = 'SAVE';
-  }
-}
-
-// ── Phase 3: Finnhub Economic Calendar ────────────────────
+// ── Finnhub calendar ───────────────────────────────────────
 async function fetchCalendar() {
-  if (FINNHUB_KEY === 'YOUR_FINNHUB_KEY_HERE') {
-    renderCalendarFallback();
-    return;
-  }
   try {
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
     const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-
-    // Today
     const todayStr = fmt(now);
-    // End of week (next Sunday)
-    const weekEnd = new Date(now);
-    weekEnd.setDate(now.getDate() + (7 - now.getDay()));
-    const weekEndStr = fmt(weekEnd);
-
-    const url = `https://finnhub.io/api/v1/calendar/economic?from=${todayStr}&to=${weekEndStr}&token=${FINNHUB_KEY}`;
+    const weekEnd  = new Date(now); weekEnd.setDate(now.getDate() + (7 - now.getDay()));
+    const url = `https://finnhub.io/api/v1/calendar/economic?from=${todayStr}&to=${fmt(weekEnd)}&token=${FINNHUB_KEY}`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error('Finnhub HTTP ' + res.status);
+    if (!res.ok) throw new Error('Finnhub ' + res.status);
     const data = await res.json();
     const events = (data.economicCalendar || []).filter(e => e.country === 'US' || e.country === 'United States');
-    if (!events.length) { renderCalendarFallback(); return; }
-
-    // Split today vs rest of week
     const todayEvents = events.filter(e => e.time && e.time.startsWith(todayStr));
     const weekEvents  = events.filter(e => e.time && !e.time.startsWith(todayStr));
-
     renderTodayEvents(todayEvents, todayStr);
     renderWeekEvents(weekEvents);
-  } catch(e) {
-    console.warn('Finnhub fetch failed:', e);
-    renderCalendarFallback();
-  }
+  } catch(e) { console.warn('Finnhub fetch failed:', e); renderCalendarFallback(); }
 }
 
-function impactClass(impact) {
-  if (!impact) return 'bdim';
-  const i = String(impact).toLowerCase();
-  if (i === 'high' || i === '3') return 'nhigh';
-  if (i === 'medium' || i === '2') return 'nmed';
-  return 'nlow';
-}
-
-function impactLabel(impact) {
-  if (!impact) return 'LOW';
-  const i = String(impact).toLowerCase();
-  if (i === 'high' || i === '3') return 'HIGH';
-  if (i === 'medium' || i === '2') return 'MEDIUM';
-  return 'LOW';
-}
-
-function fmtEventTime(timeStr) {
-  if (!timeStr) return '';
-  // timeStr is UTC like "2026-05-16 12:30:00"
-  const d = new Date(timeStr.replace(' ','T') + 'Z');
-  const ct = new Date(d.toLocaleString('en-US',{timeZone:'America/Chicago'}));
-  const pad = n => String(n).padStart(2,'0');
-  return `${pad(ct.getHours())}:${pad(ct.getMinutes())} CT`;
-}
-
-function fmtEventDate(timeStr) {
-  if (!timeStr) return '';
-  const d = new Date(timeStr.replace(' ','T') + 'Z');
-  return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'America/Chicago'});
-}
+function impactClass(i) { const s = String(i||'').toLowerCase(); return s==='high'||s==='3'?'nhigh':s==='medium'||s==='2'?'nmed':'nlow'; }
+function impactLabel(i) { const s = String(i||'').toLowerCase(); return s==='high'||s==='3'?'HIGH':s==='medium'||s==='2'?'MEDIUM':'LOW'; }
+function fmtEventTime(t) { if (!t) return ''; const d = new Date(t.replace(' ','T')+'Z'); const ct = new Date(d.toLocaleString('en-US',{timeZone:'America/Chicago'})); const pad=n=>String(n).padStart(2,'0'); return `${pad(ct.getHours())}:${pad(ct.getMinutes())} CT`; }
+function fmtEventDate(t) { if (!t) return ''; return new Date(t.replace(' ','T')+'Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'America/Chicago'}); }
 
 function renderTodayEvents(events, todayStr) {
   const el = document.getElementById('today-events');
   const badge = document.getElementById('today-impact-badge');
-  const hasHigh = events.some(e => String(e.impact||'').toLowerCase() === 'high' || e.impact === '3');
-  const hasMed  = events.some(e => String(e.impact||'').toLowerCase() === 'medium' || e.impact === '2');
-  badge.textContent = hasHigh ? 'HIGH IMPACT' : hasMed ? 'MEDIUM' : events.length ? 'LOW ACTIVITY' : 'NO EVENTS';
-  badge.className = 'bd ' + (hasHigh ? 'br' : hasMed ? 'ba' : 'bdim');
-
-  // Update card title with today's date
+  const hasHigh = events.some(e => String(e.impact||'').toLowerCase()==='high'||e.impact==='3');
+  const hasMed  = events.some(e => String(e.impact||'').toLowerCase()==='medium'||e.impact==='2');
+  badge.textContent = hasHigh?'HIGH IMPACT':hasMed?'MEDIUM':events.length?'LOW ACTIVITY':'NO EVENTS';
+  badge.className = 'bd2 ' + (hasHigh?'br2':hasMed?'ba2':'bdim');
   const titleEl = el.closest('.card').querySelector('.ct');
-  if (titleEl) {
-    const d = new Date(todayStr + 'T12:00:00');
-    titleEl.textContent = 'Today — ' + d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-  }
-
-  if (!events.length) {
-    el.innerHTML = '<div class="ni"><div class="ntime">No US events today</div></div>';
-    return;
-  }
-
-  // Sort by time
-  const sorted = [...events].sort((a,b) => (a.time||'').localeCompare(b.time||''));
-
+  if (titleEl) { const d = new Date(todayStr+'T12:00:00'); titleEl.textContent = 'Today — ' + d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
+  if (!events.length) { el.innerHTML = '<div class="ni"><div class="ntime">No US events today</div></div>'; return; }
+  const sorted = [...events].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
   el.innerHTML = sorted.map(e => {
-    const timeStr = fmtEventTime(e.time);
-    const now = new Date();
-    const evTime = e.time ? new Date(e.time.replace(' ','T') + 'Z') : null;
-    const isPast = evTime && evTime < now;
-    const isNext = !isPast && evTime && (evTime - now) < 3600000; // within 1hr
-    const timeColor = isPast ? 'var(--t3)' : isNext ? 'var(--a)' : 'var(--t2)';
-    const timeLabel = isPast ? timeStr + ' — RELEASED' : isNext ? timeStr + ' — NEXT ⚡' : timeStr;
-    return `
-    <div class="ni">
-      <div class="ntime" style="color:${timeColor}">${timeLabel}</div>
-      <div class="ntitle">${e.event || e.name || 'Economic Event'}</div>
-      <div class="ntags">
-        <span class="ntag ${impactClass(e.impact)}">${impactLabel(e.impact)}</span>
-        <span class="ntag nmed">USD</span>
-      </div>
-      ${e.actual != null || e.estimate != null || e.prev != null ? `
-      <div class="ndata">
-        ${e.prev != null ? `Prev: <span>${e.prev}</span>&nbsp;` : ''}
-        ${e.estimate != null ? `Est: <span>${e.estimate}</span>&nbsp;` : ''}
-        ${e.actual != null ? `Act: <span style="color:${parseFloat(e.actual) >= 0 ? 'var(--g)' : 'var(--r)'}">${e.actual}</span>` : ''}
-      </div>` : ''}
+    const evTime = e.time ? new Date(e.time.replace(' ','T')+'Z') : null;
+    const isPast = evTime && evTime < new Date();
+    const isNext = !isPast && evTime && (evTime - new Date()) < 3600000;
+    const tColor = isPast?'var(--t3)':isNext?'var(--a)':'var(--t2)';
+    const tLabel = fmtEventTime(e.time) + (isPast?' — RELEASED':isNext?' — NEXT ⚡':'');
+    return `<div class="ni">
+      <div class="ntime" style="color:${tColor}">${tLabel}</div>
+      <div class="ntitle">${e.event||'Economic Event'}</div>
+      <div class="ntags"><span class="ntag ${impactClass(e.impact)}">${impactLabel(e.impact)}</span><span class="ntag nmed">USD</span></div>
+      ${e.prev!=null||e.estimate!=null||e.actual!=null?`<div class="ndata">${e.prev!=null?`Prev: <span>${e.prev}</span> `:''}${e.estimate!=null?`Est: <span>${e.estimate}</span> `:''}${e.actual!=null?`Act: <span>${e.actual}</span>`:''}.</div>`:''}
     </div>`;
   }).join('');
 }
@@ -1314,67 +744,29 @@ function renderTodayEvents(events, todayStr) {
 function renderWeekEvents(events) {
   const el = document.getElementById('week-events');
   const badge = document.getElementById('week-impact-badge');
-  const highCount = events.filter(e => String(e.impact||'').toLowerCase() === 'high' || e.impact === '3').length;
-  badge.textContent = highCount ? `${highCount} HIGH IMPACT` : events.length ? `${events.length} EVENTS` : 'QUIET WEEK';
-  badge.className = 'bd ' + (highCount >= 2 ? 'br' : highCount ? 'ba' : 'bdim');
-
-  if (!events.length) {
-    el.innerHTML = '<div class="ni"><div class="ntime">No major US events this week</div></div>';
-    return;
-  }
-
-  // Sort by time, show HIGH impact only with date + time
-  const highOnly = events.filter(e => String(e.impact||'').toLowerCase() === 'high' || e.impact === '3');
-  const sorted = [...highOnly].sort((a,b) => (a.time||'').localeCompare(b.time||''));
-
-  if (!sorted.length) {
-    el.innerHTML = '<div class="ni"><div class="ntime" style="color:var(--t3)">No high impact events this week</div></div>';
-    return;
-  }
-
-  el.innerHTML = sorted.map(e => {
-    const dateStr = fmtEventDate(e.time);
-    const timeStr = fmtEventTime(e.time);
-    return `
-    <div class="ni">
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <div class="ntime">${dateStr}</div>
-        <div style="font-size:8px;font-weight:700;color:var(--t2)">${timeStr}</div>
-      </div>
-      <div class="ntitle">${e.event || e.name || 'Economic Event'}</div>
-      <div class="ntags">
-        <span class="ntag ${impactClass(e.impact)}">${impactLabel(e.impact)}</span>
-        <span class="ntag nmed">USD</span>
-      </div>
-      ${e.estimate != null ? `<div class="ndata">Est: <span>${e.estimate}</span></div>` : ''}
-    </div>`;
-  }).join('');
+  const highCount = events.filter(e=>String(e.impact||'').toLowerCase()==='high'||e.impact==='3').length;
+  badge.textContent = highCount?`${highCount} HIGH IMPACT`:events.length?`${events.length} EVENTS`:'QUIET WEEK';
+  badge.className = 'bd2 ' + (highCount>=2?'br2':highCount?'ba2':'bdim');
+  const highOnly = [...events.filter(e=>String(e.impact||'').toLowerCase()==='high'||e.impact==='3')].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  if (!highOnly.length) { el.innerHTML = '<div class="ni"><div class="ntime" style="color:var(--t3)">No high impact events this week</div></div>'; return; }
+  el.innerHTML = highOnly.map(e => `<div class="ni">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div class="ntime">${fmtEventDate(e.time)}</div>
+      <div style="font-size:8px;font-weight:700;color:var(--t2)">${fmtEventTime(e.time)}</div>
+    </div>
+    <div class="ntitle">${e.event||'Economic Event'}</div>
+    <div class="ntags"><span class="ntag nhigh">HIGH</span><span class="ntag nmed">USD</span></div>
+    ${e.estimate!=null?`<div class="ndata">Est: <span>${e.estimate}</span></div>`:''}
+  </div>`).join('');
 }
 
 function renderCalendarFallback() {
-  // Shown when no API key yet — static placeholder
-  document.getElementById('today-impact-badge').textContent = 'ADD KEY';
-  document.getElementById('today-impact-badge').className = 'bd ba';
-  document.getElementById('week-impact-badge').textContent  = 'ADD KEY';
-  document.getElementById('week-impact-badge').className   = 'bd ba';
-  document.getElementById('today-events').innerHTML = `
-    <div class="ni">
-      <div class="ntime" style="color:var(--a)">FINNHUB KEY NOT SET</div>
-      <div class="ntitle" style="color:var(--t2)">Add your key to FINNHUB_KEY at top of script</div>
-      <div class="ntags"><span class="ntag ba">SETUP NEEDED</span></div>
-      <div class="ndata">Get free key at <span>finnhub.io</span></div>
-    </div>`;
-  document.getElementById('week-events').innerHTML = `
-    <div class="ni">
-      <div class="ntime" style="color:var(--t3)">Awaiting API key...</div>
-    </div>`;
+  ['today-impact-badge','week-impact-badge'].forEach(id => { const el=document.getElementById(id); el.textContent='NO KEY'; el.className='bd2 ba2'; });
+  document.getElementById('today-events').innerHTML = '<div class="ni"><div class="ntime" style="color:var(--a)">Finnhub key not set</div></div>';
+  document.getElementById('week-events').innerHTML  = '<div class="ni"><div class="ntime" style="color:var(--t3)">Add key to script</div></div>';
 }
 
-// ── Phase 5a: CFTC COT Data ────────────────────────────────
-// CFTC publishes CSV at publicreporting.cftc.gov
-// We fetch via a CORS proxy since browser can't hit CFTC directly.
-// Fallback to last-known hardcoded data if fetch fails.
-
+// ── CFTC COT ───────────────────────────────────────────────
 const COT_FALLBACK = [
   { sym:'ES',    long:213840, short:92140,  bias:'Bullish', pct:70 },
   { sym:'NQ',    long:28950,  short:14200,  bias:'Bullish', pct:67 },
@@ -1385,62 +777,34 @@ const COT_FALLBACK = [
   { sym:'EUR',   long:214000, short:98000,  bias:'Bullish', pct:69 },
   { sym:'VIX',   long:82000,  short:34000,  bias:'Rising',  pct:71 },
 ];
-
-// CFTC market codes for the futures we care about
-const COT_CODES = {
-  'ES':    '13874+',   // E-MINI S&P 500
-  'NQ':    '209742',   // E-MINI NASDAQ-100
-  'GOLD':  '088691',   // GOLD
-  'SILVER':'084691',   // SILVER
-  'CRUDE': '067651',   // CRUDE OIL, LIGHT SWEET
-  'USD':   '098662',   // US DOLLAR INDEX
-  'EUR':   '099741',   // EURO FX
-  'VIX':   '1170E1',   // CBOE VIX FUTURES
-};
+const COT_CODES = { 'ES':'13874+','NQ':'209742','GOLD':'088691','SILVER':'084691','CRUDE':'067651','USD':'098662','EUR':'099741','VIX':'1170E1' };
 
 async function fetchCOT() {
   try {
-    // CFTC Disaggregated Futures-Only Current Year report via Socrata API
-    // This endpoint returns the latest COT data for the current year
     const BASE = 'https://publicreporting.cftc.gov/resource/gpe5-46if.json';
-    const codes = Object.values(COT_CODES).map(c => `'${c}'`).join(',');
-    const url = `${BASE}?$where=cftc_contract_market_code in(${codes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=50`;
-
-    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    const codes = Object.values(COT_CODES).map(c=>`'${c}'`).join(',');
+    const res = await fetch(`${BASE}?$where=cftc_contract_market_code in(${codes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=50`,{headers:{'Accept':'application/json'}});
     if (!res.ok) throw new Error('CFTC ' + res.status);
     const rows = await res.json();
-    if (!rows.length) throw new Error('No CFTC data');
-
-    // Get latest row per market code
+    if (!rows.length) throw new Error('No data');
     const latest = {};
-    rows.forEach(r => {
-      const code = r.cftc_contract_market_code;
-      if (!latest[code]) latest[code] = r;
-    });
-
-    // Map to our symbols
+    rows.forEach(r => { const c = r.cftc_contract_market_code; if (!latest[c]) latest[c] = r; });
     const results = Object.entries(COT_CODES).map(([sym, code]) => {
       const row = latest[code];
-      if (!row) return COT_FALLBACK.find(f => f.sym === sym) || { sym, long:0, short:0, bias:'N/A', pct:50 };
+      if (!row) return COT_FALLBACK.find(f=>f.sym===sym) || { sym, long:0, short:0, bias:'N/A', pct:50 };
       const longs  = parseInt(row.noncomm_positions_long_all  || row.asset_mgr_positions_long  || 0);
       const shorts = parseInt(row.noncomm_positions_short_all || row.asset_mgr_positions_short || 0);
       const total  = longs + shorts || 1;
-      const pct    = Math.round((longs / total) * 100);
-      let bias = 'Neutral';
-      if (pct >= 60) bias = 'Bullish';
-      else if (pct <= 40) bias = 'Bearish';
-      if (sym === 'VIX' && pct >= 60) bias = 'Rising';
-      return { sym, long: longs, short: shorts, bias, pct };
+      const pct    = Math.round((longs/total)*100);
+      let bias = pct>=60?'Bullish':pct<=40?'Bearish':'Neutral';
+      if (sym==='VIX' && pct>=60) bias = 'Rising';
+      return { sym, long:longs, short:shorts, bias, pct };
     });
-
-    // Get report date from first row
-    const reportDate = rows[0] ? rows[0].report_date_as_yyyy_mm_dd : null;
-    const dateLabel = reportDate ? 'CFTC ' + reportDate.slice(5).replace('-','/') : 'CFTC Live';
-    document.getElementById('cot-updated').textContent = dateLabel;
-
+    const reportDate = rows[0]?.report_date_as_yyyy_mm_dd;
+    document.getElementById('cot-updated').textContent = reportDate ? 'CFTC ' + reportDate.slice(5).replace('-','/') : 'CFTC Live';
     renderCOT(results);
   } catch(e) {
-    console.warn('CFTC fetch failed, using fallback:', e);
+    console.warn('CFTC fallback:', e);
     document.getElementById('cot-updated').textContent = 'Fallback data';
     renderCOT(COT_FALLBACK);
   }
@@ -1449,81 +813,34 @@ async function fetchCOT() {
 function renderCOT(items) {
   const grid = document.getElementById('cot-grid');
   grid.innerHTML = items.map(item => {
-    const biasClass = item.bias === 'Bullish' ? 'cbull' : item.bias === 'Bearish' || item.bias === 'Rising' ? 'cbear' : 'cneut';
-    const barColor  = item.bias === 'Bullish' ? 'var(--g)' : item.bias === 'Bearish' || item.bias === 'Rising' ? 'var(--r)' : 'var(--t2)';
-    return `<div class="cc">
-      <div class="csym">${item.sym}</div>
-      <div class="cbias ${biasClass}">${item.bias}</div>
-      <div class="cconf">${item.pct}%</div>
-      <div class="cbg"><div class="cbf" style="width:${item.pct}%;background:${barColor}"></div></div>
-    </div>`;
+    const biasClass = item.bias==='Bullish'?'cbull':item.bias==='Bearish'||item.bias==='Rising'?'cbear':'cneut';
+    const barColor  = item.bias==='Bullish'?'var(--g)':item.bias==='Bearish'||item.bias==='Rising'?'var(--r)':'var(--t2)';
+    return `<div class="cc"><div class="csym">${item.sym}</div><div class="cbias ${biasClass}">${item.bias}</div><div class="cconf">${item.pct}%</div><div class="cbg"><div class="cbf" style="width:${item.pct}%;background:${barColor}"></div></div></div>`;
   }).join('');
 }
 
-// ── FTMO Signal Feed renderer ──────────────────────────────
-function addFtmoSignalRow(event, instrument, direction, lotSize, pnl) {
-  const body = document.getElementById('ftmo-signal-body');
-  if (body.querySelector('.empty')) body.innerHTML = '';
-  const eventLabels = { entry_filled:'ENTRY', tp1_hit:'TP1', tp2_hit:'TP2', sl_hit:'SL' };
-  const eventColors = { entry_filled:'var(--b)', tp1_hit:'var(--g)', tp2_hit:'var(--g)', sl_hit:'var(--r)' };
-  const label = eventLabels[event] || event.toUpperCase();
-  const color = eventColors[event] || 'var(--t2)';
-  const now = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'});
-  const row = document.createElement('tr');
-  row.className = 'signal-new';
-  row.innerHTML = `
-    <td style="color:var(--t3)">${now}</td>
-    <td style="font-weight:700">${instrument||'--'}</td>
-    <td style="color:${direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${direction||'--'}</td>
-    <td>${lotSize||'--'}</td>
-    <td style="color:${color};font-weight:700">${label}</td>
-    <td style="color:${(pnl||0)>=0?'var(--g)':'var(--r)'};font-weight:700">${pnl!=null?fmt$(pnl):'--'}</td>`;
-  body.prepend(row);
-  while (body.rows.length > 10) body.deleteRow(body.rows.length - 1);
-}
-
-// ── Kill button ────────────────────────────────────────────
-function doKill() {
-  const btn = document.querySelector('.kbtn');
-  btn.textContent = 'SENDING...';
-  btn.style.background = 'rgba(255,68,68,.4)';
-  setTimeout(() => { btn.innerHTML = '&#9211; EMERGENCY KILL'; btn.style.background = ''; }, 2500);
-}
-
-// ── News Feed — via Railway /news proxy ────────────────────
+// ── News feed ──────────────────────────────────────────────
 async function fetchNews() {
   try {
     const res = await fetch('/news');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    const articles = data.articles || [];
-    if (articles.length) renderNews(articles);
+    if (data.articles && data.articles.length) renderNews(data.articles);
     else throw new Error('no articles');
   } catch(e) {
-    console.warn('News fetch failed:', e);
-    document.getElementById('news-feed').innerHTML =
-      '<div class="ni"><div class="ntime" style="color:var(--t3)">News unavailable</div></div>';
+    document.getElementById('news-feed').innerHTML = '<div class="ni"><div class="ntime" style="color:var(--t3)">News unavailable</div></div>';
   }
 }
 
 function fmtNewsAge(pubStr) {
   if (!pubStr) return '';
-  try {
-    const diff = Math.round((Date.now() - new Date(pubStr)) / 60000);
-    if (diff < 60) return diff + 'm ago';
-    if (diff < 1440) return Math.round(diff/60) + 'h ago';
-    return Math.round(diff/1440) + 'd ago';
-  } catch { return ''; }
+  try { const diff = Math.round((Date.now()-new Date(pubStr))/60000); return diff<60?diff+'m ago':diff<1440?Math.round(diff/60)+'h ago':Math.round(diff/1440)+'d ago'; }
+  catch { return ''; }
 }
 
 function renderNews(articles) {
-  const el = document.getElementById('news-feed');
-  if (!articles.length) {
-    el.innerHTML = '<div class="ni"><div class="ntime" style="color:var(--t3)">No articles found</div></div>';
-    return;
-  }
   const catColor = { 'Markets':'var(--g)', 'Gold/Comm':'var(--a)', 'US Indices':'var(--b)' };
-  el.innerHTML = articles.map(a => `
+  document.getElementById('news-feed').innerHTML = articles.map(a => `
     <div class="ni">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
         <span style="font-size:7px;padding:1px 5px;border-radius:2px;font-weight:800;background:rgba(255,255,255,.05);color:${catColor[a.category]||'var(--t2)'};">${a.category}</span>
@@ -1535,17 +852,16 @@ function renderNews(articles) {
 
 // ── Boot ───────────────────────────────────────────────────
 initChart();
-initFtmoChart();
 fetchState();
 fetchTrades();
 fetchCalendar();
 fetchCOT();
 fetchNews();
-setInterval(fetchState, 5000);
-setInterval(fetchTrades, 30000);
+setInterval(fetchState,   5000);
+setInterval(fetchTrades,  30000);
 setInterval(fetchCalendar, 3600000);
-setInterval(fetchCOT, 3600000);
-setInterval(fetchNews, 900000); // 15 min
+setInterval(fetchCOT,      3600000);
+setInterval(fetchNews,     900000);
 </script>
 </body>
 </html>
