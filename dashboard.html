@@ -150,7 +150,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div style="display:flex;align-items:center;gap:12px">
     <div class="acct">
       <div class="acct-lbl">Paper Balance</div>
-      <div class="acct-val" style="color:var(--g)" id="paper-bal">$10,000</div>
+      <div class="acct-val" style="color:var(--g)" id="paper-bal">$100,000</div>
     </div>
     <div class="sep"></div>
     <span class="live-badge"><span class="live-dot"></span>LIVE</span>
@@ -218,13 +218,15 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       <span class="bd2" id="paper-alert-badge">0 ALERTS</span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px">
-      <div class="sb"><div class="sl2">Balance</div><div class="sv2" style="color:var(--g)" id="paper-bal-card">$10,000</div></div>
+      <div class="sb"><div class="sl2">Balance</div><div class="sv2" style="color:var(--g)" id="paper-bal-card">$100,000</div></div>
       <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl">+$0.00</div></div>
       <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="paper-wr">0%</div></div>
       <div class="sb"><div class="sl2">W / L</div><div class="sv2" style="font-size:12px" id="paper-wl">0 / 0</div></div>
     </div>
     <div style="display:flex;gap:16px;font-size:8px;color:var(--t3)">
       <span>Signals today: <span style="color:var(--t2)" id="paper-sigs">0</span></span>
+      <span>Open trades: <span style="color:var(--t2)" id="paper-open">0</span><span style="color:var(--t3)">/5</span></span>
+      <span style="color:var(--t3)">Risk/trade: <span style="color:var(--t2)">$1,000 (1%)</span></span>
     </div>
   </div>
 
@@ -371,7 +373,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 <script>
 const RAILWAY_URL = 'https://tradingbot-production-1e5a.up.railway.app';
 const FINNHUB_KEY = 'd84klj1r01qutij98emgd84klj1r01qutij98en0';
-const PAPER_START = 10000;
+const PAPER_START = 100000;
 
 let chartInstance = null;
 let equityData = { '1W': { l:[], d:[] }, '1M': { l:[], d:[] }, 'ALL': { l:[], d:[] } };
@@ -454,10 +456,16 @@ function updateDashboard(d) {
   document.getElementById('paper-wl').textContent = wl;
   document.getElementById('paper-wl-side').textContent = wl;
 
-  // Signals
+  // Signals + open trades
   const sigs = d.paper_daily_signals || 0;
   document.getElementById('paper-sigs').textContent = sigs;
   document.getElementById('paper-sigs-side').textContent = sigs;
+  const openEl = document.getElementById('paper-open');
+  if (openEl) {
+    const openCount = d.paper_open_trades || 0;
+    openEl.textContent = openCount;
+    openEl.style.color = openCount >= 5 ? 'var(--r)' : openCount >= 3 ? 'var(--y)' : 'var(--t2)';
+  }
   const alertBadge = document.getElementById('paper-alert-badge');
   alertBadge.textContent = sigs + ' ALERT' + (sigs !== 1 ? 'S' : '');
   alertBadge.className = 'bd2 ' + (sigs > 0 ? 'bg2' : 'bdim');

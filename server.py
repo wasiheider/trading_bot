@@ -49,6 +49,12 @@ def handle_paper_signal(data):
     rr         = data.get("rr_to_tp1")
     sl_pips    = data.get("sl_pips")
 
+    open_count = sum(1 for t in _load_trades_log().get("paper", []) if t.get("result") == "OPEN")
+    if open_count >= 5:
+        reason = f"max open trades reached ({open_count}/5)"
+        send_telegram(f"🚫 *Paper Signal Blocked — Max Open Trades*\n`{instrument} {direction}`\n{reason}")
+        return jsonify({"status": "blocked", "reason": reason}), 200
+
     risk = check_paper_risk(instrument, sl_pips)
     if not risk["allowed"]:
         msg = f"🚫 *Paper Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
@@ -171,6 +177,8 @@ def state():
     total  = wins + losses
     wr     = round((wins / total) * 100) if total > 0 else 0
 
+    open_count = sum(1 for t in _load_trades_log().get("paper", []) if t.get("result") == "OPEN")
+
     return jsonify({
         "time_ct":              now.strftime("%Y-%m-%d %H:%M:%S"),
         "paper_account_balance": paper_state.get("account_balance", 0),
@@ -179,6 +187,7 @@ def state():
         "paper_daily_wins":      wins,
         "paper_daily_losses":    losses,
         "paper_win_rate":        wr,
+        "paper_open_trades":     open_count,
         "paper_last_signal":     paper_state.get("last_signal"),
         "paper_trades":          paper_state.get("trades", [])[-10:],
     }), 200

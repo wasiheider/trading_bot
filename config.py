@@ -13,7 +13,7 @@ CLAUDE_MODEL      = "claude-sonnet-4-20250514"
 
 # ── Paper Trading ─────────────────────────────────────────
 PAPER_WEBHOOK_TOKEN = os.getenv("PAPER_WEBHOOK_TOKEN")
-PAPER_ACCOUNT_SIZE  = float(os.getenv("PAPER_ACCOUNT_SIZE", "10000"))
+PAPER_ACCOUNT_SIZE  = float(os.getenv("PAPER_ACCOUNT_SIZE", "100000"))
 
 # ── Risk ──────────────────────────────────────────────────
 RISK_PER_TRADE = 0.01   # 1% per trade (paper account — no prop firm limits)
