@@ -827,35 +827,61 @@ function renderCOT(items) {
   }).join('');
 }
 
-// ── News feed ──────────────────────────────────────────────
+// ── News feed (Finnhub — general + forex, top 5 by recency) ──
+const NEWS_CATS = { Commodities:'var(--a)', Energy:'var(--a)', Forex:'var(--b)', Indices:'var(--g)', Macro:'var(--y)', Markets:'var(--t2)' };
+
+function classifyNews(headline) {
+  const h = (headline || '').toLowerCase();
+  if (/\bgold\b|silver|copper|metal|xau|xag|commodit/.test(h))       return 'Commodities';
+  if (/\boil\b|crude|wti|brent|natural gas|energy|opec/.test(h))     return 'Energy';
+  if (/\beur\b|\bgbp\b|\bjpy\b|\busd\b|forex|currency|currencies/.test(h)) return 'Forex';
+  if (/fed\b|federal reserve|rate|inflation|cpi|pce|fomc|gdp|treasury|yield/.test(h)) return 'Macro';
+  if (/nasdaq|ndx|\bnq\b|sp500|s&p|dow jones|\bspx\b|futures|index|indices/.test(h)) return 'Indices';
+  return 'Markets';
+}
+
 async function fetchNews() {
   try {
-    const res = await fetch('/news');
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (data.articles && data.articles.length) renderNews(data.articles);
-    else throw new Error('no articles');
+    const [genRes, fxRes] = await Promise.all([
+      fetch(`https://finnhub.io/api/v1/news?category=general&token=${FINNHUB_KEY}`, {cache:'no-store'}),
+      fetch(`https://finnhub.io/api/v1/news?category=forex&token=${FINNHUB_KEY}`,   {cache:'no-store'})
+    ]);
+    const gen = genRes.ok ? await genRes.json() : [];
+    const fx  = fxRes.ok  ? await fxRes.json()  : [];
+    const seen = new Set();
+    const combined = [...(Array.isArray(gen)?gen:[]), ...(Array.isArray(fx)?fx:[])].filter(a => {
+      if (!a.headline || seen.has(a.headline)) return false;
+      seen.add(a.headline);
+      return true;
+    });
+    combined.sort((a, b) => b.datetime - a.datetime);
+    const top5 = combined.slice(0, 5);
+    if (top5.length) renderNews(top5);
+    else throw new Error('empty');
   } catch(e) {
     document.getElementById('news-feed').innerHTML = '<div class="ni"><div class="ntime" style="color:var(--t3)">News unavailable</div></div>';
   }
 }
 
-function fmtNewsAge(pubStr) {
-  if (!pubStr) return '';
-  try { const diff = Math.round((Date.now()-new Date(pubStr))/60000); return diff<60?diff+'m ago':diff<1440?Math.round(diff/60)+'h ago':Math.round(diff/1440)+'d ago'; }
-  catch { return ''; }
+function fmtNewsAge(ts) {
+  if (!ts) return '';
+  const diff = Math.round((Date.now()/1000 - ts) / 60);
+  return diff < 60 ? diff+'m ago' : diff < 1440 ? Math.round(diff/60)+'h ago' : Math.round(diff/1440)+'d ago';
 }
 
 function renderNews(articles) {
-  const catColor = { 'Markets':'var(--g)', 'Gold/Comm':'var(--a)', 'US Indices':'var(--b)' };
-  document.getElementById('news-feed').innerHTML = articles.map(a => `
+  document.getElementById('news-feed').innerHTML = articles.map(a => {
+    const cat   = classifyNews(a.headline);
+    const color = NEWS_CATS[cat] || 'var(--t2)';
+    return `
     <div class="ni">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-        <span style="font-size:7px;padding:1px 5px;border-radius:2px;font-weight:800;background:rgba(255,255,255,.05);color:${catColor[a.category]||'var(--t2)'};">${a.category}</span>
-        <span class="ntime" style="margin:0">${fmtNewsAge(a.pub)}</span>
+        <span style="font-size:7px;padding:1px 5px;border-radius:2px;font-weight:800;background:rgba(255,255,255,.05);color:${color}">${cat}</span>
+        <span class="ntime" style="margin:0">${fmtNewsAge(a.datetime)}</span>
       </div>
-      <div class="ntitle"><a href="${a.link}" target="_blank" style="color:var(--t1);text-decoration:none">${a.title}</a></div>
-    </div>`).join('');
+      <div class="ntitle"><a href="${a.url}" target="_blank" style="color:var(--t1);text-decoration:none">${a.headline}</a></div>
+    </div>`;
+  }).join('');
 }
 
 // ── Boot ───────────────────────────────────────────────────
