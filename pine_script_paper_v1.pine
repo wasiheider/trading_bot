@@ -112,7 +112,7 @@ eurnzd_high = 2.029,    eurnzd_low = 1.97193,  eurnzd_start = timestamp("2026-04
 // ─────────────────────────────────────────────────────────
 
 is_us500  = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "SPX") or str.contains(raw_ticker, "ES1") or str.contains(raw_ticker, "MES")
-is_us30   = str.contains(raw_ticker, "US30")  or str.contains(raw_ticker, "DJI") or str.contains(raw_ticker, "YM")
+is_us30   = str.contains(raw_ticker, "US30")  or str.contains(raw_ticker, "DJI") or str.contains(raw_ticker, "YM1")
 is_xag    = str.contains(raw_ticker, "XAG")
 is_btc    = str.contains(raw_ticker, "BTC")
 is_eur    = str.contains(raw_ticker, "EURUSD")
