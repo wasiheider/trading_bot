@@ -58,12 +58,20 @@ PAPER_INSTRUMENT_CONFIG = {
     # Metals
     "XAUUSD": {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
     "XAGUSD": {"pip_value": 0.50,  "pip_size": 0.01, "default_sl_pips": 20},
-    # Indices
+    # Indices — CFD names and futures equivalents
     "US100":  {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
+    "NQ":     {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
+    "MNQ":    {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
     "US30":   {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
+    "YM":     {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
+    "MYM":    {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
     "US500":  {"pip_value": 1.00,  "pip_size": 0.1,  "default_sl_pips": 20},
-    # Commodities
+    "ES":     {"pip_value": 1.00,  "pip_size": 0.1,  "default_sl_pips": 20},
+    "MES":    {"pip_value": 1.00,  "pip_size": 0.1,  "default_sl_pips": 20},
+    # Commodities — CFD and futures
     "USOIL":  {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
+    "CL":     {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
+    "MCL":    {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
     # Forex
     "EURUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
     "GBPUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},

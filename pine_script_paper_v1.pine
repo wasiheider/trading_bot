@@ -15,7 +15,7 @@
 //   Close 50% at TP1, move SL to entry, hold rest to TP2.
 //   After trade closes: wait for opposite boundary before re-arming.
 //
-// Instruments : XAUUSD (first) → US100 → US30 → GBPUSD → EURUSD → USDJPY → USOIL
+// Instruments : XAUUSD (first) → NQ → YM → GBPUSD → EURUSD → USDJPY → CL
 // Webhook     : /webhook/paper
 // Sizing      : Dynamic lots sent to Railway — paper account, no kill switches
 // =============================================================================
@@ -601,5 +601,5 @@ if show_info
 // 3. Create alert: webhook URL = https://tradingbot-production-1e5a.up.railway.app/webhook/paper
 // 4. Token is already set to paper_wasirizvi_wyckoffstrategy in all alert() calls
 // 5. Verify first order appears in broker panel → Positions tab
-// 6. Roll out additional instruments one at a time after XAUUSD confirms
+// 6. Roll out one at a time after XAUUSD confirms: NQ1! → YM1! → GBPUSD → EURUSD → USDJPY → CL1!
 // =============================================================================
