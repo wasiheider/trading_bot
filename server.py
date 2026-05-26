@@ -11,6 +11,7 @@ from risk import (
     record_paper_signal,
     record_paper_trade,
     update_paper_outcome,
+    reset_paper_full,
 )
 from notifier import send_telegram
 from logger import init_db
@@ -262,6 +263,16 @@ def dashboard():
     if os.path.exists(dash_path):
         return send_file(dash_path, mimetype="text/html")
     return Response("<h1>dashboard.html not found</h1>", mimetype="text/html"), 404
+
+
+# ── Admin Reset ────────────────────────────────────────────
+@app.route("/admin/reset", methods=["POST"])
+def admin_reset():
+    token = request.json.get("token") if request.is_json else None
+    if token != PAPER_WEBHOOK_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
+    reset_paper_full()
+    return jsonify({"status": "reset", "balance": paper_state["account_balance"]}), 200
 
 
 # ── Health ─────────────────────────────────────────────────

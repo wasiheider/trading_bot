@@ -62,9 +62,26 @@ raw_ticker   = syminfo.tickerid
 clean_ticker = str.replace(str.replace(raw_ticker, ".SIM", ""), "SIM", "")
 symbol_name  = str.replace(str.replace(clean_ticker, "1!", ""), "!", "")
 
-is_xauusd = str.contains(raw_ticker, "XAU")
-is_usoil  = str.contains(raw_ticker, "OIL") or str.contains(raw_ticker, "WTI") or str.contains(raw_ticker, "CL")
-is_us100  = str.contains(raw_ticker, "US100") or str.contains(raw_ticker, "NAS") or str.contains(raw_ticker, "NQ")
+is_xauusd_cash = str.contains(raw_ticker, "XAU")
+is_gc          = str.contains(raw_ticker, "GC")   // GC1!, MGC1!
+is_xauusd      = is_xauusd_cash or is_gc
+
+is_usoil_cash  = str.contains(raw_ticker, "OIL") or str.contains(raw_ticker, "WTI")
+is_cl          = str.contains(raw_ticker, "CL")   // CL1!, MCL1!
+is_usoil       = is_usoil_cash or is_cl
+
+// Split cash vs futures so range levels can be maintained independently
+is_us100_cash = str.contains(raw_ticker, "US100") or str.contains(raw_ticker, "NAS")
+is_nq         = str.contains(raw_ticker, "NQ")   // NQ1!, MNQ1!
+is_us100      = is_us100_cash or is_nq
+
+is_us30_cash  = str.contains(raw_ticker, "US30") or str.contains(raw_ticker, "DJI")
+is_ym         = str.contains(raw_ticker, "YM")   // YM1!, MYM1!
+is_us30       = is_us30_cash or is_ym
+
+is_us500_cash = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "SPX")
+is_es         = str.contains(raw_ticker, "ES") or str.contains(raw_ticker, "MES")  // ES1!, MES1!
+is_us500      = is_us500_cash or is_es
 
 pip_value_per_001 = is_xauusd ? 0.01 : is_usoil ? 0.10 : is_us100 ? 0.01 : 0.10
 pip_size          = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0  : syminfo.mintick * 10
@@ -98,12 +115,19 @@ htf_l = request.security(syminfo.tickerid, "60", low,   lookahead=barmerge.looka
 htf_c = request.security(syminfo.tickerid, "60", close, lookahead=barmerge.lookahead_off)
 
 // ── UPDATE THESE WHEN A RANGE BREAKS ─────────────────────
+// Cash CFD levels (US100, US30, US500 on broker CFD charts)
 us100_high  = 29700.0,  us100_low  = 28660.0,  us100_start  = timestamp("2026-05-07 00:00")
 us500_high  = 7524.0,   us500_low  = 7345.0,   us500_start  = timestamp("2026-05-07 00:00")
 us30_high   = 50200.0,  us30_low   = 48500.0,  us30_start   = timestamp("2026-04-29 00:00")
+// Futures levels — maintained separately (futures carry ~50-100pt premium vs cash CFDs)
+nq_high     = 29763.0,  nq_low     = 28723.0,  nq_start     = timestamp("2026-05-07 00:00")
+ym_high     = 50250.0,  ym_low     = 48550.0,  ym_start     = timestamp("2026-04-29 00:00")
+es_high     = 7534.0,   es_low     = 7355.0,   es_start     = timestamp("2026-05-07 00:00")
 xau_high    = 4772.0,   xau_low    = 4500.0,   xau_start    = timestamp("2026-05-04 00:00")
+gc_high     = 4780.0,   gc_low     = 4508.0,   gc_start     = timestamp("2026-05-04 00:00")
 xag_high    = 87.0,     xag_low    = 70.0,     xag_start    = timestamp("2026-04-29 00:00")
 oil_high    = 113.0,    oil_low    = 82.0,     oil_start    = timestamp("2026-04-17 00:00")
+cl_high     = 113.5,    cl_low     = 82.5,     cl_start     = timestamp("2026-04-17 00:00")
 btc_high    = 82000.0,  btc_low    = 63000.0,  btc_start    = timestamp("2026-02-23 00:00")
 eur_high    = 1.18489,  eur_low    = 1.1437,   eur_start    = timestamp("2026-03-13 00:00")
 gbp_high    = 1.3658,   gbp_low    = 1.3180,   gbp_start    = timestamp("2026-02-12 00:00")
@@ -111,8 +135,7 @@ jpy_high    = 160.45,   jpy_low    = 155.58,   jpy_start    = timestamp("2026-03
 eurnzd_high = 2.029,    eurnzd_low = 1.97193,  eurnzd_start = timestamp("2026-04-07 00:00")
 // ─────────────────────────────────────────────────────────
 
-is_us500  = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "SPX") or str.contains(raw_ticker, "ES1") or str.contains(raw_ticker, "MES")
-is_us30   = str.contains(raw_ticker, "US30")  or str.contains(raw_ticker, "DJI") or str.contains(raw_ticker, "YM1")
+// is_us100/us30/us500/nq/ym/es already defined in INSTRUMENT CONFIG above
 is_xag    = str.contains(raw_ticker, "XAG")
 is_btc    = str.contains(raw_ticker, "BTC")
 is_eur    = str.contains(raw_ticker, "EURUSD")
@@ -120,20 +143,33 @@ is_gbp    = str.contains(raw_ticker, "GBPUSD")
 is_jpy    = str.contains(raw_ticker, "USDJPY")
 is_eurnzd = str.contains(raw_ticker, "EURNZD")
 
-htf_struct_high  = is_us100  ? us100_high  : is_us500  ? us500_high  : is_us30   ? us30_high  :
-                   is_xauusd ? xau_high    : is_xag    ? xag_high    : is_usoil  ? oil_high   :
-                   is_btc    ? btc_high    : is_eur    ? eur_high    : is_gbp    ? gbp_high   :
-                   is_jpy    ? jpy_high    : is_eurnzd ? eurnzd_high : na
+// Futures checked before cash so NQ1!/YM1!/ES1! get their own levels
+htf_struct_high  = is_nq      ? nq_high     : is_us100_cash ? us100_high  :
+                   is_ym      ? ym_high     : is_us30_cash  ? us30_high   :
+                   is_es      ? es_high     : is_us500_cash ? us500_high  :
+                   is_gc      ? gc_high     : is_xauusd_cash ? xau_high   :
+                   is_cl      ? cl_high     : is_usoil_cash  ? oil_high   :
+                   is_xag     ? xag_high    : is_btc         ? btc_high   :
+                   is_eur     ? eur_high    : is_gbp         ? gbp_high   :
+                   is_jpy     ? jpy_high    : is_eurnzd      ? eurnzd_high : na
 
-htf_struct_low   = is_us100  ? us100_low   : is_us500  ? us500_low   : is_us30   ? us30_low   :
-                   is_xauusd ? xau_low     : is_xag    ? xag_low     : is_usoil  ? oil_low    :
-                   is_btc    ? btc_low     : is_eur    ? eur_low     : is_gbp    ? gbp_low    :
-                   is_jpy    ? jpy_low     : is_eurnzd ? eurnzd_low  : na
+htf_struct_low   = is_nq      ? nq_low      : is_us100_cash ? us100_low   :
+                   is_ym      ? ym_low      : is_us30_cash  ? us30_low    :
+                   is_es      ? es_low      : is_us500_cash ? us500_low   :
+                   is_gc      ? gc_low      : is_xauusd_cash ? xau_low    :
+                   is_cl      ? cl_low      : is_usoil_cash  ? oil_low    :
+                   is_xag     ? xag_low     : is_btc         ? btc_low    :
+                   is_eur     ? eur_low     : is_gbp         ? gbp_low    :
+                   is_jpy     ? jpy_low     : is_eurnzd      ? eurnzd_low  : na
 
-range_start_date = is_us100  ? us100_start  : is_us500  ? us500_start  : is_us30   ? us30_start  :
-                   is_xauusd ? xau_start    : is_xag    ? xag_start    : is_usoil  ? oil_start   :
-                   is_btc    ? btc_start    : is_eur    ? eur_start    : is_gbp    ? gbp_start   :
-                   is_jpy    ? jpy_start    : is_eurnzd ? eurnzd_start : timestamp("2020-01-01")
+range_start_date = is_nq      ? nq_start    : is_us100_cash ? us100_start :
+                   is_ym      ? ym_start    : is_us30_cash  ? us30_start  :
+                   is_es      ? es_start    : is_us500_cash ? us500_start :
+                   is_gc      ? gc_start    : is_xauusd_cash ? xau_start  :
+                   is_cl      ? cl_start    : is_usoil_cash  ? oil_start  :
+                   is_xag     ? xag_start   : is_btc         ? btc_start  :
+                   is_eur     ? eur_start   : is_gbp         ? gbp_start  :
+                   is_jpy     ? jpy_start   : is_eurnzd      ? eurnzd_start : timestamp("2020-01-01")
 
 htf_range = not na(htf_struct_high) and not na(htf_struct_low) and htf_struct_high > htf_struct_low ?
      htf_struct_high - htf_struct_low : na

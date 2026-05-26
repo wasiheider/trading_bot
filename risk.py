@@ -144,3 +144,19 @@ def reset_paper_daily():
     paper_state["daily_losses"]  = 0
     paper_state["last_signal"]   = None
     _save_state()
+
+
+def reset_paper_full():
+    paper_state["account_balance"] = PAPER_ACCOUNT_SIZE
+    paper_state["daily_pnl"]       = 0.0
+    paper_state["daily_signals"]   = 0
+    paper_state["daily_wins"]      = 0
+    paper_state["daily_losses"]    = 0
+    paper_state["last_signal"]     = None
+    _save_state()
+    # clear trades log
+    try:
+        with open(TRADES_FILE, "w") as f:
+            json.dump({"paper": []}, f)
+    except Exception:
+        pass
