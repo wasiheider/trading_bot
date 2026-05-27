@@ -40,8 +40,24 @@ def webhook_paper():
     return handle_paper_signal(data)
 
 
+_OANDA_MAP = {
+    "NAS100USD": "US100",
+    "US30USD":   "US30",
+    "SPX500USD": "US500",
+    "WTICOUSD":  "USOIL",
+    "XAGUSD":    "XAGUSD",
+    "XAUUSD":    "XAUUSD",
+}
+
+def _normalize_instrument(raw: str) -> str:
+    s = raw.upper().replace("1!", "").replace("!", "")
+    if ":" in s:                          # strip broker prefix e.g. "OANDA:"
+        s = s.split(":")[-1]
+    return _OANDA_MAP.get(s, s)
+
+
 def handle_paper_signal(data):
-    instrument = data.get("symbol", data.get("instrument", "")).upper().replace("1!", "").replace("!", "")
+    instrument = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
     direction  = data.get("direction", "").upper()
     price      = data.get("entry_price", data.get("price"))
     sl         = data.get("stop_loss", data.get("sl"))
@@ -94,7 +110,7 @@ def handle_paper_signal(data):
 
 
 def handle_paper_lifecycle(data, event):
-    instrument = data.get("symbol", data.get("instrument", "")).upper().replace("1!", "").replace("!", "")
+    instrument = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
     direction  = data.get("direction", "").upper()
     price      = data.get("price", data.get("entry_price"))
     pnl        = data.get("pnl")
