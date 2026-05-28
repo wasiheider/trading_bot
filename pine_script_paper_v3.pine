@@ -392,37 +392,12 @@ prev_pos := strategy.position_size
 // VISUALS
 // =============================================================================
 
-// Flat horizontal lines — drawn ONLY on the current (real-time) bar so they
-// never follow historical candle structure. barstate.islast fires every tick
-// on the live bar; delete+recreate keeps them anchored to the right edge.
-var line  line_high  = na
-var line  line_mid   = na
-var line  line_low   = na
-var label label_high = na
-var label label_mid  = na
-var label label_low  = na
-
-if barstate.islast and show_range and not na(range_high)
-    line.delete(line_high)
-    line.delete(line_mid)
-    line.delete(line_low)
-    label.delete(label_high)
-    label.delete(label_mid)
-    label.delete(label_low)
-
-    line_high := line.new(bar_index, range_high, bar_index + 1, range_high,
-         color=color.red,                width=2, extend=extend.both, style=line.style_solid)
-    line_mid  := line.new(bar_index, htf_mid,    bar_index + 1, htf_mid,
-         color=color.new(color.gray, 0), width=1, extend=extend.both, style=line.style_dashed)
-    line_low  := line.new(bar_index, range_low,  bar_index + 1, range_low,
-         color=color.green,              width=2, extend=extend.both, style=line.style_solid)
-
-    label_high := label.new(bar_index + 2, range_high, "1H HIGH  " + str.tostring(range_high, price_format),
-         color=color.new(color.red,80),   textcolor=color.red,   style=label.style_label_left, size=size.small)
-    label_mid  := label.new(bar_index + 2, htf_mid,    "MID  "     + str.tostring(htf_mid,    price_format),
-         color=color.new(color.gray,80),  textcolor=color.gray,  style=label.style_label_left, size=size.small)
-    label_low  := label.new(bar_index + 2, range_low,  "1H LOW  "  + str.tostring(range_low,  price_format),
-         color=color.new(color.green,80), textcolor=color.green, style=label.style_label_left, size=size.small)
+// Range level plots — plot() draws a flat horizontal at a fixed value; since
+// range_high/low are var floats that only update on a new 1H pivot, each
+// level renders as a clean flat line with no candle-structure artifacts.
+plot(show_range and not na(range_high) ? range_high : na, "1H Range High", color=color.red,               linewidth=2)
+plot(show_range and not na(htf_mid)   ? htf_mid    : na, "Range Mid",      color=color.new(color.gray,0), linewidth=1, style=plot.style_linebr)
+plot(show_range and not na(range_low) ? range_low  : na, "1H Range Low",   color=color.green,             linewidth=2)
 
 bgcolor(near_high ? color.new(color.red,   92) : na, title="High zone")
 bgcolor(near_low  ? color.new(color.green, 92) : na, title="Low zone")
