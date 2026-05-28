@@ -15,5 +15,10 @@ CLAUDE_MODEL      = "claude-sonnet-4-20250514"
 PAPER_WEBHOOK_TOKEN = os.getenv("PAPER_WEBHOOK_TOKEN")
 PAPER_ACCOUNT_SIZE  = float(os.getenv("PAPER_ACCOUNT_SIZE", "100000"))
 
+# ── OANDA ─────────────────────────────────────────────────
+OANDA_API_TOKEN  = os.getenv("OANDA_API_TOKEN")
+OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID")
+OANDA_BASE_URL   = os.getenv("OANDA_BASE_URL", "https://api-fxpractice.oanda.com")
+
 # ── Risk ──────────────────────────────────────────────────
 RISK_PER_TRADE = 0.01   # 1% per trade (paper account — no prop firm limits)

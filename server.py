@@ -15,6 +15,7 @@ from risk import (
 )
 from notifier import send_telegram
 from logger import init_db
+import oanda
 
 app = Flask(__name__)
 CT = pytz.timezone("America/Chicago")
@@ -78,8 +79,21 @@ def handle_paper_signal(data):
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
+    # ── Execute on OANDA ──────────────────────────────────────
+    oanda_trade_id = None
+    oanda_fill_price = price
+    oanda_error = None
+    try:
+        fill = oanda.place_order(instrument, direction, risk["lot_size"])
+        oanda_trade_id   = fill["trade_id"]
+        oanda_fill_price = fill["price"]
+    except Exception as e:
+        oanda_error = str(e)
+        print(f"[oanda] ERROR placing order: {e}", flush=True)
+
     emoji   = "🟢" if direction == "LONG" else "🔴"
     rr_line = f"\nR:R: `{rr}`" if rr else ""
+    exec_line = f"\nOANDA ID: `{oanda_trade_id}` @ `{oanda_fill_price}`" if oanda_trade_id else f"\nOANDA: FAILED ({oanda_error})"
     msg = (
         f"{emoji} *Paper — {instrument} {direction}*\n"
         f"Entry: `{price}`\n"
@@ -89,24 +103,26 @@ def handle_paper_signal(data):
         f"Lots: `{risk['lot_size']}`\n"
         f"Risk: `${risk['risk_dollars']}`"
         f"{rr_line}"
+        f"{exec_line}"
     )
 
     record_paper_signal(data)
     _append_trade_log({
-        "time":       ct_now().strftime("%H:%M"),
-        "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
-        "instrument": instrument,
-        "direction":  direction,
-        "price":      price,
-        "sl":         sl,
-        "tp1":        tp1,
-        "tp2":        tp2,
-        "lot_size":   risk["lot_size"],
-        "result":     "OPEN",
-        "pnl":        0,
+        "time":            ct_now().strftime("%H:%M"),
+        "date":            ct_now().strftime("%Y-%m-%d %H:%M"),
+        "instrument":      instrument,
+        "direction":       direction,
+        "price":           oanda_fill_price,
+        "sl":              sl,
+        "tp1":             tp1,
+        "tp2":             tp2,
+        "lot_size":        risk["lot_size"],
+        "result":          "OPEN",
+        "pnl":             0,
+        "oanda_trade_id":  oanda_trade_id,
     })
     send_telegram(msg)
-    return jsonify({"status": "approved", "lot_size": risk["lot_size"]}), 200
+    return jsonify({"status": "approved", "lot_size": risk["lot_size"], "oanda_trade_id": oanda_trade_id}), 200
 
 
 def handle_paper_lifecycle(data, event):
@@ -115,6 +131,15 @@ def handle_paper_lifecycle(data, event):
     price      = data.get("price", data.get("entry_price"))
     pnl        = data.get("pnl")
     lot_size   = data.get("lot_size")
+
+    # ── Close on OANDA ────────────────────────────────────────
+    oanda_trade_id = _get_oanda_trade_id(instrument, direction)
+    if oanda_trade_id:
+        try:
+            oanda.close_trade(oanda_trade_id)
+            print(f"[oanda] Closed trade {oanda_trade_id} ({event})", flush=True)
+        except Exception as e:
+            print(f"[oanda] ERROR closing trade {oanda_trade_id}: {e}", flush=True)
 
     won = event in ("tp1_hit", "tp2_hit")
     update_paper_outcome(won=won, pnl=pnl)
@@ -165,6 +190,18 @@ def _append_trade_log(trade: dict):
             json.dump(log, f, indent=2)
     except Exception as e:
         print(f"[trades] WARNING: could not write trades.json: {e}", flush=True)
+
+def _get_oanda_trade_id(instrument: str, direction: str):
+    try:
+        trades = _load_trades_log().get("paper", [])
+        for t in reversed(trades):
+            if (t.get("instrument", "").upper() == instrument.upper() and
+                    t.get("direction", "").upper() == direction.upper() and
+                    t.get("result") == "OPEN"):
+                return t.get("oanda_trade_id")
+    except Exception:
+        pass
+    return None
 
 def _update_open_trade(instrument: str, direction: str, event: str, pnl):
     try:
