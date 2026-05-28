@@ -55,8 +55,10 @@ _save_state()
 
 # ── Instrument config (pip values for lot sizing) ──────────
 PAPER_INSTRUMENT_CONFIG = {
-    # Metals
+    # Metals — CFD and futures
     "XAUUSD": {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
+    "GC":     {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
+    "MGC":    {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
     "XAGUSD": {"pip_value": 0.50,  "pip_size": 0.01, "default_sl_pips": 20},
     # Indices — CFD names and futures equivalents
     "US100":  {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
