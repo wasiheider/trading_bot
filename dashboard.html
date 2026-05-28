@@ -142,7 +142,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="tb-brand">
     <div class="tb-dot" id="conn-dot"></div>
     <div>
-      <div class="tb-name">TRADING BOT V2.4 <span class="tb-tag">WYCKOFF_MTF</span></div>
+      <div class="tb-name">TRADING BOT V3 <span class="tb-tag">1H RANGE · 15M BOS · 5M ENTRY</span></div>
       <div class="tb-clock" id="clock-line">Connecting...</div>
     </div>
   </div>
@@ -185,17 +185,17 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="ir"><div class="il"><div class="dlv" id="dot-railway"></div>Railway Cluster</div><span style="font-size:8px;color:var(--t3)" id="railway-status">connecting</span></div>
     <div class="ir"><div class="il"><div class="dlv"></div>TradingView Webhook</div><span style="font-size:8px;color:var(--t3)">live</span></div>
     <div class="ir"><div class="il"><div class="dlv"></div>Telegram Notifier</div><span style="font-size:8px;color:var(--t3)">live</span></div>
-    <div class="ir"><div class="il"><div class="dlv"></div>VPS Vultr Dallas</div><span style="font-size:8px;color:var(--t3)">$5/mo</span></div>
-    <div class="ir"><div class="il"><div class="dlv"></div>Paper Account</div><span style="font-size:8px;color:var(--g)">TradingView</span></div>
+    <div class="ir"><div class="il"><div class="dlv"></div>OANDA Demo</div><span style="font-size:8px;color:var(--g)">Forex execution</span></div>
+    <div class="ir"><div class="il"><div class="dlv"></div>Paper Account</div><span style="font-size:8px;color:var(--g)">$100k simulated</span></div>
   </div>
 
   <div class="card">
     <div class="ct">Schedule</div>
     <div class="sr2"><span class="sl3">&#8635; Daily Reset</span><div class="st">00:00<div class="sd">Daily CT</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; Session Filter</span><div class="st">Weekdays<div class="sd">only</div></div></div>
-    <div class="sr2"><span class="sl3">&#128240; News Block</span><div class="st">08–09 ET<div class="sd">13:30 ET</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; ATR Filter</span><div class="st">5M ATR<div class="sd">above 50-bar avg</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">15% beyond<div class="sd">boundary = pause</div></div></div>
     <div class="sr2"><span class="sl3">&#9825; Heartbeat</span><div class="st">Hourly<div class="sd">Railway keepalive</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; POC Window</span><div class="st">2 weeks<div class="sd">then review</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; POC Window</span><div class="st">Active<div class="sd">live signals</div></div></div>
   </div>
 </div>
 
@@ -205,8 +205,8 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <!-- Execution banner -->
   <div class="exec-banner">
     <div>
-      <div class="exec-mode">&#9654; Auto-Executing — TradingView Paper Trading</div>
-      <div class="exec-sub">strategy.entry() places orders in broker panel · 15M MTF Wyckoff · XAUUSD, NQ, YM, CL, Forex</div>
+      <div class="exec-mode">&#9654; Auto-Executing — OANDA Demo (Forex) · Log+Telegram (All Others)</div>
+      <div class="exec-sub">TradingView 5M alert → Railway webhook → OANDA market order · Forex: EURUSD, GBPUSD, USDJPY, EURNZD · Others: log only</div>
     </div>
     <span class="bd2 bg2">PAPER</span>
   </div>
@@ -225,8 +225,8 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     </div>
     <div style="display:flex;gap:16px;font-size:8px;color:var(--t3)">
       <span>Signals today: <span style="color:var(--t2)" id="paper-sigs">0</span></span>
-      <span>Open trades: <span style="color:var(--t2)" id="paper-open">0</span><span style="color:var(--t3)">/5</span></span>
-      <span style="color:var(--t3)">Risk/trade: <span style="color:var(--t2)">$1,000 (1%)</span></span>
+      <span>Open trades: <span style="color:var(--t2)" id="paper-open">0</span><span style="color:var(--t3)">/1</span></span>
+      <span style="color:var(--t3)">Risk/trade: <span style="color:var(--t2)">$500 (0.5%)</span></span>
     </div>
   </div>
 
