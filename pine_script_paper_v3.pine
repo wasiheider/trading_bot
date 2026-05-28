@@ -438,7 +438,7 @@ plot(show_trade_lvls and strategy.position_size != 0 and not na(active_tp2) ? ac
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 13, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 14, bgcolor=color.new(color.black, 70), border_width=1)
 if show_info
     arm_display = not use_rotation ? "OFF" :
          armed_side == "none" ? "WAIT->" + (waiting_for_high ? "HIGH" : "LOW") :
@@ -476,3 +476,7 @@ if show_info
          text_color=bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
     table.cell(info, 0, 12, "1H Lookback",                    text_color=color.gray)
     table.cell(info, 1, 12, str.tostring(h1_lookback),         text_color=color.gray)
+    table.cell(info, 0, 13, "ATR Filter",                      text_color=color.gray)
+    table.cell(info, 1, 13, atr_ok ? "PASS " + str.tostring(atr_now, "#.##") + " > " + str.tostring(atr_avg, "#.##") :
+         "BLOCK " + str.tostring(atr_now, "#.##") + " < " + str.tostring(atr_avg, "#.##"),
+         text_color=atr_ok ? color.green : color.red)
