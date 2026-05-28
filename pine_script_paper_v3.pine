@@ -36,7 +36,7 @@ strategy(
 // =============================================================================
 // INPUTS
 // =============================================================================
-h1_pivot_len    = input.int(5,     "1H Pivot Length (range boundaries)",  group="Range",  minval=2,   maxval=15)
+h1_lookback     = input.int(20,    "1H Range Lookback (bars)",            group="Range",  minval=5,   maxval=100)
 zone_pct        = input.float(8.0, "Boundary Zone % of Range",            group="Range",  minval=1.0, maxval=20.0, step=0.5)
 
 m15_bos_len     = input.int(3,     "15M BOS Pivot Length",                group="Entry",  minval=2,   maxval=10)
@@ -79,21 +79,15 @@ risk_dollars      = 500.0
 atr_now = ta.atr(14)
 
 // =============================================================================
-// 1H AUTO-RANGE — last confirmed 1H pivot high and low
+// 1H AUTO-RANGE — highest high and lowest low of the last N 1H bars
+// This directly matches the swing high/low you see on the 1H chart, with
+// no pivot-confirmation lag. Range updates when 1H structure changes.
 // =============================================================================
-[h1_ph_src, h1_pl_src] = request.security(
+[range_high, range_low] = request.security(
      syminfo.tickerid, "60",
-     [ta.pivothigh(high, h1_pivot_len, h1_pivot_len),
-      ta.pivotlow(low,   h1_pivot_len, h1_pivot_len)],
+     [ta.highest(high, h1_lookback),
+      ta.lowest(low,   h1_lookback)],
      lookahead=barmerge.lookahead_off)
-
-var float range_high = na
-var float range_low  = na
-
-if not na(h1_ph_src)
-    range_high := h1_ph_src
-if not na(h1_pl_src)
-    range_low := h1_pl_src
 
 htf_range = not na(range_high) and not na(range_low) and range_high > range_low ?
      range_high - range_low : na
@@ -477,5 +471,5 @@ if show_info
     table.cell(info, 1, 11, bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
          text_color=bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
-    table.cell(info, 0, 12, "1H Pivot Len",                   text_color=color.gray)
-    table.cell(info, 1, 12, str.tostring(h1_pivot_len),        text_color=color.gray)
+    table.cell(info, 0, 12, "1H Lookback",                    text_color=color.gray)
+    table.cell(info, 1, 12, str.tostring(h1_lookback),         text_color=color.gray)
