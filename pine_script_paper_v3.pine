@@ -428,9 +428,9 @@ if strategy.position_size == 0 and prev_pos != 0
     active_tp1 := na
     active_tp2 := na
 
-plot(show_trade_lvls and not na(active_sl)  ? active_sl  : na, "SL",  color=color.red,                  linewidth=2, style=plot.style_linebr)
-plot(show_trade_lvls and not na(active_tp1) ? active_tp1 : na, "TP1", color=color.new(color.green, 30), linewidth=1, style=plot.style_linebr)
-plot(show_trade_lvls and not na(active_tp2) ? active_tp2 : na, "TP2", color=color.green,                linewidth=2, style=plot.style_linebr)
+plot(show_trade_lvls and strategy.position_size != 0 and not na(active_sl)  ? active_sl  : na, "SL",  color=color.red,                  linewidth=2, style=plot.style_linebr)
+plot(show_trade_lvls and strategy.position_size != 0 and not na(active_tp1) ? active_tp1 : na, "TP1", color=color.new(color.green, 30), linewidth=1, style=plot.style_linebr)
+plot(show_trade_lvls and strategy.position_size != 0 and not na(active_tp2) ? active_tp2 : na, "TP2", color=color.green,                linewidth=2, style=plot.style_linebr)
 
 // =============================================================================
 // INFO TABLE
