@@ -21,4 +21,4 @@ OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID")
 OANDA_BASE_URL   = os.getenv("OANDA_BASE_URL", "https://api-fxpractice.oanda.com")
 
 # ── Risk ──────────────────────────────────────────────────
-RISK_PER_TRADE = 0.01   # 1% per trade (paper account — no prop firm limits)
+RISK_PER_TRADE = 0.005  # 0.5% per trade ($500 on $100k — higher frequency strategy
