@@ -46,6 +46,7 @@ max_retrace_pct = input.float(60.0,"Max Retrace — invalidate BOS (%)",    grou
 
 use_rotation    = input.bool(true,  "Boundary Rotation Gate",             group="Filters")
 max_break_pct   = input.float(15.0, "Pause entries if range breaks by %", group="Filters", minval=5.0, step=1.0)
+atr_avg_len     = input.int(50,    "ATR average length (above = entry allowed)", group="Filters", minval=10, maxval=200)
 
 show_range      = input.bool(true, "Show range levels",                   group="Display")
 show_bos        = input.bool(true, "Show BOS level",                      group="Display")
@@ -77,6 +78,8 @@ risk_dollars      = 500.0
 // ATR (5M native)
 // =============================================================================
 atr_now = ta.atr(14)
+atr_avg = ta.sma(atr_now, atr_avg_len)
+atr_ok  = atr_now > atr_avg
 
 // =============================================================================
 // 1H AUTO-RANGE — highest high and lowest low of the last N 1H bars
@@ -262,8 +265,8 @@ long_tp1_lots  = math.max(0.01, math.floor(long_lots  / 2 / 0.01) * 0.01)
 // FINAL SIGNALS
 // =============================================================================
 no_position  = strategy.opentrades == 0
-short_signal = short_retracing and short_rr_ok and not na(short_sl) and bear_entry_bar < bear_bos_bar and no_position and not range_broken
-long_signal  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken
+short_signal = short_retracing and short_rr_ok and not na(short_sl) and bear_entry_bar < bear_bos_bar and no_position and not range_broken and atr_ok
+long_signal  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken and atr_ok
 
 // =============================================================================
 // STRATEGY EXECUTION
