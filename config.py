@@ -21,4 +21,10 @@ OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID")
 OANDA_BASE_URL   = os.getenv("OANDA_BASE_URL", "https://api-fxpractice.oanda.com")
 
 # ── Risk ──────────────────────────────────────────────────
-RISK_PER_TRADE = 0.005  # 0.5% per trade ($500 on $100k — higher frequency strategy
+RISK_PER_TRADE = 0.005  # 0.5% per trade ($500 on $100k)
+
+# ── Risk Limits (breach = signals still fire, OANDA skipped) ──
+MAX_DAILY_LOSS     = 3000.0  # $3,000 daily loss
+MAX_DAILY_SL_HITS  = 6       # SL hits across all instruments per day
+MAX_WEEKLY_LOSS    = 5000.0  # $5,000 weekly loss
+MAX_WEEKLY_SL_HITS = 10      # SL hits across all instruments per week

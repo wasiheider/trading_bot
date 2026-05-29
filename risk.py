@@ -1,7 +1,11 @@
 import json
 import os
 
-from config import RISK_PER_TRADE, PAPER_ACCOUNT_SIZE
+from config import (
+    RISK_PER_TRADE, PAPER_ACCOUNT_SIZE,
+    MAX_DAILY_LOSS, MAX_DAILY_SL_HITS,
+    MAX_WEEKLY_LOSS, MAX_WEEKLY_SL_HITS,
+)
 
 STATE_FILE  = "state.json"
 TRADES_FILE = "trades.json"
@@ -25,29 +29,48 @@ def _is_today(date_str: str) -> bool:
     except Exception:
         return False
 
+def _get_week_start() -> str:
+    """Monday date (CT) of the current week — used to detect a new week."""
+    try:
+        import pytz
+        from datetime import datetime, timedelta
+        ct = pytz.timezone("America/Chicago")
+        now = datetime.now(ct)
+        monday = now - timedelta(days=now.weekday())
+        return monday.strftime("%Y-%m-%d")
+    except Exception:
+        return ""
+
 def _save_state():
     try:
         import pytz
         from datetime import datetime
         ct = pytz.timezone("America/Chicago")
-        today = datetime.now(ct).strftime("%Y-%m-%d")
-        paper_state["_date"] = today
+        paper_state["_date"] = datetime.now(ct).strftime("%Y-%m-%d")
+        paper_state["_week"] = _get_week_start()
         with open(STATE_FILE, "w") as f:
             json.dump({"paper": paper_state}, f, indent=2)
     except Exception as e:
         print(f"[state] WARNING: could not save state: {e}", flush=True)
 
-_saved = _load_state()
+
+_saved       = _load_state()
 _paper_date  = _saved.get("paper", {}).get("_date", "")
+_paper_week  = _saved.get("paper", {}).get("_week", "")
 _paper_fresh = not _paper_date or not _is_today(_paper_date)
+_week_fresh  = not _paper_week or _paper_week != _get_week_start()
 
 paper_state = {
     "account_balance": _saved.get("paper", {}).get("account_balance", PAPER_ACCOUNT_SIZE),
+    # daily — reset each midnight CT
     "daily_pnl":       0.0 if _paper_fresh else _saved.get("paper", {}).get("daily_pnl", 0.0),
     "daily_signals":   0   if _paper_fresh else _saved.get("paper", {}).get("daily_signals", 0),
     "daily_wins":      0   if _paper_fresh else _saved.get("paper", {}).get("daily_wins", 0),
     "daily_losses":    0   if _paper_fresh else _saved.get("paper", {}).get("daily_losses", 0),
     "sl_hits_today":   {}  if _paper_fresh else _saved.get("paper", {}).get("sl_hits_today", {}),
+    # weekly — reset each Monday midnight CT
+    "weekly_pnl":      0.0 if _week_fresh  else _saved.get("paper", {}).get("weekly_pnl", 0.0),
+    "weekly_sl_hits":  0   if _week_fresh  else _saved.get("paper", {}).get("weekly_sl_hits", 0),
     "last_signal":     _saved.get("paper", {}).get("last_signal", None),
     "trades":          _saved.get("paper", {}).get("trades", []),
 }
@@ -56,32 +79,32 @@ _save_state()
 
 # ── Instrument config (pip values for lot sizing) ──────────
 PAPER_INSTRUMENT_CONFIG = {
-    # Metals — CFD and futures
-    "XAUUSD": {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
-    "GC":     {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
-    "MGC":    {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
-    "XAGUSD": {"pip_value": 0.50,  "pip_size": 0.01, "default_sl_pips": 20},
-    # Indices — CFD names and futures equivalents
-    "US100":  {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
-    "NQ":     {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
-    "MNQ":    {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
-    "US30":   {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
-    "YM":     {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
-    "MYM":    {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
-    "US500":  {"pip_value": 1.00,  "pip_size": 0.1,  "default_sl_pips": 20},
-    "ES":     {"pip_value": 1.00,  "pip_size": 0.1,  "default_sl_pips": 20},
-    "MES":    {"pip_value": 1.00,  "pip_size": 0.1,  "default_sl_pips": 20},
-    # Commodities — CFD and futures
-    "USOIL":  {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
-    "CL":     {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
-    "MCL":    {"pip_value": 1.00,  "pip_size": 0.01, "default_sl_pips": 20},
+    # Metals
+    "XAUUSD": {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
+    "GC":     {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
+    "MGC":    {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
+    "XAGUSD": {"pip_value": 0.50,  "pip_size": 0.01,   "default_sl_pips": 20},
+    # Indices
+    "US100":  {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
+    "NQ":     {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
+    "MNQ":    {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
+    "US30":   {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
+    "YM":     {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
+    "MYM":    {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
+    "US500":  {"pip_value": 1.00,  "pip_size": 0.1,    "default_sl_pips": 20},
+    "ES":     {"pip_value": 1.00,  "pip_size": 0.1,    "default_sl_pips": 20},
+    "MES":    {"pip_value": 1.00,  "pip_size": 0.1,    "default_sl_pips": 20},
+    # Commodities
+    "USOIL":  {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
+    "CL":     {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
+    "MCL":    {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
     # Forex
     "EURUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
     "GBPUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
     "USDJPY": {"pip_value": 9.00,  "pip_size": 0.01,   "default_sl_pips": 20},
     "EURNZD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
     # Crypto
-    "BTCUSD": {"pip_value": 1.00,  "pip_size": 1.0,  "default_sl_pips": 20},
+    "BTCUSD": {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
 }
 
 
@@ -103,9 +126,36 @@ def check_paper_risk(instrument: str, sl_pips: int = None) -> dict:
     }
 
 
+# ── Limit checks ───────────────────────────────────────────
+
+def is_daily_limit_hit() -> tuple:
+    """Returns (hit: bool, reason: str)."""
+    daily_loss = -(paper_state.get("daily_pnl", 0.0))
+    if daily_loss >= MAX_DAILY_LOSS:
+        return True, f"daily loss limit ${daily_loss:,.0f} / ${MAX_DAILY_LOSS:,.0f}"
+    total_sl = sum(paper_state.get("sl_hits_today", {}).values())
+    if total_sl >= MAX_DAILY_SL_HITS:
+        return True, f"daily SL limit {total_sl}/{MAX_DAILY_SL_HITS} hits"
+    return False, ""
+
+
+def is_weekly_limit_hit() -> tuple:
+    """Returns (hit: bool, reason: str)."""
+    weekly_loss = -(paper_state.get("weekly_pnl", 0.0))
+    if weekly_loss >= MAX_WEEKLY_LOSS:
+        return True, f"weekly loss limit ${weekly_loss:,.0f} / ${MAX_WEEKLY_LOSS:,.0f}"
+    weekly_sl = paper_state.get("weekly_sl_hits", 0)
+    if weekly_sl >= MAX_WEEKLY_SL_HITS:
+        return True, f"weekly SL limit {weekly_sl}/{MAX_WEEKLY_SL_HITS} hits"
+    return False, ""
+
+
+# ── State mutation ─────────────────────────────────────────
+
 def record_sl_hit(instrument: str):
     hits = paper_state.setdefault("sl_hits_today", {})
     hits[instrument.upper()] = hits.get(instrument.upper(), 0) + 1
+    paper_state["weekly_sl_hits"] = paper_state.get("weekly_sl_hits", 0) + 1
     _save_state()
 
 
@@ -142,6 +192,7 @@ def record_paper_trade(trade: dict):
 def update_paper_outcome(won: bool, pnl: float = None):
     if pnl is not None:
         paper_state["daily_pnl"]       += pnl
+        paper_state["weekly_pnl"]      += pnl
         paper_state["account_balance"] += pnl
     if won:
         paper_state["daily_wins"] += 1
@@ -160,6 +211,12 @@ def reset_paper_daily():
     _save_state()
 
 
+def reset_paper_weekly():
+    paper_state["weekly_pnl"]     = 0.0
+    paper_state["weekly_sl_hits"] = 0
+    _save_state()
+
+
 def reset_paper_full():
     paper_state["account_balance"] = PAPER_ACCOUNT_SIZE
     paper_state["daily_pnl"]       = 0.0
@@ -167,9 +224,10 @@ def reset_paper_full():
     paper_state["daily_wins"]      = 0
     paper_state["daily_losses"]    = 0
     paper_state["sl_hits_today"]   = {}
+    paper_state["weekly_pnl"]      = 0.0
+    paper_state["weekly_sl_hits"]  = 0
     paper_state["last_signal"]     = None
     _save_state()
-    # clear trades log
     try:
         with open(TRADES_FILE, "w") as f:
             json.dump({"paper": []}, f)

@@ -14,6 +14,8 @@ from risk import (
     reset_paper_full,
     record_sl_hit,
     get_sl_hits,
+    is_daily_limit_hit,
+    is_weekly_limit_hit,
 )
 from notifier import send_telegram
 from logger import init_db
@@ -98,21 +100,34 @@ def handle_paper_signal(data):
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
+    # ── Daily / weekly limit check (signal fires, OANDA skipped) ─
+    daily_hit,  daily_reason  = is_daily_limit_hit()
+    weekly_hit, weekly_reason = is_weekly_limit_hit()
+    limit_hit    = daily_hit or weekly_hit
+    limit_reason = daily_reason or weekly_reason
+
     # ── Execute on OANDA ──────────────────────────────────────
-    oanda_trade_id = None
+    oanda_trade_id   = None
     oanda_fill_price = price
-    oanda_error = None
-    try:
-        fill = oanda.place_order(instrument, direction, risk["lot_size"])
-        oanda_trade_id   = fill["trade_id"]
-        oanda_fill_price = fill["price"]
-    except Exception as e:
-        oanda_error = str(e)
-        print(f"[oanda] ERROR placing order: {e}", flush=True)
+    oanda_error      = None
+    if not limit_hit:
+        try:
+            fill = oanda.place_order(instrument, direction, risk["lot_size"])
+            oanda_trade_id   = fill["trade_id"]
+            oanda_fill_price = fill["price"]
+        except Exception as e:
+            oanda_error = str(e)
+            print(f"[oanda] ERROR placing order: {e}", flush=True)
 
     emoji   = "🟢" if direction == "LONG" else "🔴"
     rr_line = f"\nR:R: `{rr}`" if rr else ""
-    exec_line = f"\nOANDA ID: `{oanda_trade_id}` @ `{oanda_fill_price}`" if oanda_trade_id else f"\nOANDA: FAILED ({oanda_error})"
+    if limit_hit:
+        exec_line = f"\n⚠️ *NOT EXECUTED — {limit_reason}*"
+    elif oanda_trade_id:
+        exec_line = f"\nOANDA ID: `{oanda_trade_id}` @ `{oanda_fill_price}`"
+    else:
+        exec_line = f"\nOANDA: FAILED ({oanda_error})"
+
     msg = (
         f"{emoji} *Paper — {instrument} {direction}*\n"
         f"Entry: `{price}`\n"
@@ -126,22 +141,23 @@ def handle_paper_signal(data):
     )
 
     record_paper_signal(data)
-    _append_trade_log({
-        "time":            ct_now().strftime("%H:%M"),
-        "date":            ct_now().strftime("%Y-%m-%d %H:%M"),
-        "instrument":      instrument,
-        "direction":       direction,
-        "price":           oanda_fill_price,
-        "sl":              sl,
-        "tp1":             tp1,
-        "tp2":             tp2,
-        "lot_size":        risk["lot_size"],
-        "result":          "OPEN",
-        "pnl":             0,
-        "oanda_trade_id":  oanda_trade_id,
-    })
+    if not limit_hit:
+        _append_trade_log({
+            "time":           ct_now().strftime("%H:%M"),
+            "date":           ct_now().strftime("%Y-%m-%d %H:%M"),
+            "instrument":     instrument,
+            "direction":      direction,
+            "price":          oanda_fill_price,
+            "sl":             sl,
+            "tp1":            tp1,
+            "tp2":            tp2,
+            "lot_size":       risk["lot_size"],
+            "result":         "OPEN",
+            "pnl":            0,
+            "oanda_trade_id": oanda_trade_id,
+        })
     send_telegram(msg)
-    return jsonify({"status": "approved", "lot_size": risk["lot_size"], "oanda_trade_id": oanda_trade_id}), 200
+    return jsonify({"status": "approved", "lot_size": risk["lot_size"], "oanda_trade_id": oanda_trade_id, "limit_hit": limit_hit}), 200
 
 
 def handle_paper_lifecycle(data, event):
@@ -160,23 +176,23 @@ def handle_paper_lifecycle(data, event):
         except Exception as e:
             print(f"[oanda] ERROR closing trade {oanda_trade_id}: {e}", flush=True)
 
-    if event == "sl_hit":
-        record_sl_hit(instrument)
-
-    won = event in ("tp1_hit", "tp2_hit")
-    update_paper_outcome(won=won, pnl=pnl)
-
-    result_map = {"tp1_hit": "TP1", "tp2_hit": "TP2", "sl_hit": "SL"}
-    record_paper_trade({
-        "time":       ct_now().strftime("%H:%M"),
-        "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
-        "instrument": instrument,
-        "direction":  direction,
-        "result":     result_map.get(event, event.upper()),
-        "pnl":        pnl or 0,
-        "lot_size":   lot_size,
-    })
-    _update_open_trade(instrument, direction, event, pnl)
+    # Only update stats for trades that were actually executed on OANDA
+    if oanda_trade_id:
+        if event == "sl_hit":
+            record_sl_hit(instrument)
+        won = event in ("tp1_hit", "tp2_hit")
+        update_paper_outcome(won=won, pnl=pnl)
+        result_map = {"tp1_hit": "TP1", "tp2_hit": "TP2", "sl_hit": "SL"}
+        record_paper_trade({
+            "time":       ct_now().strftime("%H:%M"),
+            "date":       ct_now().strftime("%Y-%m-%d %H:%M"),
+            "instrument": instrument,
+            "direction":  direction,
+            "result":     result_map.get(event, event.upper()),
+            "pnl":        pnl or 0,
+            "lot_size":   lot_size,
+        })
+        _update_open_trade(instrument, direction, event, pnl)
 
     emoji_map = {"tp1_hit": "✅", "tp2_hit": "🏆", "sl_hit": "❌"}
     label_map = {"tp1_hit": "TP1 Hit", "tp2_hit": "TP2 Hit", "sl_hit": "Stop Loss Hit"}

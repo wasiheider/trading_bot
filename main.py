@@ -5,7 +5,7 @@ import requests
 from datetime import datetime
 import pytz
 
-from risk import reset_paper_daily, paper_state
+from risk import reset_paper_daily, reset_paper_weekly, paper_state
 from notifier import send_telegram
 
 CT = pytz.timezone("America/Chicago")
@@ -19,6 +19,11 @@ def log(msg):
 
 # ── Midnight Reset ─────────────────────────────────────────
 def midnight_reset():
+    now = ct_now()
+    if now.weekday() == 0:  # Monday — reset weekly counters first
+        reset_paper_weekly()
+        log("Weekly reset — paper weekly counters cleared")
+        send_telegram("🔄 *Weekly Reset*\nPaper trading weekly P&L and SL counters reset.")
     reset_paper_daily()
     log("Midnight reset — paper daily counters cleared")
     send_telegram("🔄 *Midnight Reset*\nPaper trading daily P&L and counters reset.")
