@@ -375,14 +375,13 @@ if tp2_long_hit
     _lc("tp2_hit", "LONG")
 if sl_short_hit
     _lc("sl_hit", "SHORT")
-    if use_rotation
-        waiting_for_low := true
-        armed_side      := "none"
+    // Re-arm both sides — server enforces 2-SL session cooldown per instrument
+    armed_side      := "both"
+    waiting_for_low := false
 if sl_long_hit
     _lc("sl_hit", "LONG")
-    if use_rotation
-        waiting_for_high := true
-        armed_side       := "none"
+    armed_side       := "both"
+    waiting_for_high := false
 
 prev_pos := strategy.position_size
 

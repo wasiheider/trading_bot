@@ -47,6 +47,7 @@ paper_state = {
     "daily_signals":   0   if _paper_fresh else _saved.get("paper", {}).get("daily_signals", 0),
     "daily_wins":      0   if _paper_fresh else _saved.get("paper", {}).get("daily_wins", 0),
     "daily_losses":    0   if _paper_fresh else _saved.get("paper", {}).get("daily_losses", 0),
+    "sl_hits_today":   {}  if _paper_fresh else _saved.get("paper", {}).get("sl_hits_today", {}),
     "last_signal":     _saved.get("paper", {}).get("last_signal", None),
     "trades":          _saved.get("paper", {}).get("trades", []),
 }
@@ -102,6 +103,16 @@ def check_paper_risk(instrument: str, sl_pips: int = None) -> dict:
     }
 
 
+def record_sl_hit(instrument: str):
+    hits = paper_state.setdefault("sl_hits_today", {})
+    hits[instrument.upper()] = hits.get(instrument.upper(), 0) + 1
+    _save_state()
+
+
+def get_sl_hits(instrument: str) -> int:
+    return paper_state.get("sl_hits_today", {}).get(instrument.upper(), 0)
+
+
 def record_paper_signal(payload: dict):
     from datetime import datetime
     import pytz
@@ -144,6 +155,7 @@ def reset_paper_daily():
     paper_state["daily_signals"] = 0
     paper_state["daily_wins"]    = 0
     paper_state["daily_losses"]  = 0
+    paper_state["sl_hits_today"] = {}
     paper_state["last_signal"]   = None
     _save_state()
 
@@ -154,6 +166,7 @@ def reset_paper_full():
     paper_state["daily_signals"]   = 0
     paper_state["daily_wins"]      = 0
     paper_state["daily_losses"]    = 0
+    paper_state["sl_hits_today"]   = {}
     paper_state["last_signal"]     = None
     _save_state()
     # clear trades log

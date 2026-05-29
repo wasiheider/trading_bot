@@ -12,6 +12,8 @@ from risk import (
     record_paper_trade,
     update_paper_outcome,
     reset_paper_full,
+    record_sl_hit,
+    get_sl_hits,
 )
 from notifier import send_telegram
 from logger import init_db
@@ -84,6 +86,12 @@ def handle_paper_signal(data):
         send_telegram(f"🚫 *Paper Signal Blocked — Max Open Trades*\n`{instrument} {direction}`\n{reason}")
         return jsonify({"status": "blocked", "reason": reason}), 200
 
+    sl_count = get_sl_hits(instrument)
+    if sl_count >= 2:
+        reason = f"2 SL hits today on {instrument} — sitting out for the session"
+        send_telegram(f"🚫 *Paper Signal Blocked — Session Cooldown*\n`{instrument} {direction}`\n{reason}")
+        return jsonify({"status": "blocked", "reason": reason}), 200
+
     risk = check_paper_risk(instrument, sl_pips)
     if not risk["allowed"]:
         msg = f"🚫 *Paper Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
@@ -151,6 +159,9 @@ def handle_paper_lifecycle(data, event):
             print(f"[oanda] Closed trade {oanda_trade_id} ({event})", flush=True)
         except Exception as e:
             print(f"[oanda] ERROR closing trade {oanda_trade_id}: {e}", flush=True)
+
+    if event == "sl_hit":
+        record_sl_hit(instrument)
 
     won = event in ("tp1_hit", "tp2_hit")
     update_paper_outcome(won=won, pnl=pnl)
