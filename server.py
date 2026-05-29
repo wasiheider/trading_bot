@@ -57,6 +57,17 @@ def _normalize_instrument(raw: str) -> str:
     return _OANDA_MAP.get(s, s)
 
 
+def _calc_sl_pips(instrument: str, entry_price, sl_price):
+    from risk import PAPER_INSTRUMENT_CONFIG
+    cfg = PAPER_INSTRUMENT_CONFIG.get(instrument.upper())
+    if not cfg or entry_price is None or sl_price is None:
+        return None
+    try:
+        return round(abs(float(entry_price) - float(sl_price)) / cfg["pip_size"], 1)
+    except Exception:
+        return None
+
+
 def handle_paper_signal(data):
     instrument = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
     direction  = data.get("direction", "").upper()
@@ -65,7 +76,7 @@ def handle_paper_signal(data):
     tp1        = data.get("tp1")
     tp2        = data.get("tp2")
     rr         = data.get("rr_to_tp1")
-    sl_pips    = data.get("sl_pips")
+    sl_pips    = _calc_sl_pips(instrument, price, sl) or data.get("sl_pips")
 
     open_count = sum(1 for t in _load_trades_log().get("paper", []) if t.get("result") == "OPEN")
     if open_count >= 5:

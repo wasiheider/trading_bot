@@ -12,7 +12,7 @@
 //   Near HIGH zone → 15M bearish BOS → 5M rejection candle at BOS level → SHORT
 //   Near LOW  zone → 15M bullish BOS → 5M rejection candle at BOS level → LONG
 //   TP1 = range mid  |  TP2 = opposite boundary
-//   SL  = BOS level ± ATR(14) * atr_mult
+//   SL  = range boundary ± ATR(14) * atr_mult  (trade invalidation — not BOS-level tight stop)
 //   At TP1: close 50% of position, move SL to breakeven
 //
 // Chart       : Load on 5M
@@ -41,7 +41,7 @@ zone_pct        = input.float(8.0, "Boundary Zone % of Range",            group=
 
 m15_bos_len     = input.int(3,     "15M BOS Pivot Length",                group="Entry",  minval=2,   maxval=10)
 min_rr          = input.float(1.5, "Min R:R to TP1",                      group="Entry",  minval=1.0, step=0.1)
-atr_mult        = input.float(0.5, "ATR SL Buffer (x ATR)",               group="Entry",  minval=0.1, step=0.1)
+atr_mult        = input.float(1.0, "ATR Buffer above/below range boundary (x ATR)", group="Entry",  minval=0.1, step=0.1)
 max_retrace_pct = input.float(60.0,"Max Retrace — invalidate BOS (%)",    group="Entry",  minval=10.0,maxval=90.0, step=5.0)
 
 use_rotation    = input.bool(true,  "Boundary Rotation Gate",             group="Filters")
@@ -230,8 +230,9 @@ long_retracing  = bull_bos_active and not na(bull_bos_level) and
 // =============================================================================
 // SL / TP / R:R
 // =============================================================================
+// SL at range boundary — trade is invalidated only if price breaks through the range extreme
 short_entry = close
-short_sl    = not na(bear_bos_level) ? bear_bos_level + atr_now * atr_mult : na
+short_sl    = not na(range_high) ? range_high + atr_now * atr_mult : na
 short_tp1   = htf_mid
 short_tp2   = range_low
 short_risk  = not na(short_sl) ? short_sl - short_entry : na
@@ -240,7 +241,7 @@ short_rr1   = not na(short_risk) and short_risk > 0 ? short_rwd1 / short_risk : 
 short_rr_ok = short_rr1 >= min_rr
 
 long_entry = close
-long_sl    = not na(bull_bos_level) ? bull_bos_level - atr_now * atr_mult : na
+long_sl    = not na(range_low) ? range_low - atr_now * atr_mult : na
 long_tp1   = htf_mid
 long_tp2   = range_high
 long_risk  = not na(long_sl) ? long_entry - long_sl : na
