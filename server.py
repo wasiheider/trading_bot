@@ -106,11 +106,12 @@ def handle_paper_signal(data):
     limit_hit    = daily_hit or weekly_hit
     limit_reason = daily_reason or weekly_reason
 
-    # ── Execute on OANDA ──────────────────────────────────────
+    # ── Execute on OANDA (forex pairs only) ───────────────────
     oanda_trade_id   = None
     oanda_fill_price = price
     oanda_error      = None
-    if not limit_hit:
+    oanda_supported  = instrument.upper() in oanda.INSTRUMENT_MAP
+    if not limit_hit and oanda_supported:
         try:
             fill = oanda.place_order(instrument, direction, risk["lot_size"])
             oanda_trade_id   = fill["trade_id"]
@@ -123,6 +124,8 @@ def handle_paper_signal(data):
     rr_line = f"\nR:R: `{rr}`" if rr else ""
     if limit_hit:
         exec_line = f"\n⚠️ *NOT EXECUTED — {limit_reason}*"
+    elif not oanda_supported:
+        exec_line = "\n📋 Log + Telegram only (not a forex pair)"
     elif oanda_trade_id:
         exec_line = f"\nOANDA ID: `{oanda_trade_id}` @ `{oanda_fill_price}`"
     else:
