@@ -167,24 +167,39 @@ def handle_paper_lifecycle(data, event):
     instrument = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
     direction  = data.get("direction", "").upper()
     price      = data.get("price", data.get("entry_price"))
-    pnl        = data.get("pnl")
+    pine_pnl   = data.get("pnl")  # Pine Script PNL — fallback only
     lot_size   = data.get("lot_size")
 
-    # ── Close on OANDA ────────────────────────────────────────
+    # ── Find OANDA trade ID — local trades.json first, then query OANDA ──
     oanda_trade_id = _get_oanda_trade_id(instrument, direction)
+    if not oanda_trade_id and instrument.upper() in oanda.INSTRUMENT_MAP:
+        try:
+            open_trade = oanda.get_open_trade(instrument, direction)
+            if open_trade:
+                oanda_trade_id = open_trade["id"]
+                print(f"[oanda] Recovered trade ID {oanda_trade_id} from OANDA API", flush=True)
+        except Exception as e:
+            print(f"[oanda] Could not query open trades: {e}", flush=True)
+
+    # ── Close on OANDA and capture actual realized PNL ────────
+    oanda_pnl = None
     if oanda_trade_id:
         try:
-            oanda.close_trade(oanda_trade_id)
-            print(f"[oanda] Closed trade {oanda_trade_id} ({event})", flush=True)
+            close_resp = oanda.close_trade(oanda_trade_id)
+            oanda_pnl  = close_resp.get("realizedPL")
+            print(f"[oanda] Closed trade {oanda_trade_id} ({event}), PNL: ${oanda_pnl:.2f}", flush=True)
         except Exception as e:
             print(f"[oanda] ERROR closing trade {oanda_trade_id}: {e}", flush=True)
 
-    # Only update stats for trades that were actually executed on OANDA
+    # OANDA realizedPL is authoritative; Pine Script PNL is the fallback
+    final_pnl = oanda_pnl if oanda_pnl is not None else pine_pnl
+
+    # ── Update stats (only for confirmed OANDA-executed trades) ──
     if oanda_trade_id:
         if event == "sl_hit":
             record_sl_hit(instrument)
         won = event in ("tp1_hit", "tp2_hit")
-        update_paper_outcome(won=won, pnl=pnl)
+        update_paper_outcome(won=won, pnl=final_pnl)
         result_map = {"tp1_hit": "TP1", "tp2_hit": "TP2", "sl_hit": "SL"}
         record_paper_trade({
             "time":       ct_now().strftime("%H:%M"),
@@ -192,15 +207,15 @@ def handle_paper_lifecycle(data, event):
             "instrument": instrument,
             "direction":  direction,
             "result":     result_map.get(event, event.upper()),
-            "pnl":        pnl or 0,
+            "pnl":        final_pnl or 0,
             "lot_size":   lot_size,
         })
-        _update_open_trade(instrument, direction, event, pnl)
+        _update_open_trade(instrument, direction, event, final_pnl)
 
     emoji_map = {"tp1_hit": "✅", "tp2_hit": "🏆", "sl_hit": "❌"}
     label_map = {"tp1_hit": "TP1 Hit", "tp2_hit": "TP2 Hit", "sl_hit": "Stop Loss Hit"}
     dir_emoji = "🟢" if direction == "LONG" else "🔴"
-    pnl_line  = f"\nP&L: `${pnl:+.2f}`" if pnl is not None else ""
+    pnl_line  = f"\nP&L: `${final_pnl:+.2f}`" if final_pnl is not None else ""
 
     msg = (
         f"{emoji_map.get(event, '📊')} *Paper {label_map.get(event, event.upper())}*\n"

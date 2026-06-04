@@ -80,5 +80,27 @@ def place_order(instrument: str, direction: str, lot_size: float) -> dict:
 
 
 def close_trade(trade_id: str) -> dict:
-    """Close a specific trade by its OANDA trade ID."""
-    return _request("PUT", f"/v3/accounts/{OANDA_ACCOUNT_ID}/trades/{trade_id}/close")
+    """Close a specific trade by its OANDA trade ID. Returns realizedPL."""
+    resp = _request("PUT", f"/v3/accounts/{OANDA_ACCOUNT_ID}/trades/{trade_id}/close")
+    fill = resp.get("orderFillTransaction", {})
+    try:
+        pl = float(fill.get("pl", "0") or "0")
+    except (ValueError, TypeError):
+        pl = 0.0
+    return {"realizedPL": pl}
+
+
+def get_open_trade(instrument: str, direction: str) -> dict | None:
+    """Query OANDA for an open trade matching instrument and direction. Returns trade dict or None."""
+    oanda_instrument = INSTRUMENT_MAP.get(instrument.upper())
+    if not oanda_instrument:
+        return None
+    resp = _request("GET", f"/v3/accounts/{OANDA_ACCOUNT_ID}/openTrades")
+    for trade in resp.get("trades", []):
+        if trade.get("instrument") != oanda_instrument:
+            continue
+        units = float(trade.get("currentUnits", 0))
+        trade_dir = "LONG" if units > 0 else "SHORT"
+        if trade_dir == direction.upper():
+            return trade
+    return None
