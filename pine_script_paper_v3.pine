@@ -464,6 +464,55 @@ plot(show_trade_lvls and in_trade and not na(active_sl)    ? active_sl    : na, 
 plot(show_trade_lvls and in_trade and not na(active_tp1)   ? active_tp1   : na, "TP1",   color=color.new(color.green,30), linewidth=1, style=plot.style_linebr)
 plot(show_trade_lvls and in_trade and not na(active_tp2)   ? active_tp2   : na, "TP2",   color=color.green,               linewidth=2, style=plot.style_linebr)
 
+// ── Floating price labels (right edge of chart while trade is open) ────────
+// Created on new entry signal OR on first live bar of an already-open trade
+// (handles script reload mid-trade). Updated every bar to track current bar.
+// SL label text/Y updated when SL moves to breakeven after TP1.
+var label lbl_entry = na
+var label lbl_sl    = na
+var label lbl_tp1   = na
+var label lbl_tp2   = na
+
+_make_labels = show_trade_lvls and ((short_signal or long_signal) or (in_trade and na(lbl_entry) and not na(active_entry)))
+if _make_labels
+    label.delete(lbl_entry)
+    label.delete(lbl_sl)
+    label.delete(lbl_tp1)
+    label.delete(lbl_tp2)
+    _dir = strategy.position_size < 0 or short_signal ? "SHORT " : "LONG "
+    lbl_entry := label.new(bar_index, active_entry, _dir + str.tostring(active_entry, price_format),
+                  color=color.new(color.white, 55), textcolor=color.white, style=label.style_label_right, size=size.tiny)
+    lbl_sl    := label.new(bar_index, active_sl, "SL   " + str.tostring(active_sl, price_format),
+                  color=color.new(color.red, 55), textcolor=color.white, style=label.style_label_right, size=size.tiny)
+    if not na(active_tp1)
+        lbl_tp1 := label.new(bar_index, active_tp1, "TP1  " + str.tostring(active_tp1, price_format),
+                  color=color.new(color.green, 55), textcolor=color.white, style=label.style_label_right, size=size.tiny)
+    if not na(active_tp2)
+        lbl_tp2 := label.new(bar_index, active_tp2, "TP2  " + str.tostring(active_tp2, price_format),
+                  color=color.new(color.green, 55), textcolor=color.white, style=label.style_label_right, size=size.tiny)
+
+if show_trade_lvls and in_trade
+    if not na(lbl_entry)
+        label.set_x(lbl_entry, bar_index)
+    if not na(lbl_sl)
+        label.set_x(lbl_sl, bar_index)
+        label.set_y(lbl_sl, active_sl)
+        label.set_text(lbl_sl, "SL   " + str.tostring(active_sl, price_format))
+    if not na(lbl_tp1)
+        label.set_x(lbl_tp1, bar_index)
+    if not na(lbl_tp2)
+        label.set_x(lbl_tp2, bar_index)
+
+if not in_trade
+    label.delete(lbl_entry)
+    label.delete(lbl_sl)
+    label.delete(lbl_tp1)
+    label.delete(lbl_tp2)
+    lbl_entry := na
+    lbl_sl    := na
+    lbl_tp1   := na
+    lbl_tp2   := na
+
 // ── Close arrows (drawn at the exit bar) ──────────────────────────────────
 // Green label at TP1/TP2 hit; red label at SL hit.
 if show_signals and tp1_short_hit
