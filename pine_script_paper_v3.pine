@@ -49,11 +49,12 @@ max_break_pct   = input.float(15.0, "Pause entries if range breaks by %", group=
 use_atr_filter  = input.bool(false, "ATR Volatility Filter (block when ATR < avg)", group="Filters")
 atr_avg_len     = input.int(50,    "ATR average length (above = entry allowed)", group="Filters", minval=10, maxval=200)
 
-show_range      = input.bool(true, "Show range levels",                   group="Display")
-show_bos        = input.bool(true, "Show BOS level",                      group="Display")
-show_signals    = input.bool(true, "Show entry signals",                  group="Display")
-show_trade_lvls = input.bool(true, "Show SL/TP on trade",                 group="Display")
-show_info       = input.bool(true, "Show info table",                     group="Display")
+show_range      = input.bool(true,  "Show range levels",                   group="Display")
+show_bos        = input.bool(true,  "Show BOS level",                      group="Display")
+show_signals    = input.bool(true,  "Show entry signals",                  group="Display")
+show_trade_lvls = input.bool(true,  "Show SL/TP on trade",                 group="Display")
+show_info       = input.bool(true,  "Show info table",                     group="Display")
+force_clear     = input.bool(false, "Force clear trade levels (spread/news close)", group="Display")
 
 // =============================================================================
 // INSTRUMENT CONFIG
@@ -503,7 +504,7 @@ if show_trade_lvls and in_trade
     if not na(lbl_tp2)
         label.set_x(lbl_tp2, bar_index)
 
-if not in_trade
+if not in_trade or force_clear
     label.delete(lbl_entry)
     label.delete(lbl_sl)
     label.delete(lbl_tp1)
