@@ -528,7 +528,7 @@ if show_trade_lvls and in_trade
 // Input changes cause a full historical replay — barstate.isrealtime guard
 // prevents the cleanup from firing on every bar during the rerun.
 var int last_force_n = 0
-force_clear_edge = barstate.isrealtime and force_clear_n != last_force_n
+force_clear_edge = barstate.islast and force_clear_n != last_force_n
 if force_clear_edge
     last_force_n := force_clear_n
     strategy.cancel_all()   // cancel pending exits (TP/SL orders for old trade)
