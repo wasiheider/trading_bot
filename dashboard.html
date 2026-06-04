@@ -442,17 +442,27 @@ function updateDashboard(d) {
   const atEl = document.getElementById('paper-alltime-pnl');
   if (atEl) { atEl.textContent = fmt$(allTimePnl) + ' all-time'; atEl.style.color = allTimePnl >= 0 ? 'var(--g)' : 'var(--r)'; }
 
-  // P&L Today + this week
-  const pnl = d.paper_daily_pnl || 0;
+  // P&L Today (realized) + unrealized overlay
+  const pnl        = d.paper_daily_pnl    || 0;
+  const unrealized = d.paper_unrealized_pnl || 0;
+  const totalLive  = pnl + unrealized;
   const pnlEl = document.getElementById('paper-pnl');
-  pnlEl.textContent = fmt$(pnl);
-  pnlEl.style.color = pnl >= 0 ? 'var(--g)' : 'var(--r)';
+  pnlEl.textContent = fmt$(totalLive);
+  pnlEl.style.color = totalLive >= 0 ? 'var(--g)' : 'var(--r)';
   const pnlSide = document.getElementById('paper-pnl-side');
-  pnlSide.textContent = fmt$(pnl);
-  pnlSide.style.color = pnl >= 0 ? 'var(--g)' : 'var(--r)';
+  pnlSide.textContent = fmt$(totalLive);
+  pnlSide.style.color = totalLive >= 0 ? 'var(--g)' : 'var(--r)';
   const weekPnl = d.paper_weekly_pnl || 0;
   const wkEl = document.getElementById('paper-week-pnl');
-  if (wkEl) { wkEl.textContent = fmt$(weekPnl); wkEl.style.color = weekPnl >= 0 ? 'var(--g)' : 'var(--r)'; }
+  if (wkEl) { wkEl.textContent = fmt$(weekPnl + unrealized); wkEl.style.color = (weekPnl + unrealized) >= 0 ? 'var(--g)' : 'var(--r)'; }
+
+  // Live all-time P&L includes unrealized
+  const allTimePnlLive = (bal - PAPER_START) + unrealized;
+  if (atEl) { atEl.textContent = fmt$(allTimePnlLive) + ' all-time'; atEl.style.color = allTimePnlLive >= 0 ? 'var(--g)' : 'var(--r)'; }
+
+  // Store open details for trade history and patch rows immediately
+  window._openDetails = d.paper_open_details || [];
+  patchOpenTradeRows();
 
   // Win % + W/L — updated from all-time trades in fetchTrades(); skip here to avoid overwriting
 
@@ -501,6 +511,25 @@ async function fetchTrades() {
     renderSessionBreakdown(allTrades);
     updateAllTimeStats(allTrades);
   } catch(e) { console.warn('Trades fetch failed:', e); }
+}
+
+// ── Patch open-trade rows with live unrealized PNL ─────────
+function patchOpenTradeRows() {
+  if (!window._openDetails) return;
+  document.querySelectorAll('#trades-body tr[data-open="1"]').forEach(row => {
+    const instr = row.getAttribute('data-instrument');
+    const dir   = row.getAttribute('data-direction');
+    const live  = window._openDetails.find(o =>
+      o.instrument.toUpperCase() === instr && o.direction.toUpperCase() === dir
+    );
+    if (!live) return;
+    const cells = row.querySelectorAll('td');
+    if (cells[4]) {
+      const v = live.unrealized_pnl;
+      cells[4].style.color = v >= 0 ? 'var(--g)' : 'var(--r)';
+      cells[4].innerHTML = fmt$(v) + ' <span style="font-size:7px;color:var(--t3)">live</span>';
+    }
+  });
 }
 
 function updateAllTimeStats(trades) {
@@ -572,17 +601,32 @@ function renderTradeHistory(trades) {
   tcEl.textContent = trades.length + ' trade' + (trades.length !== 1 ? 's' : '');
   body.innerHTML = '';
   [...trades].reverse().slice(0, 25).forEach(t => {
-    const pnl = t.pnl || 0;
     const result = t.result || '';
-    const resultClass = result.includes('TP') ? 'bd2 bg2' : result.includes('SL') ? 'bd2 br2' : 'bd2 bdim';
+    const isOpen = result === 'OPEN' || !result;
+
+    // For open trades, overlay live unrealized PNL from OANDA
+    let displayPnl = t.pnl || 0;
+    let pnlSuffix  = '';
+    if (isOpen && window._openDetails) {
+      const live = window._openDetails.find(o =>
+        o.instrument.toUpperCase() === (t.instrument||'').toUpperCase() &&
+        o.direction.toUpperCase()  === (t.direction||'').toUpperCase()
+      );
+      if (live) { displayPnl = live.unrealized_pnl; pnlSuffix = ' <span style="font-size:7px;color:var(--t3)">live</span>'; }
+    }
+
+    const resultClass = result.includes('TP') ? 'bd2 bg2' : result.includes('SL') ? 'bd2 br2' : isOpen ? 'bd2 bb3' : 'bd2 bdim';
     const displayTime = t.date ? t.date.slice(5,16).replace(' ',' ') : t.time || '--';
     const row = document.createElement('tr');
+    row.setAttribute('data-instrument', (t.instrument||'').toUpperCase());
+    row.setAttribute('data-direction',  (t.direction||'').toUpperCase());
+    row.setAttribute('data-open', isOpen ? '1' : '0');
     row.innerHTML = `
       <td style="color:var(--t3);font-size:9px">${displayTime}</td>
       <td style="font-weight:700">${t.instrument||'--'}</td>
       <td style="color:${t.direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${t.direction||'--'}</td>
       <td style="text-align:center">${t.lot_size||'--'}</td>
-      <td style="color:${pnl>=0?'var(--g)':'var(--r)'};font-weight:700">${fmt$(pnl)}</td>
+      <td style="color:${displayPnl>=0?'var(--g)':'var(--r)'};font-weight:700">${fmt$(displayPnl)}${pnlSuffix}</td>
       <td><span class="${resultClass}">${result||'OPEN'}</span></td>`;
     body.appendChild(row);
   });

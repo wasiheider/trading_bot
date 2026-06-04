@@ -341,21 +341,42 @@ def state():
     total_trades = total_wins + total_losses
     total_wr     = round((total_wins / total_trades) * 100) if total_trades > 0 else 0
 
+    # ── Live unrealized PNL from OANDA ────────────────────────
+    unrealized_pnl     = 0.0
+    open_trade_details = []
+    try:
+        for t in oanda.get_all_open_trades():
+            upnl      = float(t.get("unrealizedPL", 0) or 0)
+            units     = float(t.get("currentUnits", 0))
+            direction = "LONG" if units > 0 else "SHORT"
+            instr     = _OANDA_REVERSE_MAP.get(t.get("instrument", ""), t.get("instrument", ""))
+            unrealized_pnl += upnl
+            open_trade_details.append({
+                "trade_id":       t.get("id"),
+                "instrument":     instr,
+                "direction":      direction,
+                "unrealized_pnl": round(upnl, 2),
+            })
+    except Exception as e:
+        print(f"[state] unrealized PNL fetch failed: {e}", flush=True)
+
     return jsonify({
-        "time_ct":               now.strftime("%Y-%m-%d %H:%M:%S"),
-        "paper_account_balance": paper_state.get("account_balance", 0),
-        "paper_daily_pnl":       round(paper_state.get("daily_pnl", 0.0), 2),
-        "paper_weekly_pnl":      round(paper_state.get("weekly_pnl", 0.0), 2),
-        "paper_daily_signals":   paper_state.get("daily_signals", 0),
-        "paper_daily_wins":      wins,
-        "paper_daily_losses":    losses,
-        "paper_win_rate":        wr,
-        "paper_total_wins":      total_wins,
-        "paper_total_losses":    total_losses,
-        "paper_total_win_rate":  total_wr,
-        "paper_open_trades":     open_count,
-        "paper_last_signal":     paper_state.get("last_signal"),
-        "paper_trades":          paper_state.get("trades", [])[-10:],
+        "time_ct":                now.strftime("%Y-%m-%d %H:%M:%S"),
+        "paper_account_balance":  paper_state.get("account_balance", 0),
+        "paper_daily_pnl":        round(paper_state.get("daily_pnl", 0.0), 2),
+        "paper_weekly_pnl":       round(paper_state.get("weekly_pnl", 0.0), 2),
+        "paper_unrealized_pnl":   round(unrealized_pnl, 2),
+        "paper_open_details":     open_trade_details,
+        "paper_daily_signals":    paper_state.get("daily_signals", 0),
+        "paper_daily_wins":       wins,
+        "paper_daily_losses":     losses,
+        "paper_win_rate":         wr,
+        "paper_total_wins":       total_wins,
+        "paper_total_losses":     total_losses,
+        "paper_total_win_rate":   total_wr,
+        "paper_open_trades":      open_count,
+        "paper_last_signal":      paper_state.get("last_signal"),
+        "paper_trades":           paper_state.get("trades", [])[-10:],
     }), 200
 
 
