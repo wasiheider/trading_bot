@@ -110,3 +110,14 @@ def get_all_open_trades() -> list:
     """Return all open trades on the OANDA account."""
     resp = _request("GET", f"/v3/accounts/{OANDA_ACCOUNT_ID}/openTrades")
     return resp.get("trades", [])
+
+
+def get_account_summary() -> dict:
+    """Return OANDA account balance (realized), NAV, and unrealizedPL."""
+    resp = _request("GET", f"/v3/accounts/{OANDA_ACCOUNT_ID}/summary")
+    acct = resp.get("account", {})
+    return {
+        "balance":      float(acct.get("balance",      0) or 0),
+        "nav":          float(acct.get("NAV",           0) or 0),
+        "unrealizedPL": float(acct.get("unrealizedPL", 0) or 0),
+    }

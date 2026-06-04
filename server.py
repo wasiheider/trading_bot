@@ -341,9 +341,17 @@ def state():
     total_trades = total_wins + total_losses
     total_wr     = round((total_wins / total_trades) * 100) if total_trades > 0 else 0
 
-    # ── Live unrealized PNL from OANDA ────────────────────────
+    # ── Live balance + unrealized PNL from OANDA (authoritative) ─
+    oanda_balance      = paper_state.get("account_balance", 100000)
     unrealized_pnl     = 0.0
     open_trade_details = []
+
+    try:
+        acct_summary  = oanda.get_account_summary()
+        oanda_balance = acct_summary["balance"]
+    except Exception as e:
+        print(f"[state] OANDA account summary failed: {e}", flush=True)
+
     try:
         for t in oanda.get_all_open_trades():
             upnl      = float(t.get("unrealizedPL", 0) or 0)
@@ -362,7 +370,7 @@ def state():
 
     return jsonify({
         "time_ct":                now.strftime("%Y-%m-%d %H:%M:%S"),
-        "paper_account_balance":  paper_state.get("account_balance", 0),
+        "paper_account_balance":  round(oanda_balance, 2),
         "paper_daily_pnl":        round(paper_state.get("daily_pnl", 0.0), 2),
         "paper_weekly_pnl":       round(paper_state.get("weekly_pnl", 0.0), 2),
         "paper_unrealized_pnl":   round(unrealized_pnl, 2),
