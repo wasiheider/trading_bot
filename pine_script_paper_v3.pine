@@ -504,7 +504,10 @@ if show_trade_lvls and in_trade
     if not na(lbl_tp2)
         label.set_x(lbl_tp2, bar_index)
 
-if not in_trade or force_clear
+// Fire cleanup only on the bar the position transitions open → closed (not on every bar
+// where there's no position — that would wipe labels on the entry bar before fill).
+just_closed = strategy.position_size == 0 and strategy.position_size[1] != 0
+if just_closed or force_clear
     label.delete(lbl_entry)
     label.delete(lbl_sl)
     label.delete(lbl_tp1)
