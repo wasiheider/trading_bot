@@ -241,8 +241,9 @@ def handle_paper_lifecycle(data, event):
     # OANDA realizedPL is authoritative; Pine Script PNL is the fallback
     final_pnl = oanda_pnl if oanda_pnl is not None else pine_pnl
 
-    # ── Update stats (only for confirmed OANDA-executed trades) ──
-    if oanda_trade_id:
+    # ── Update stats + trades.json (forex and log-only) ──────
+    locally_tracked = bool(oanda_trade_id) or _has_local_open_trade(instrument, direction)
+    if locally_tracked:
         if event == "sl_hit":
             record_sl_hit(instrument)
         won = event in ("tp1_hit", "tp2_hit")
@@ -305,6 +306,18 @@ def _get_oanda_trade_id(instrument: str, direction: str):
     except Exception:
         pass
     return None
+
+def _has_local_open_trade(instrument: str, direction: str) -> bool:
+    """Return True if trades.json has an OPEN entry for this instrument/direction."""
+    try:
+        for t in reversed(_load_trades_log().get("paper", [])):
+            if (t.get("instrument", "").upper() == instrument.upper() and
+                    t.get("direction", "").upper() == direction.upper() and
+                    t.get("result") == "OPEN"):
+                return True
+    except Exception:
+        pass
+    return False
 
 def _update_open_trade(instrument: str, direction: str, event: str, pnl):
     try:
