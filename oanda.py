@@ -104,3 +104,9 @@ def get_open_trade(instrument: str, direction: str) -> dict | None:
         if trade_dir == direction.upper():
             return trade
     return None
+
+
+def get_all_open_trades() -> list:
+    """Return all open trades on the OANDA account."""
+    resp = _request("GET", f"/v3/accounts/{OANDA_ACCOUNT_ID}/openTrades")
+    return resp.get("trades", [])

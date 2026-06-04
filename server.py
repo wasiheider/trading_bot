@@ -21,10 +21,57 @@ from notifier import send_telegram
 from logger import init_db
 import oanda
 
+# Reverse lookup: OANDA instrument name → bot instrument name
+_OANDA_REVERSE_MAP = {v: k for k, v in oanda.INSTRUMENT_MAP.items()}
+
+def _sync_oanda_on_startup():
+    """On every startup, add any OANDA open positions missing from trades.json."""
+    try:
+        open_trades = oanda.get_all_open_trades()
+        for t in open_trades:
+            oanda_instrument = t.get("instrument", "")
+            bot_instrument   = _OANDA_REVERSE_MAP.get(oanda_instrument)
+            if not bot_instrument:
+                continue
+            units     = float(t.get("currentUnits", 0))
+            direction = "LONG" if units > 0 else "SHORT"
+            trade_id  = t.get("id")
+            # Skip if already tracked as OPEN in trades.json
+            if _get_oanda_trade_id(bot_instrument, direction):
+                continue
+            open_time = t.get("openTime", "")[:16].replace("T", " ")
+            _append_trade_log({
+                "time":           open_time[11:16] if len(open_time) >= 16 else "--",
+                "date":           open_time,
+                "instrument":     bot_instrument,
+                "direction":      direction,
+                "price":          float(t.get("price", 0)),
+                "sl":             None,
+                "tp1":            None,
+                "tp2":            None,
+                "lot_size":       round(abs(units) / 100000, 2),
+                "result":         "OPEN",
+                "pnl":            0,
+                "oanda_trade_id": trade_id,
+            })
+            print(f"[startup] Synced OANDA trade {trade_id} ({bot_instrument} {direction}) → trades.json", flush=True)
+    except Exception as e:
+        print(f"[startup] OANDA sync failed: {e}", flush=True)
+
+
 app = Flask(__name__)
 CT = pytz.timezone("America/Chicago")
 
 init_db()
+
+_startup_done = False
+
+@app.before_request
+def _on_first_request():
+    global _startup_done
+    if not _startup_done:
+        _startup_done = True
+        _sync_oanda_on_startup()
 
 def ct_now():
     return datetime.now(CT)
