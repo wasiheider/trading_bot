@@ -508,10 +508,14 @@ if not in_trade
     label.delete(lbl_sl)
     label.delete(lbl_tp1)
     label.delete(lbl_tp2)
-    lbl_entry := na
-    lbl_sl    := na
-    lbl_tp1   := na
-    lbl_tp2   := na
+    lbl_entry    := na
+    lbl_sl       := na
+    lbl_tp1      := na
+    lbl_tp2      := na
+    active_entry := na
+    active_sl    := na
+    active_tp1   := na
+    active_tp2   := na
 
 // ── Close arrows (drawn at the exit bar) ──────────────────────────────────
 // Green label at TP1/TP2 hit; red label at SL hit.
