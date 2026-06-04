@@ -7,6 +7,7 @@ import pytz
 
 from risk import reset_paper_daily, reset_paper_weekly, paper_state
 from notifier import send_telegram
+from config import DATA_DIR
 
 CT = pytz.timezone("America/Chicago")
 
@@ -33,10 +34,10 @@ def midnight_reset():
 def weekly_summary():
     if ct_now().weekday() != 4:
         return
-    import os, json as _json
+    import os as _os, json as _json
     log("Generating weekly summary...")
 
-    trades_path = os.path.join(os.path.dirname(__file__), "trades.json")
+    trades_path = _os.path.join(DATA_DIR, "trades.json")
     try:
         with open(trades_path, "r") as f:
             all_trades = _json.load(f)

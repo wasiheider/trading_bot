@@ -4,7 +4,7 @@ import os
 import json
 import pytz
 
-from config import PAPER_WEBHOOK_TOKEN
+from config import PAPER_WEBHOOK_TOKEN, DATA_DIR
 from risk import (
     check_paper_risk,
     paper_state,
@@ -227,7 +227,7 @@ def handle_paper_lifecycle(data, event):
 
 
 # ── Trade log helpers ──────────────────────────────────────
-TRADES_FILE = os.path.join(os.path.dirname(__file__), "trades.json")
+TRADES_FILE = os.path.join(DATA_DIR, "trades.json")
 
 def _load_trades_log():
     if os.path.exists(TRADES_FILE):
@@ -289,14 +289,23 @@ def state():
 
     open_count = sum(1 for t in _load_trades_log().get("paper", []) if t.get("result") == "OPEN")
 
+    total_wins   = paper_state.get("total_wins", 0)
+    total_losses = paper_state.get("total_losses", 0)
+    total_trades = total_wins + total_losses
+    total_wr     = round((total_wins / total_trades) * 100) if total_trades > 0 else 0
+
     return jsonify({
-        "time_ct":              now.strftime("%Y-%m-%d %H:%M:%S"),
+        "time_ct":               now.strftime("%Y-%m-%d %H:%M:%S"),
         "paper_account_balance": paper_state.get("account_balance", 0),
         "paper_daily_pnl":       round(paper_state.get("daily_pnl", 0.0), 2),
+        "paper_weekly_pnl":      round(paper_state.get("weekly_pnl", 0.0), 2),
         "paper_daily_signals":   paper_state.get("daily_signals", 0),
         "paper_daily_wins":      wins,
         "paper_daily_losses":    losses,
         "paper_win_rate":        wr,
+        "paper_total_wins":      total_wins,
+        "paper_total_losses":    total_losses,
+        "paper_total_win_rate":  total_wr,
         "paper_open_trades":     open_count,
         "paper_last_signal":     paper_state.get("last_signal"),
         "paper_trades":          paper_state.get("trades", [])[-10:],

@@ -174,9 +174,9 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="ct">Paper Performance</div>
     <div class="sg">
       <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl-side">$0</div></div>
-      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="paper-wr-side">0%</div></div>
+      <div class="sb"><div class="sl2">Win % All-Time</div><div class="sv2" style="color:var(--b)" id="paper-wr-side">0%</div></div>
       <div class="sb"><div class="sl2">Signals</div><div class="sv2" id="paper-sigs-side">0</div></div>
-      <div class="sb"><div class="sl2">W / L</div><div class="sv2" id="paper-wl-side" style="font-size:12px">0 / 0</div></div>
+      <div class="sb"><div class="sl2">W / L All-Time</div><div class="sv2" id="paper-wl-side" style="font-size:12px">0 / 0</div></div>
     </div>
   </div>
 
@@ -218,15 +218,15 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       <span class="bd2" id="paper-alert-badge">0 ALERTS</span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px">
-      <div class="sb"><div class="sl2">Balance</div><div class="sv2" style="color:var(--g)" id="paper-bal-card">$100,000</div></div>
-      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl">+$0.00</div></div>
-      <div class="sb"><div class="sl2">Win Rate</div><div class="sv2" style="color:var(--b)" id="paper-wr">0%</div></div>
-      <div class="sb"><div class="sl2">W / L</div><div class="sv2" style="font-size:12px" id="paper-wl">0 / 0</div></div>
+      <div class="sb"><div class="sl2">Balance</div><div class="sv2" style="color:var(--g)" id="paper-bal-card">$100,000</div><div style="font-size:8px;margin-top:2px" id="paper-alltime-pnl" style="color:var(--t3)">+$0.00 all-time</div></div>
+      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl">+$0.00</div><div style="font-size:8px;color:var(--t3);margin-top:2px">Week: <span id="paper-week-pnl" style="color:var(--t2)">$0</span></div></div>
+      <div class="sb"><div class="sl2">Win % (All-Time)</div><div class="sv2" style="color:var(--b)" id="paper-wr">0%</div></div>
+      <div class="sb"><div class="sl2">W / L (All-Time)</div><div class="sv2" style="font-size:12px" id="paper-wl">0 / 0</div></div>
     </div>
     <div style="display:flex;gap:16px;font-size:8px;color:var(--t3)">
       <span>Signals today: <span style="color:var(--t2)" id="paper-sigs">0</span></span>
-      <span>Open trades: <span style="color:var(--t2)" id="paper-open">0</span><span style="color:var(--t3)">/1</span></span>
-      <span style="color:var(--t3)">Risk/trade: <span style="color:var(--t2)">$500 (0.5%)</span></span>
+      <span>Open trades: <span style="color:var(--t2)" id="paper-open">0</span><span style="color:var(--t3)">/5</span></span>
+      <span style="color:var(--t3)">Risk/trade: <span style="color:var(--t2)">$250 (0.25%)</span></span>
     </div>
   </div>
 
@@ -434,12 +434,15 @@ function updateDashboard(d) {
   bsb.textContent = 'TRADING';
   bsb.className = 'bd2 bg2';
 
-  // Paper balance
+  // Paper balance + all-time P&L
   const bal = d.paper_account_balance || PAPER_START;
   document.getElementById('paper-bal').textContent = fmtBal(bal);
   document.getElementById('paper-bal-card').textContent = fmtBal(bal);
+  const allTimePnl = bal - PAPER_START;
+  const atEl = document.getElementById('paper-alltime-pnl');
+  if (atEl) { atEl.textContent = fmt$(allTimePnl) + ' all-time'; atEl.style.color = allTimePnl >= 0 ? 'var(--g)' : 'var(--r)'; }
 
-  // Paper P&L
+  // P&L Today + this week
   const pnl = d.paper_daily_pnl || 0;
   const pnlEl = document.getElementById('paper-pnl');
   pnlEl.textContent = fmt$(pnl);
@@ -447,14 +450,11 @@ function updateDashboard(d) {
   const pnlSide = document.getElementById('paper-pnl-side');
   pnlSide.textContent = fmt$(pnl);
   pnlSide.style.color = pnl >= 0 ? 'var(--g)' : 'var(--r)';
+  const weekPnl = d.paper_weekly_pnl || 0;
+  const wkEl = document.getElementById('paper-week-pnl');
+  if (wkEl) { wkEl.textContent = fmt$(weekPnl); wkEl.style.color = weekPnl >= 0 ? 'var(--g)' : 'var(--r)'; }
 
-  // Win rate + W/L
-  const wr = d.paper_win_rate || 0;
-  document.getElementById('paper-wr').textContent = wr + '%';
-  document.getElementById('paper-wr-side').textContent = wr + '%';
-  const wl = (d.paper_daily_wins||0) + ' / ' + (d.paper_daily_losses||0);
-  document.getElementById('paper-wl').textContent = wl;
-  document.getElementById('paper-wl-side').textContent = wl;
+  // Win % + W/L — updated from all-time trades in fetchTrades(); skip here to avoid overwriting
 
   // Signals + open trades
   const sigs = d.paper_daily_signals || 0;
@@ -499,7 +499,24 @@ async function fetchTrades() {
     buildEquityCurve(allTrades);
     renderTradeHistory(allTrades);
     renderSessionBreakdown(allTrades);
+    updateAllTimeStats(allTrades);
   } catch(e) { console.warn('Trades fetch failed:', e); }
+}
+
+function updateAllTimeStats(trades) {
+  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN');
+  const wins   = closed.filter(t => (t.result||'').includes('TP')).length;
+  const losses = closed.length - wins;
+  const wr     = closed.length ? Math.round((wins / closed.length) * 100) : 0;
+  const wlStr  = wins + ' / ' + losses;
+  ['paper-wr','paper-wr-side'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = wr + '%';
+  });
+  ['paper-wl','paper-wl-side'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = wlStr;
+  });
 }
 
 // ── Equity curve ───────────────────────────────────────────

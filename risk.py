@@ -1,14 +1,16 @@
 import json
 import os
 
+import os as _os
 from config import (
     RISK_PER_TRADE, PAPER_ACCOUNT_SIZE,
     MAX_DAILY_LOSS, MAX_DAILY_SL_HITS,
     MAX_WEEKLY_LOSS, MAX_WEEKLY_SL_HITS,
+    DATA_DIR,
 )
 
-STATE_FILE  = "state.json"
-TRADES_FILE = "trades.json"
+STATE_FILE  = _os.path.join(DATA_DIR, "state.json")
+TRADES_FILE = _os.path.join(DATA_DIR, "trades.json")
 
 def _load_state():
     if os.path.exists(STATE_FILE):
@@ -71,6 +73,9 @@ paper_state = {
     # weekly — reset each Monday midnight CT
     "weekly_pnl":      0.0 if _week_fresh  else _saved.get("paper", {}).get("weekly_pnl", 0.0),
     "weekly_sl_hits":  0   if _week_fresh  else _saved.get("paper", {}).get("weekly_sl_hits", 0),
+    # all-time — never reset (persists across days/weeks)
+    "total_wins":      _saved.get("paper", {}).get("total_wins", 0),
+    "total_losses":    _saved.get("paper", {}).get("total_losses", 0),
     "last_signal":     _saved.get("paper", {}).get("last_signal", None),
     "trades":          _saved.get("paper", {}).get("trades", []),
 }
@@ -195,9 +200,11 @@ def update_paper_outcome(won: bool, pnl: float = None):
         paper_state["weekly_pnl"]      += pnl
         paper_state["account_balance"] += pnl
     if won:
-        paper_state["daily_wins"] += 1
+        paper_state["daily_wins"]   += 1
+        paper_state["total_wins"]   += 1
     else:
         paper_state["daily_losses"] += 1
+        paper_state["total_losses"] += 1
     _save_state()
 
 
@@ -226,6 +233,8 @@ def reset_paper_full():
     paper_state["sl_hits_today"]   = {}
     paper_state["weekly_pnl"]      = 0.0
     paper_state["weekly_sl_hits"]  = 0
+    paper_state["total_wins"]      = 0
+    paper_state["total_losses"]    = 0
     paper_state["last_signal"]     = None
     _save_state()
     try:
