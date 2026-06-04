@@ -24,8 +24,35 @@ import oanda
 # Reverse lookup: OANDA instrument name → bot instrument name
 _OANDA_REVERSE_MAP = {v: k for k, v in oanda.INSTRUMENT_MAP.items()}
 
+def _patch_stuck_trades():
+    """One-time: fix non-forex OPEN trades whose lifecycle event fired before the fix was deployed."""
+    patches = [
+        # US100 LONG — SL hit 2026-06-04 03:15 CT, PNL -128.54 (Telegram confirmed)
+        {"instrument": "US100", "direction": "LONG", "date_prefix": "2026-06-04", "result": "SL", "pnl": -128.54},
+    ]
+    try:
+        log = _load_trades_log()
+        modified = False
+        for p in patches:
+            for t in log.get("paper", []):
+                if (t.get("instrument", "").upper() == p["instrument"] and
+                        t.get("direction", "").upper()  == p["direction"] and
+                        t.get("result") == "OPEN" and
+                        (t.get("date", "") or "").startswith(p["date_prefix"])):
+                    t["result"] = p["result"]
+                    t["pnl"]    = p["pnl"]
+                    modified = True
+                    print(f"[startup] Patched stuck {p['instrument']} {p['direction']} → {p['result']} ${p['pnl']}", flush=True)
+        if modified:
+            with open(TRADES_FILE, "w") as f:
+                json.dump(log, f, indent=2)
+    except Exception as e:
+        print(f"[startup] Stuck trade patch failed: {e}", flush=True)
+
+
 def _sync_oanda_on_startup():
     """On every startup, add any OANDA open positions missing from trades.json."""
+    _patch_stuck_trades()
     try:
         open_trades = oanda.get_all_open_trades()
         for t in open_trades:
