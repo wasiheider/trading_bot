@@ -54,7 +54,7 @@ show_bos        = input.bool(true,  "Show BOS level",                      group
 show_signals    = input.bool(true,  "Show entry signals",                  group="Display")
 show_trade_lvls = input.bool(true,  "Show SL/TP on trade",                 group="Display")
 show_info       = input.bool(true,  "Show info table",                     group="Display")
-force_clear     = input.bool(false, "Force clear trade levels (spread/news close)", group="Display")
+force_clear_n   = input.int(0,     "Manual close — increment to force-clear stale levels", group="Display", minval=0)
 
 // =============================================================================
 // INSTRUMENT CONFIG
@@ -504,10 +504,19 @@ if show_trade_lvls and in_trade
     if not na(lbl_tp2)
         label.set_x(lbl_tp2, bar_index)
 
-// Fire cleanup only on the bar the position transitions open → closed (not on every bar
-// where there's no position — that would wipe labels on the entry bar before fill).
+// Manual force-clear: detect rising edge on the current realtime bar only.
+// Input changes cause a full historical replay — barstate.isrealtime guard
+// prevents the cleanup from firing on every bar during the rerun.
+var int last_force_n = 0
+force_clear_edge = barstate.isrealtime and force_clear_n != last_force_n
+if force_clear_edge
+    last_force_n := force_clear_n
+    strategy.cancel_all()   // cancel pending exits (TP/SL orders for old trade)
+    strategy.close_all()    // close position in simulation so new signals can fire
+
+// Fire cleanup on normal close OR on manual force-clear.
 just_closed = strategy.position_size == 0 and strategy.position_size[1] != 0
-if just_closed or force_clear
+if just_closed or force_clear_edge
     label.delete(lbl_entry)
     label.delete(lbl_sl)
     label.delete(lbl_tp1)
