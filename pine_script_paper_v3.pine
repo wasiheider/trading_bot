@@ -1,6 +1,6 @@
 // =============================================================================
 // PAPER TRADING — WYCKOFF MTF STRATEGY v3
-// 1H Auto-Range | 15M BOS | 5M Retest Entry
+// 1H Auto-Range | 5M BOS | 5M Entry
 // =============================================================================
 // Range Logic:
 //   Range High = last confirmed 1H pivot high  (auto-updates, no manual input)
@@ -9,8 +9,8 @@
 //   Works on every instrument without touching the code.
 //
 // Entry Logic:
-//   Near HIGH zone → 15M bearish BOS → 5M rejection candle at BOS level → SHORT
-//   Near LOW  zone → 15M bullish BOS → 5M rejection candle at BOS level → LONG
+//   Near HIGH zone → 5M bearish BOS → 5M rejection candle at BOS level → SHORT
+//   Near LOW  zone → 5M bullish BOS → 5M rejection candle at BOS level → LONG
 //   TP1 = range mid  |  TP2 = opposite boundary
 //   SL  = range boundary ± ATR(14) * atr_mult  (trade invalidation — not BOS-level tight stop)
 //   At TP1: close 50% of position, move SL to breakeven
@@ -22,7 +22,7 @@
 
 //@version=6
 strategy(
-     title             = "Paper MTF Wyckoff v3 — 1H Range / 15M BOS / 5M Entry",
+     title             = "Paper MTF Wyckoff v3 — 1H Range / 5M BOS / 5M Entry",
      shorttitle        = "PAPER-MTF3",
      overlay           = true,
      pyramiding        = 0,
@@ -39,13 +39,14 @@ strategy(
 h1_lookback     = input.int(20,    "1H Range Lookback (bars)",            group="Range",  minval=5,   maxval=100)
 zone_pct        = input.float(8.0, "Boundary Zone % of Range",            group="Range",  minval=1.0, maxval=20.0, step=0.5)
 
-m15_bos_len     = input.int(3,     "15M BOS Pivot Length",                group="Entry",  minval=2,   maxval=10)
+bos_pivot_len   = input.int(5,     "5M BOS Pivot Length",                 group="Entry",  minval=2,   maxval=10)
 min_rr          = input.float(1.5, "Min R:R to TP1",                      group="Entry",  minval=1.0, step=0.1)
 atr_mult        = input.float(1.0, "ATR Buffer above/below range boundary (x ATR)", group="Entry",  minval=0.1, step=0.1)
 max_retrace_pct = input.float(60.0,"Max Retrace — invalidate BOS (%)",    group="Entry",  minval=10.0,maxval=90.0, step=5.0)
 
-use_rotation    = input.bool(true,  "Boundary Rotation Gate",             group="Filters")
+use_rotation    = input.bool(false, "Boundary Rotation Gate",             group="Filters")
 max_break_pct   = input.float(15.0, "Pause entries if range breaks by %", group="Filters", minval=5.0, step=1.0)
+use_atr_filter  = input.bool(false, "ATR Volatility Filter (block when ATR < avg)", group="Filters")
 atr_avg_len     = input.int(50,    "ATR average length (above = entry allowed)", group="Filters", minval=10, maxval=200)
 
 show_range      = input.bool(true, "Show range levels",                   group="Display")
@@ -72,14 +73,14 @@ is_us500      = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "S
 pip_value_per_001 = is_xauusd ? 0.01 : is_usoil ? 0.10 : is_us100 ? 0.01 : 0.10
 pip_size          = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0  : syminfo.mintick * 10
 price_format      = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
-risk_dollars      = 500.0
+risk_dollars      = 250.0
 
 // =============================================================================
 // ATR (5M native)
 // =============================================================================
 atr_now = ta.atr(14)
 atr_avg = ta.sma(atr_now, atr_avg_len)
-atr_ok  = atr_now > atr_avg
+atr_ok  = not use_atr_filter or atr_now > atr_avg
 
 // =============================================================================
 // 1H AUTO-RANGE — highest high and lowest low of the last N 1H bars
@@ -111,11 +112,11 @@ var bool was_near_low  = false
 
 if near_high
     was_near_high := true
-if range_valid and not na(zone_size) and close < range_high - zone_size * 3
+if range_valid and not na(htf_mid) and close < htf_mid
     was_near_high := false
 if near_low
     was_near_low := true
-if range_valid and not na(zone_size) and close > range_low + zone_size * 3
+if range_valid and not na(htf_mid) and close > htf_mid
     was_near_low := false
 
 // Reset latch when range updates to a new high/low
@@ -146,34 +147,30 @@ can_trade_high = range_valid and (not use_rotation or armed_side == "both" or ar
 can_trade_low  = range_valid and (not use_rotation or armed_side == "both" or armed_side == "low")
 
 // =============================================================================
-// 15M BOS DETECTION
+// 5M BOS DETECTION
 // =============================================================================
-[m15_close_src, m15_ph_src, m15_pl_src] = request.security(
-     syminfo.tickerid, "15",
-     [close,
-      ta.pivothigh(high, m15_bos_len, m15_bos_len),
-      ta.pivotlow(low,   m15_bos_len, m15_bos_len)],
-     lookahead=barmerge.lookahead_off)
+m5_ph_src = ta.pivothigh(high, bos_pivot_len, bos_pivot_len)
+m5_pl_src = ta.pivotlow(low,   bos_pivot_len, bos_pivot_len)
 
-var float last_m15_ph = na
-var float last_m15_pl = na
-if not na(m15_ph_src)
-    last_m15_ph := m15_ph_src
-if not na(m15_pl_src)
-    last_m15_pl := m15_pl_src
+var float last_m5_ph = na
+var float last_m5_pl = na
+if not na(m5_ph_src)
+    last_m5_ph := m5_ph_src
+if not na(m5_pl_src)
+    last_m5_pl := m5_pl_src
 
 // Debounced BOS events — only fire once per cross, only when near the relevant zone
-m15_bear_raw = not na(last_m15_pl) and m15_close_src < last_m15_pl
-m15_bull_raw = not na(last_m15_ph) and m15_close_src > last_m15_ph
+m5_bear_raw = not na(last_m5_pl) and close < last_m5_pl
+m5_bull_raw = not na(last_m5_ph) and close > last_m5_ph
 
-var bool m15_bear_prev = false
-var bool m15_bull_prev = false
+var bool m5_bear_prev = false
+var bool m5_bull_prev = false
 
-m15_bear_event = m15_bear_raw and not m15_bear_prev and was_near_high and can_trade_high
-m15_bull_event = m15_bull_raw and not m15_bull_prev and was_near_low  and can_trade_low
+m5_bear_event = m5_bear_raw and not m5_bear_prev and was_near_high and can_trade_high
+m5_bull_event = m5_bull_raw and not m5_bull_prev and was_near_low  and can_trade_low
 
-m15_bear_prev := m15_bear_raw
-m15_bull_prev := m15_bull_raw
+m5_bear_prev := m5_bear_raw
+m5_bull_prev := m5_bull_raw
 
 // =============================================================================
 // BOS STATE
@@ -186,35 +183,48 @@ var int   bear_bos_bar    = -1
 var int   bull_bos_bar    = -1
 var int   bear_entry_bar  = -1
 var int   bull_entry_bar  = -1
+// SL swing anchors — captured at the moment the BOS fires
+var float bear_sl_swing   = na  // 5M swing HIGH above entry — SL reference for shorts
+var float bull_sl_swing   = na  // 5M swing LOW  below entry — SL reference for longs
 
 max_retrace_dist = not na(htf_range) ? htf_range * (max_retrace_pct / 100.0) : na
 
-if m15_bear_event
-    bear_bos_level  := last_m15_pl
+if m5_bear_event
+    bear_bos_level  := last_m5_pl
     bear_bos_active := true
     bear_bos_bar    := bar_index
     bull_bos_active := false
     was_near_high   := false
+    bear_sl_swing   := last_m5_ph  // swing HIGH above — SL will go above this
 
-if m15_bull_event
-    bull_bos_level  := last_m15_ph
+if m5_bull_event
+    bull_bos_level  := last_m5_ph
     bull_bos_active := true
     bull_bos_bar    := bar_index
     bear_bos_active := false
     was_near_low    := false
+    bull_sl_swing   := last_m5_pl  // swing LOW below — SL will go below this
 
 // Invalidate if range updates (new 1H structure)
 if range_high != prev_range_high or range_low != prev_range_low
     bear_bos_active := false
     bull_bos_active := false
+    bear_sl_swing   := na
+    bull_sl_swing   := na
 
-// Invalidate if price moves too far from BOS without retesting
+// Invalidate if price moves too far from BOS without retesting, in either direction.
+// BEAR BOS: price broke DOWN through bear_bos_level. Retest = bounce back UP to it.
+//   → cancel if price dropped too far below (retest impossible) OR bounced back above (BOS cancelled)
+// BULL BOS: price broke UP through bull_bos_level. Retest = pullback DOWN to it.
+//   → cancel if price fell too far below (BOS cancelled) OR shot too far above (retest impossible)
 if bear_bos_active and not na(max_retrace_dist) and not na(bear_bos_level)
-    if close < bear_bos_level - max_retrace_dist
+    if close < bear_bos_level - max_retrace_dist or close > bear_bos_level + max_retrace_dist
         bear_bos_active := false
+        bear_sl_swing   := na
 if bull_bos_active and not na(max_retrace_dist) and not na(bull_bos_level)
-    if close > bull_bos_level + max_retrace_dist
+    if close > bull_bos_level + max_retrace_dist or close < bull_bos_level - max_retrace_dist
         bull_bos_active := false
+        bull_sl_swing   := na
 
 // =============================================================================
 // 5M ENTRY — REJECTION CANDLE AT BOS LEVEL
@@ -230,9 +240,16 @@ long_retracing  = bull_bos_active and not na(bull_bos_level) and
 // =============================================================================
 // SL / TP / R:R
 // =============================================================================
-// SL at range boundary — trade is invalidated only if price breaks through the range extreme
+// SL is placed beyond the 5M swing that preceded the BOS — structural stop.
+// SHORT: above the swing HIGH captured when the bearish BOS fired.
+// LONG:  below the swing LOW  captured when the bullish BOS fired.
+// Falls back to range boundary if no swing was captured (e.g. first bar of session).
+// ATR buffer keeps the stop outside the swing wick.
+_short_sl_base = not na(bear_sl_swing) ? bear_sl_swing : range_high
+_long_sl_base  = not na(bull_sl_swing) ? bull_sl_swing : range_low
+
 short_entry = close
-short_sl    = not na(range_high) ? range_high + atr_now * atr_mult : na
+short_sl    = not na(_short_sl_base) ? _short_sl_base + atr_now * atr_mult : na
 short_tp1   = htf_mid
 short_tp2   = range_low
 short_risk  = not na(short_sl) ? short_sl - short_entry : na
@@ -241,7 +258,7 @@ short_rr1   = not na(short_risk) and short_risk > 0 ? short_rwd1 / short_risk : 
 short_rr_ok = short_rr1 >= min_rr
 
 long_entry = close
-long_sl    = not na(range_low) ? range_low - atr_now * atr_mult : na
+long_sl    = not na(_long_sl_base) ? _long_sl_base - atr_now * atr_mult : na
 long_tp1   = htf_mid
 long_tp2   = range_high
 long_risk  = not na(long_sl) ? long_entry - long_sl : na
@@ -279,18 +296,19 @@ if short_signal
          limit=short_tp1, stop=short_sl, comment="TP1")
     strategy.exit("SHORT_TP2", from_entry="SHORT",
          limit=short_tp2, stop=short_sl, comment="TP2+SL")
-    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-         '","direction":"SHORT","timeframe":"5"' +
-         ',"lot_size":'        + str.tostring(short_lots) +
-         ',"entry_price":'     + str.tostring(short_entry,    price_format) +
-         ',"stop_loss":'       + str.tostring(short_sl,       price_format) +
-         ',"tp1":'             + str.tostring(short_tp1,      price_format) +
-         ',"tp2":'             + str.tostring(short_tp2,      price_format) +
-         ',"rr_to_tp1":'       + str.tostring(short_rr1,      "#.##") +
-         ',"bos_level":'       + str.tostring(bear_bos_level, price_format) +
-         ',"range_high":'      + str.tostring(range_high,     price_format) +
-         ',"range_low":'       + str.tostring(range_low,      price_format) +
-         ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+    if barstate.isrealtime
+        alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"SHORT","timeframe":"5"' +
+             ',"lot_size":'        + str.tostring(short_lots) +
+             ',"entry_price":'     + str.tostring(short_entry,    price_format) +
+             ',"stop_loss":'       + str.tostring(short_sl,       price_format) +
+             ',"tp1":'             + str.tostring(short_tp1,      price_format) +
+             ',"tp2":'             + str.tostring(short_tp2,      price_format) +
+             ',"rr_to_tp1":'       + str.tostring(short_rr1,      "#.##") +
+             ',"bos_level":'       + str.tostring(bear_bos_level, price_format) +
+             ',"range_high":'      + str.tostring(range_high,     price_format) +
+             ',"range_low":'       + str.tostring(range_low,      price_format) +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
     bear_entry_bar  := bar_index
     bear_bos_active := false
     if use_rotation
@@ -304,18 +322,19 @@ if long_signal
          limit=long_tp1, stop=long_sl, comment="TP1")
     strategy.exit("LONG_TP2", from_entry="LONG",
          limit=long_tp2, stop=long_sl, comment="TP2+SL")
-    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-         '","direction":"LONG","timeframe":"5"' +
-         ',"lot_size":'        + str.tostring(long_lots) +
-         ',"entry_price":'     + str.tostring(long_entry,    price_format) +
-         ',"stop_loss":'       + str.tostring(long_sl,       price_format) +
-         ',"tp1":'             + str.tostring(long_tp1,      price_format) +
-         ',"tp2":'             + str.tostring(long_tp2,      price_format) +
-         ',"rr_to_tp1":'       + str.tostring(long_rr1,      "#.##") +
-         ',"bos_level":'       + str.tostring(bull_bos_level, price_format) +
-         ',"range_high":'      + str.tostring(range_high,    price_format) +
-         ',"range_low":'       + str.tostring(range_low,     price_format) +
-         ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+    if barstate.isrealtime
+        alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"LONG","timeframe":"5"' +
+             ',"lot_size":'        + str.tostring(long_lots) +
+             ',"entry_price":'     + str.tostring(long_entry,    price_format) +
+             ',"stop_loss":'       + str.tostring(long_sl,       price_format) +
+             ',"tp1":'             + str.tostring(long_tp1,      price_format) +
+             ',"tp2":'             + str.tostring(long_tp2,      price_format) +
+             ',"rr_to_tp1":'       + str.tostring(long_rr1,      "#.##") +
+             ',"bos_level":'       + str.tostring(bull_bos_level, price_format) +
+             ',"range_high":'      + str.tostring(range_high,    price_format) +
+             ',"range_low":'       + str.tostring(range_low,     price_format) +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
     bull_entry_bar  := bar_index
     bull_bos_active := false
     if use_rotation
@@ -359,11 +378,12 @@ last_pnl        = _n >= 0 ? strategy.closedtrades.profit(_n) : 0.0
 last_exit_price = _n >= 0 ? strategy.closedtrades.exit_price(_n) : close
 
 _lc(evt, dir) =>
-    alert('{"event":"' + evt + '","account":"PAPER","symbol":"' + symbol_name +
-         '","direction":"' + dir +
-         '","price":'  + str.tostring(last_exit_price, price_format) +
-         ',"pnl":'     + str.tostring(last_pnl) +
-         ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+    if barstate.isrealtime
+        alert('{"event":"' + evt + '","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"' + dir +
+             '","price":'  + str.tostring(last_exit_price, price_format) +
+             ',"pnl":'     + str.tostring(last_pnl) +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
 
 if tp1_short_hit
     _lc("tp1_hit", "SHORT")
@@ -389,9 +409,7 @@ prev_pos := strategy.position_size
 // VISUALS
 // =============================================================================
 
-// Range level plots — plot() draws a flat horizontal at a fixed value; since
-// range_high/low are var floats that only update on a new 1H pivot, each
-// level renders as a clean flat line with no candle-structure artifacts.
+// Range levels
 plot(show_range and not na(range_high) ? range_high : na, "1H Range High", color=color.red,               linewidth=2)
 plot(show_range and not na(htf_mid)   ? htf_mid    : na, "Range Mid",      color=color.new(color.gray,0), linewidth=1, style=plot.style_linebr)
 plot(show_range and not na(range_low) ? range_low  : na, "1H Range Low",   color=color.green,             linewidth=2)
@@ -402,13 +420,14 @@ bgcolor(near_low  ? color.new(color.green, 92) : na, title="Low zone")
 plot(show_bos and bear_bos_active ? bear_bos_level : na, "Bear BOS", color=color.new(color.orange, 0), linewidth=1, style=plot.style_linebr)
 plot(show_bos and bull_bos_active ? bull_bos_level : na, "Bull BOS", color=color.new(color.blue,   0), linewidth=1, style=plot.style_linebr)
 
-if show_bos and m15_bear_event
-    label.new(bar_index, high, "15M BOS v", color=color.orange, textcolor=color.white, style=label.style_label_down, size=size.small)
-if show_bos and m15_bull_event
-    label.new(bar_index, low,  "15M BOS ^", color=color.blue,   textcolor=color.white, style=label.style_label_up,   size=size.small)
+if show_bos and m5_bear_event
+    label.new(bar_index, high, "5M BOS v", color=color.orange, textcolor=color.white, style=label.style_label_down, size=size.small)
+if show_bos and m5_bull_event
+    label.new(bar_index, low,  "5M BOS ^", color=color.blue,   textcolor=color.white, style=label.style_label_up,   size=size.small)
 
-plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.abovebar, color.new(color.red,   0), size=size.normal)
-plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.new(color.green, 0), size=size.normal)
+// Entry signal arrows — white
+plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.abovebar, color.white, size=size.normal)
+plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.white, size=size.normal)
 
 if show_signals and short_retracing and not short_signal
     label.new(bar_index, high, "RR:" + str.tostring(short_rr1,"#.#") + (short_rr_ok ? "" : "x"),
@@ -419,21 +438,46 @@ if show_signals and long_retracing and not long_signal
          color=long_rr_ok ? color.new(color.green,70) : color.new(color.gray,70),
          textcolor=color.white, style=label.style_label_up, size=size.tiny)
 
-var float active_sl  = na
-var float active_tp1 = na
-var float active_tp2 = na
-if short_signal or long_signal
-    active_sl  := short_signal ? short_sl  : long_sl
-    active_tp1 := short_signal ? short_tp1 : long_tp1
-    active_tp2 := short_signal ? short_tp2 : long_tp2
-if strategy.position_size == 0 and prev_pos != 0
-    active_sl  := na
-    active_tp1 := na
-    active_tp2 := na
+// ── Open-trade level lines ─────────────────────────────────────────────────
+// Entry (white), SL (red), TP1 (light green), TP2 (green) drawn from the
+// entry bar rightward while the position is open, gated by position_size != 0.
+// After TP1 fires, SL line moves to breakeven (entry price).
+var float active_entry = na
+var float active_sl    = na
+var float active_tp1   = na
+var float active_tp2   = na
 
-plot(show_trade_lvls and strategy.position_size != 0 and not na(active_sl)  ? active_sl  : na, "SL",  color=color.red,                  linewidth=2, style=plot.style_linebr)
-plot(show_trade_lvls and strategy.position_size != 0 and not na(active_tp1) ? active_tp1 : na, "TP1", color=color.new(color.green, 30), linewidth=1, style=plot.style_linebr)
-plot(show_trade_lvls and strategy.position_size != 0 and not na(active_tp2) ? active_tp2 : na, "TP2", color=color.green,                linewidth=2, style=plot.style_linebr)
+if short_signal or long_signal
+    active_entry := short_signal ? short_entry : long_entry
+    active_sl    := short_signal ? short_sl    : long_sl
+    active_tp1   := short_signal ? short_tp1   : long_tp1
+    active_tp2   := short_signal ? short_tp2   : long_tp2
+
+if tp1_short_hit and not na(entry_price_stored)
+    active_sl := entry_price_stored
+if tp1_long_hit  and not na(entry_price_stored)
+    active_sl := entry_price_stored
+
+in_trade = strategy.position_size != 0
+plot(show_trade_lvls and in_trade and not na(active_entry) ? active_entry : na, "Entry", color=color.white,               linewidth=1, style=plot.style_linebr)
+plot(show_trade_lvls and in_trade and not na(active_sl)    ? active_sl    : na, "SL",    color=color.red,                 linewidth=2, style=plot.style_linebr)
+plot(show_trade_lvls and in_trade and not na(active_tp1)   ? active_tp1   : na, "TP1",   color=color.new(color.green,30), linewidth=1, style=plot.style_linebr)
+plot(show_trade_lvls and in_trade and not na(active_tp2)   ? active_tp2   : na, "TP2",   color=color.green,               linewidth=2, style=plot.style_linebr)
+
+// ── Close arrows (drawn at the exit bar) ──────────────────────────────────
+// Green label at TP1/TP2 hit; red label at SL hit.
+if show_signals and tp1_short_hit
+    label.new(bar_index, last_exit_price, "TP1", color=color.green, textcolor=color.white, style=label.style_label_up,   size=size.small)
+if show_signals and tp1_long_hit
+    label.new(bar_index, last_exit_price, "TP1", color=color.green, textcolor=color.white, style=label.style_label_down, size=size.small)
+if show_signals and tp2_short_hit
+    label.new(bar_index, last_exit_price, "TP2", color=color.green, textcolor=color.white, style=label.style_label_up,   size=size.small)
+if show_signals and tp2_long_hit
+    label.new(bar_index, last_exit_price, "TP2", color=color.green, textcolor=color.white, style=label.style_label_down, size=size.small)
+if show_signals and sl_short_hit
+    label.new(bar_index, last_exit_price, "SL",  color=color.red,   textcolor=color.white, style=label.style_label_up,   size=size.small)
+if show_signals and sl_long_hit
+    label.new(bar_index, last_exit_price, "SL",  color=color.red,   textcolor=color.white, style=label.style_label_down, size=size.small)
 
 // =============================================================================
 // INFO TABLE
@@ -447,7 +491,7 @@ if show_info
     retr_state  = short_retracing ? "SHORT RETEST" : long_retracing ? "LONG RETEST" : "--"
 
     table.cell(info, 0, 0,  "PAPER MTF v3",                  text_color=color.white, text_size=size.normal)
-    table.cell(info, 1, 0,  "1H Range | 15M BOS | 5M Entry", text_color=color.yellow)
+    table.cell(info, 1, 0,  "1H Range | 5M BOS | 5M Entry",  text_color=color.yellow)
     table.cell(info, 0, 1,  "Symbol",                         text_color=color.gray)
     table.cell(info, 1, 1,  symbol_name,                      text_color=color.white)
     table.cell(info, 0, 2,  "Range High (1H)",                text_color=color.gray)
@@ -463,7 +507,7 @@ if show_info
          text_color=near_high ? color.red : near_low ? color.green : color.gray)
     table.cell(info, 0, 7,  "Armed Side",                     text_color=color.gray)
     table.cell(info, 1, 7,  arm_display,                      text_color=armed_side == "none" ? color.orange : color.green)
-    table.cell(info, 0, 8,  "15M BOS State",                  text_color=color.gray)
+    table.cell(info, 0, 8,  "5M BOS State",                   text_color=color.gray)
     table.cell(info, 1, 8,  bos_state,                        text_color=bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
     table.cell(info, 0, 9,  "5M Retest",                      text_color=color.gray)
     table.cell(info, 1, 9,  retr_state,                        text_color=short_retracing ? color.red : long_retracing ? color.green : color.gray)
@@ -476,7 +520,11 @@ if show_info
          text_color=bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
     table.cell(info, 0, 12, "1H Lookback",                    text_color=color.gray)
     table.cell(info, 1, 12, str.tostring(h1_lookback),         text_color=color.gray)
+    _atr_pips     = math.round(atr_now / pip_size, 1)
+    _atr_avg_pips = math.round(atr_avg / pip_size, 1)
+    _atr_label    = not use_atr_filter ? "OFF" :
+         atr_ok ? "PASS " + str.tostring(_atr_pips, "#.#") + " > " + str.tostring(_atr_avg_pips, "#.#") + " pips" :
+         "BLOCK " + str.tostring(_atr_pips, "#.#") + " < " + str.tostring(_atr_avg_pips, "#.#") + " pips"
     table.cell(info, 0, 13, "ATR Filter",                      text_color=color.gray)
-    table.cell(info, 1, 13, atr_ok ? "PASS " + str.tostring(atr_now, "#.##") + " > " + str.tostring(atr_avg, "#.##") :
-         "BLOCK " + str.tostring(atr_now, "#.##") + " < " + str.tostring(atr_avg, "#.##"),
-         text_color=atr_ok ? color.green : color.red)
+    table.cell(info, 1, 13, _atr_label,
+         text_color=not use_atr_filter ? color.gray : atr_ok ? color.green : color.red)
