@@ -21,6 +21,9 @@ from notifier import send_telegram
 from logger import init_db
 import oanda
 
+# Mascot header for all Telegram notifications (daughter's crowned robot design)
+_MASCOT = "🩷👑🤖👑🩷"
+
 # Reverse lookup: OANDA instrument name → bot instrument name
 _OANDA_REVERSE_MAP = {v: k for k, v in oanda.INSTRUMENT_MAP.items()}
 
@@ -159,18 +162,18 @@ def handle_paper_signal(data):
     open_count = sum(1 for t in _load_trades_log().get("paper", []) if t.get("result") == "OPEN")
     if open_count >= 5:
         reason = f"max open trades reached ({open_count}/5)"
-        send_telegram(f"🚫 *Paper Signal Blocked — Max Open Trades*\n`{instrument} {direction}`\n{reason}")
+        send_telegram(f"{_MASCOT}\n🚫 *Paper Signal Blocked — Max Open Trades*\n`{instrument} {direction}`\n{reason}")
         return jsonify({"status": "blocked", "reason": reason}), 200
 
     sl_count = get_sl_hits(instrument)
     if sl_count >= 2:
         reason = f"2 SL hits today on {instrument} — sitting out for the session"
-        send_telegram(f"🚫 *Paper Signal Blocked — Session Cooldown*\n`{instrument} {direction}`\n{reason}")
+        send_telegram(f"{_MASCOT}\n🚫 *Paper Signal Blocked — Session Cooldown*\n`{instrument} {direction}`\n{reason}")
         return jsonify({"status": "blocked", "reason": reason}), 200
 
     risk = check_paper_risk(instrument, sl_pips)
     if not risk["allowed"]:
-        msg = f"🚫 *Paper Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
+        msg = f"{_MASCOT}\n🚫 *Paper Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
@@ -206,6 +209,7 @@ def handle_paper_signal(data):
         exec_line = f"\nOANDA: FAILED ({oanda_error})"
 
     msg = (
+        f"{_MASCOT}\n"
         f"{emoji} *Paper — {instrument} {direction}*\n"
         f"Entry: `{price}`\n"
         f"SL: `{sl}`\n"
@@ -293,6 +297,7 @@ def handle_paper_lifecycle(data, event):
     pnl_line  = f"\nP&L: `${final_pnl:+.2f}`" if final_pnl is not None else ""
 
     msg = (
+        f"{_MASCOT}\n"
         f"{emoji_map.get(event, '📊')} *Paper {label_map.get(event, event.upper())}*\n"
         f"{dir_emoji} `{instrument} {direction}`\n"
         f"Price: `{price}`{pnl_line}"

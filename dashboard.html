@@ -14,6 +14,7 @@
   --a:#f5a623;--ad:rgba(245,166,35,.12);--ab:rgba(245,166,35,.25);
   --b:#4a9eff;--bd:rgba(74,158,255,.12);--bb:rgba(74,158,255,.25);
   --pu:#a78bfa;
+  --pk:#ff69b4;--pkd:rgba(255,105,180,.15);--pkb:rgba(255,105,180,.3);
   --bg0:#060810;--bg1:#0b0f1a;--bg2:#101520;--bg3:#161d2e;--bg4:#1e2840;
   --bo:rgba(255,255,255,.06);--bo2:rgba(255,255,255,.11);--bo3:rgba(255,255,255,.18);
   --t1:#e2eaf6;--t2:#5d7490;--t3:#2e3d52;
@@ -28,6 +29,9 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .tb-brand{display:flex;align-items:center;gap:10px}
 .tb-dot{width:8px;height:8px;border-radius:50%;background:var(--g);box-shadow:0 0 8px var(--g);animation:blink 2s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.bot-logo{display:flex;align-items:center;margin-right:4px}
+.bot-logo svg{filter:drop-shadow(0 0 5px var(--pkb));animation:bot-float 4s ease-in-out infinite}
+@keyframes bot-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 .tb-name{font-family:var(--head);font-size:15px;font-weight:800;letter-spacing:1px;color:var(--t1)}
 .tb-tag{font-size:9px;color:var(--t3);letter-spacing:2px;font-weight:600;margin-left:2px}
 .tb-clock{font-size:11px;color:var(--t2);letter-spacing:.5px}
@@ -140,6 +144,35 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 <!-- TOPBAR -->
 <div class="tb">
   <div class="tb-brand">
+    <div class="bot-logo">
+      <svg viewBox="0 0 38 46" width="30" height="37" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <!-- Crown -->
+        <polygon points="9,16 13,6 19,12 25,6 29,16" fill="#ff69b4"/>
+        <rect x="9" y="14" width="20" height="4" rx="1.5" fill="#ff69b4"/>
+        <!-- Head -->
+        <rect x="5" y="17" width="28" height="18" rx="6" fill="#ffb6d9" stroke="#ff69b4" stroke-width="1.5"/>
+        <!-- Left eye -->
+        <circle cx="14" cy="24" r="3" fill="white" opacity=".92"/>
+        <circle cx="14.6" cy="24.6" r="1.6" fill="#e91e8c"/>
+        <circle cx="15.3" cy="23.7" r="0.5" fill="white"/>
+        <!-- Right eye -->
+        <circle cx="24" cy="24" r="3" fill="white" opacity=".92"/>
+        <circle cx="24.6" cy="24.6" r="1.6" fill="#e91e8c"/>
+        <circle cx="25.3" cy="23.7" r="0.5" fill="white"/>
+        <!-- Smile -->
+        <path d="M13,30 Q19,35 25,30" stroke="#e91e8c" stroke-width="1.6" stroke-linecap="round"/>
+        <!-- Neck -->
+        <rect x="16" y="35" width="6" height="3" fill="#ffb6d9"/>
+        <!-- Body -->
+        <rect x="2" y="37" width="34" height="9" rx="4" fill="#ffb6d9" stroke="#ff69b4" stroke-width="1.5"/>
+        <!-- Screen -->
+        <rect x="7" y="39.5" width="24" height="4" rx="2" fill="#ffe4f0" stroke="#ff69b4" stroke-width="0.8"/>
+        <!-- Left arm -->
+        <rect x="0" y="38.5" width="3" height="5" rx="1.5" fill="#ffb6d9" stroke="#ff69b4" stroke-width="1"/>
+        <!-- Right arm -->
+        <rect x="35" y="38.5" width="3" height="5" rx="1.5" fill="#ffb6d9" stroke="#ff69b4" stroke-width="1"/>
+      </svg>
+    </div>
     <div class="tb-dot" id="conn-dot"></div>
     <div>
       <div class="tb-name">TRADING BOT V3 <span class="tb-tag">1H RANGE · 15M BOS · 5M ENTRY</span></div>
