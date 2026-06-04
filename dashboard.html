@@ -151,6 +151,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="acct">
       <div class="acct-lbl">Paper Balance</div>
       <div class="acct-val" style="color:var(--g)" id="paper-bal">$100,000</div>
+      <div id="paper-unr-line" style="font-size:8px;color:var(--t3);text-align:right;margin-top:1px"></div>
     </div>
     <div class="sep"></div>
     <span class="live-badge"><span class="live-dot"></span>LIVE</span>
@@ -434,18 +435,28 @@ function updateDashboard(d) {
   bsb.textContent = 'TRADING';
   bsb.className = 'bd2 bg2';
 
-  // Paper balance + all-time P&L
-  const bal = d.paper_account_balance || PAPER_START;
-  document.getElementById('paper-bal').textContent = fmtBal(bal);
-  document.getElementById('paper-bal-card').textContent = fmtBal(bal);
-  const allTimePnl = bal - PAPER_START;
-  const atEl = document.getElementById('paper-alltime-pnl');
-  if (atEl) { atEl.textContent = fmt$(allTimePnl) + ' all-time'; atEl.style.color = allTimePnl >= 0 ? 'var(--g)' : 'var(--r)'; }
+  // Paper balance + live equity
+  const bal        = d.paper_account_balance || PAPER_START;
+  const unrealized = d.paper_unrealized_pnl  || 0;
+  const liveEquity = bal + unrealized;
 
-  // P&L Today (realized) + unrealized overlay
-  const pnl        = d.paper_daily_pnl    || 0;
-  const unrealized = d.paper_unrealized_pnl || 0;
-  const totalLive  = pnl + unrealized;
+  // Top-right & card: show live equity
+  document.getElementById('paper-bal').textContent      = fmtBal(liveEquity);
+  document.getElementById('paper-bal-card').textContent = fmtBal(liveEquity);
+  const unrLine = document.getElementById('paper-unr-line');
+  if (unrLine) {
+    unrLine.textContent = unrealized !== 0 ? 'unr: ' + fmt$(unrealized) : '';
+    unrLine.style.color  = unrealized >= 0 ? 'var(--g)' : 'var(--r)';
+  }
+
+  // All-time P&L (unrealized included)
+  const allTimePnlLive = liveEquity - PAPER_START;
+  const atEl = document.getElementById('paper-alltime-pnl');
+  if (atEl) { atEl.textContent = fmt$(allTimePnlLive) + ' all-time'; atEl.style.color = allTimePnlLive >= 0 ? 'var(--g)' : 'var(--r)'; }
+
+  // P&L Today (realized + unrealized)
+  const pnl       = d.paper_daily_pnl || 0;
+  const totalLive = pnl + unrealized;
   const pnlEl = document.getElementById('paper-pnl');
   pnlEl.textContent = fmt$(totalLive);
   pnlEl.style.color = totalLive >= 0 ? 'var(--g)' : 'var(--r)';
@@ -456,9 +467,9 @@ function updateDashboard(d) {
   const wkEl = document.getElementById('paper-week-pnl');
   if (wkEl) { wkEl.textContent = fmt$(weekPnl + unrealized); wkEl.style.color = (weekPnl + unrealized) >= 0 ? 'var(--g)' : 'var(--r)'; }
 
-  // Live all-time P&L includes unrealized
-  const allTimePnlLive = (bal - PAPER_START) + unrealized;
-  if (atEl) { atEl.textContent = fmt$(allTimePnlLive) + ' all-time'; atEl.style.color = allTimePnlLive >= 0 ? 'var(--g)' : 'var(--r)'; }
+  // Live equity dot on chart
+  window._liveEquity = liveEquity;
+  paintLiveDot();
 
   // Store open details for trade history and patch rows immediately
   window._openDetails = d.paper_open_details || [];
@@ -559,7 +570,7 @@ function buildEquityCurve(trades) {
       values.push(PAPER_START);
     }
     equityData['1W'] = equityData['1M'] = equityData['ALL'] = { l: labels, d: values };
-    if (chartInstance) { chartInstance.data.labels = labels; chartInstance.data.datasets[0].data = values; chartInstance.update(); }
+    if (chartInstance) { chartInstance.data.labels = labels; chartInstance.data.datasets[0].data = values; chartInstance.update(); paintLiveDot(); }
     return;
   }
 
@@ -580,7 +591,18 @@ function buildEquityCurve(trades) {
     chartInstance.data.labels = equityData['1W'].l;
     chartInstance.data.datasets[0].data = equityData['1W'].d;
     chartInstance.update();
+    paintLiveDot();
   }
+}
+
+function paintLiveDot() {
+  if (!chartInstance || window._liveEquity === undefined) return;
+  const n = chartInstance.data.datasets[0].data.length;
+  if (!n) return;
+  const dots = Array(n).fill(null);
+  dots[n - 1] = window._liveEquity;
+  chartInstance.data.datasets[1].data = dots;
+  chartInstance.update('none');
 }
 
 function setR(k, el) {
@@ -590,6 +612,7 @@ function setR(k, el) {
     chartInstance.data.labels = equityData[k].l;
     chartInstance.data.datasets[0].data = equityData[k].d;
     chartInstance.update();
+    paintLiveDot();
   }
 }
 
@@ -751,8 +774,12 @@ function initChart() {
   const ctx = document.getElementById('ec').getContext('2d');
   chartInstance = new Chart(ctx, {
     type: 'line',
-    data: { labels: [], datasets: [{ data: [], borderColor: '#00e676', borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: '#00e676', fill: true,
-      backgroundColor: (c) => { const g = c.chart.ctx.createLinearGradient(0,0,0,140); g.addColorStop(0,'rgba(0,230,118,.15)'); g.addColorStop(1,'rgba(0,230,118,0)'); return g; }, tension: 0.4 }] },
+    data: { labels: [], datasets: [
+      { data: [], borderColor: '#00e676', borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: '#00e676', fill: true,
+        backgroundColor: (c) => { const g = c.chart.ctx.createLinearGradient(0,0,0,140); g.addColorStop(0,'rgba(0,230,118,.15)'); g.addColorStop(1,'rgba(0,230,118,0)'); return g; }, tension: 0.4 },
+      { data: [], borderColor: 'transparent', borderWidth: 0, pointRadius: 5, pointHoverRadius: 7,
+        pointBackgroundColor: '#4a9eff', pointBorderColor: 'rgba(74,158,255,0.4)', pointBorderWidth: 3, fill: false, tension: 0 }
+    ]},
     options: { responsive:true, maintainAspectRatio:false,
       plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2233',borderColor:'rgba(255,255,255,.1)',borderWidth:1,titleColor:'#5d7490',bodyColor:'#00e676',callbacks:{label:c=>' $'+Math.round(c.parsed.y).toLocaleString()}}},
       scales:{ x:{ticks:{color:'#2e3d52',font:{size:9,family:"'JetBrains Mono',monospace"}},grid:{color:'rgba(255,255,255,.03)'}}, y:{ticks:{color:'#2e3d52',font:{size:9},callback:v=>'$'+(v/1000).toFixed(1)+'k'},grid:{color:'rgba(255,255,255,.03)'}} } }
