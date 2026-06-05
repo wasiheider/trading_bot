@@ -166,8 +166,8 @@ def handle_paper_signal(data):
         return jsonify({"status": "blocked", "reason": reason}), 200
 
     sl_count = get_sl_hits(instrument)
-    if sl_count >= 2:
-        reason = f"2 SL hits today on {instrument} — sitting out for the session"
+    if sl_count >= 3:
+        reason = f"3 SL hits today on {instrument} — sitting out for the session"
         send_telegram(f"{_MASCOT}\n🚫 *Paper Signal Blocked — Session Cooldown*\n`{instrument} {direction}`\n{reason}")
         return jsonify({"status": "blocked", "reason": reason}), 200
 
