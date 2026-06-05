@@ -4,8 +4,7 @@ import os
 import os as _os
 from config import (
     RISK_PER_TRADE, PAPER_ACCOUNT_SIZE,
-    MAX_DAILY_LOSS, MAX_DAILY_SL_HITS,
-    MAX_WEEKLY_LOSS, MAX_WEEKLY_SL_HITS,
+    MAX_DAILY_LOSS, MAX_WEEKLY_LOSS,
     DATA_DIR,
 )
 
@@ -138,9 +137,6 @@ def is_daily_limit_hit() -> tuple:
     daily_loss = -(paper_state.get("daily_pnl", 0.0))
     if daily_loss >= MAX_DAILY_LOSS:
         return True, f"daily loss limit ${daily_loss:,.0f} / ${MAX_DAILY_LOSS:,.0f}"
-    total_sl = sum(paper_state.get("sl_hits_today", {}).values())
-    if total_sl >= MAX_DAILY_SL_HITS:
-        return True, f"daily SL limit {total_sl}/{MAX_DAILY_SL_HITS} hits"
     return False, ""
 
 
@@ -149,9 +145,6 @@ def is_weekly_limit_hit() -> tuple:
     weekly_loss = -(paper_state.get("weekly_pnl", 0.0))
     if weekly_loss >= MAX_WEEKLY_LOSS:
         return True, f"weekly loss limit ${weekly_loss:,.0f} / ${MAX_WEEKLY_LOSS:,.0f}"
-    weekly_sl = paper_state.get("weekly_sl_hits", 0)
-    if weekly_sl >= MAX_WEEKLY_SL_HITS:
-        return True, f"weekly SL limit {weekly_sl}/{MAX_WEEKLY_SL_HITS} hits"
     return False, ""
 
 
