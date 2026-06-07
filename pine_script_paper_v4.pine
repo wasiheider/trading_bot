@@ -9,10 +9,10 @@
 //
 // Range Quality Gate (must pass before ANY entry):
 //   Boundary Touches: price must enter the high/low boundary zone ≥ 3 times total
-//   Mid Crosses:      price close must flip sides of htf_mid ≥ 5 times
+//   Mid Crosses:      price reaches mid from the opposite settled side ≥ 5 times
+//   1H Swing Pattern: last 50 1H bars must contain down≥4 → up≥4 → down≥4
 //   Both counters reset whenever the 1H range updates to a new high/low.
-//   This filters trending markets — a trending move rarely oscillates back
-//   through mid 5 times or tags both boundaries repeatedly.
+//   The swing pattern proves structural oscillation — trending markets can't pass it.
 //
 // Entry Logic:
 //   Near HIGH zone → 15M bearish BOS → 15M rejection candle at BOS level → SHORT
@@ -52,6 +52,9 @@ max_retrace_pct = input.float(60.0,"Max Retrace — invalidate BOS (%)",        
 
 min_boundary_touches = input.int(3, "Min boundary touches to arm (combined H+L)", group="Filters", minval=1, maxval=10)
 min_mid_crosses      = input.int(5, "Min mid crosses to arm",                     group="Filters", minval=1, maxval=20)
+swing_down_bars      = input.int(4, "1H swing: min consecutive down bars",        group="Filters", minval=2, maxval=10)
+swing_up_bars        = input.int(4, "1H swing: min consecutive up bars",          group="Filters", minval=2, maxval=10)
+swing_lookback       = input.int(50,"1H swing scan window (bars back)",           group="Filters", minval=20, maxval=100)
 use_rotation    = input.bool(false, "Boundary Rotation Gate",                     group="Filters")
 max_break_pct   = input.float(15.0, "Pause entries if range breaks by %",         group="Filters", minval=5.0, step=1.0)
 use_atr_filter  = input.bool(false, "ATR Volatility Filter (block when ATR < avg)",group="Filters")
@@ -106,6 +109,47 @@ zone_size = not na(htf_range) ? htf_range * (zone_pct / 100.0) : na
 
 range_valid  = not na(range_high) and not na(range_low) and not na(htf_range)
 range_broken = range_valid and (close > range_high * (1 + max_break_pct / 100.0) or close < range_low * (1 - max_break_pct / 100.0))
+
+// =============================================================================
+// 1H SWING CONFIRMATION — down≥N → up≥N → down≥N
+// Scans the last `swing_lookback` 1H bars for a complete structural oscillation.
+// Consecutive lower closes = down bar. Consecutive higher closes = up bar.
+// Any bar in the opposite direction resets that leg's streak.
+// Called inside request.security so `close` refers to 1H closes.
+// =============================================================================
+f_h1_swing_confirmed() =>
+    _found  = false
+    _phase  = 0   // 0=looking for first down leg, 1=looking for up leg, 2=looking for final down leg
+    _streak = 0
+    for i = swing_lookback to 1
+        _dir = close[i] < close[i + 1] ? -1 : close[i] > close[i + 1] ? 1 : 0
+        if _phase == 0
+            if _dir == -1
+                _streak := _streak + 1
+                if _streak >= swing_down_bars
+                    _phase  := 1
+                    _streak := 0
+            else if _dir == 1
+                _streak := 0
+        else if _phase == 1
+            if _dir == 1
+                _streak := _streak + 1
+                if _streak >= swing_up_bars
+                    _phase  := 2
+                    _streak := 0
+            else if _dir == -1
+                _streak := 0
+        else if _phase == 2
+            if _dir == -1
+                _streak := _streak + 1
+                if _streak >= swing_down_bars
+                    _found := true
+                    break
+            else if _dir == 1
+                _streak := 0
+    _found
+
+h1_swing_ok = request.security(syminfo.tickerid, "60", f_h1_swing_confirmed())
 
 // =============================================================================
 // ZONE DETECTION
@@ -184,7 +228,7 @@ if not na(htf_mid)
 total_boundary_touches = high_zone_touches + low_zone_touches
 range_quality_ok = total_boundary_touches >= min_boundary_touches
 mid_filter_ok    = mid_crosses >= min_mid_crosses
-range_armed      = range_quality_ok and mid_filter_ok
+range_armed      = range_quality_ok and mid_filter_ok and h1_swing_ok
 
 // =============================================================================
 // BOUNDARY ROTATION GATE
@@ -601,7 +645,7 @@ if show_signals and sl_long_hit
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 17, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 18, bgcolor=color.new(color.black, 70), border_width=1)
 if show_info
     arm_display = not use_rotation ? "OFF" :
          armed_side == "none" ? "WAIT->" + (waiting_for_high ? "HIGH" : "LOW") :
@@ -611,7 +655,8 @@ if show_info
 
     _touches_str = str.tostring(high_zone_touches) + "H + " + str.tostring(low_zone_touches) + "L = " + str.tostring(total_boundary_touches)
     _armed_color = range_armed ? color.green : color.orange
-    _armed_txt   = range_armed ? "YES" : (range_quality_ok ? "NEED MID" : mid_filter_ok ? "NEED TOUCH" : "NO")
+    _armed_txt   = range_armed ? "YES" :
+         (not range_quality_ok ? "NEED TOUCH" : not mid_filter_ok ? "NEED MID" : "NEED SWING")
 
     table.cell(info, 0, 0,  "PAPER MTF v4",                   text_color=color.white, text_size=size.normal)
     table.cell(info, 1, 0,  "1H Range | 15M BOS | 15M Entry", text_color=color.yellow)
@@ -656,6 +701,9 @@ if show_info
     table.cell(info, 0, 15, "ATR Filter",                       text_color=color.gray)
     table.cell(info, 1, 15, _atr_label,
          text_color=not use_atr_filter ? color.gray : atr_ok ? color.green : color.red)
-    table.cell(info, 0, 16, "Range Broken",                     text_color=color.gray)
-    table.cell(info, 1, 16, range_broken ? "YES — paused" : "NO",
+    _swing_txt = h1_swing_ok ? "CONFIRMED (4d-4u-4d)" : "WAITING (4 down, 4 up, 4 down)"
+    table.cell(info, 0, 16, "1H Swing Pattern",                  text_color=color.gray)
+    table.cell(info, 1, 16, _swing_txt,                          text_color=h1_swing_ok ? color.green : color.orange)
+    table.cell(info, 0, 17, "Range Broken",                      text_color=color.gray)
+    table.cell(info, 1, 17, range_broken ? "YES — paused" : "NO",
          text_color=range_broken ? color.red : color.gray)
