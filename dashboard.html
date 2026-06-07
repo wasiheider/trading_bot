@@ -917,9 +917,9 @@ function renderCalendarFallback() {
 // Weekly Δ = this week's lev fund net change vs last week (upcoming week signal)
 // VIX is inverted: high lev-fund longs = high fear = bearish for market
 // MM signal: money managers closing longs faster than their 8-week avg
-const COT_TFF   = { 'ES':'13874+', 'NQ':'209742', 'US30':'12460+', 'BTC':'133741', 'USD':'098662', 'VIX':'1170E1' };
+const COT_TFF   = { 'ES':'13874+', 'NQ':'209742', 'US30':'12460+', 'BTC':'133741', 'USD':'098662', 'EUR':'099741', 'GBP':'096742', 'JPY':'097741', 'VIX':'1170E1' };
 const COT_LEG   = { 'GOLD':'088691', 'SILVER':'084691', 'CRUDE':'067651' };
-const COT_ORDER = ['ES','NQ','US30','BTC','GOLD','SILVER','CRUDE','USD','VIX'];
+const COT_ORDER = ['ES','NQ','US30','BTC','GOLD','SILVER','CRUDE','USD','EUR','GBP','JPY','VIX'];
 
 function _cotIndex(nets) {
   const min = Math.min(...nets), max = Math.max(...nets);
@@ -962,7 +962,7 @@ async function fetchCOT() {
     const tffCodes = Object.values(COT_TFF).map(c=>`'${c.replace(/\+/g,'%2B')}'`).join(',');
     const legCodes = Object.values(COT_LEG).map(c=>`'${c}'`).join(',');
     const [tffRes, legRes] = await Promise.all([
-      fetch(`https://publicreporting.cftc.gov/resource/gpe5-46if.json?$where=cftc_contract_market_code in(${tffCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=300`, {headers:{Accept:'application/json'}}),
+      fetch(`https://publicreporting.cftc.gov/resource/gpe5-46if.json?$where=cftc_contract_market_code in(${tffCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=600`, {headers:{Accept:'application/json'}}),
       fetch(`https://publicreporting.cftc.gov/resource/6dca-aqww.json?$where=cftc_contract_market_code in(${legCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=200`, {headers:{Accept:'application/json'}}),
     ]);
     if (!tffRes.ok || !legRes.ok) throw new Error('CFTC API error');
