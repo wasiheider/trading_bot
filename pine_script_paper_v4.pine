@@ -42,7 +42,6 @@ strategy(
 // =============================================================================
 // INPUTS
 // =============================================================================
-h1_lookback     = input.int(20,    "1H Range Lookback (bars)",                    group="Range",   minval=5,   maxval=100)
 zone_pct        = input.float(8.0, "Boundary Zone % of Range",                    group="Range",   minval=1.0, maxval=20.0, step=0.5)
 
 bos_pivot_len   = input.int(5,     "15M BOS Pivot Length",                        group="Entry",   minval=2,   maxval=10)
@@ -54,9 +53,8 @@ min_boundary_touches = input.int(3, "Min boundary touches to arm (combined H+L)"
 min_mid_crosses      = input.int(5, "Min mid crosses to arm",                     group="Filters", minval=1, maxval=20)
 swing_down_bars      = input.int(4, "1H swing: min consecutive down bars",        group="Filters", minval=2, maxval=10)
 swing_up_bars        = input.int(4, "1H swing: min consecutive up bars",          group="Filters", minval=2, maxval=10)
-swing_lookback       = input.int(50,"1H swing scan window (bars back)",           group="Filters", minval=20, maxval=100)
 use_rotation    = input.bool(false, "Boundary Rotation Gate",                     group="Filters")
-max_break_pct   = input.float(15.0, "Pause entries if range breaks by %",         group="Filters", minval=5.0, step=1.0)
+max_break_pct   = input.float(30.0, "Invalidate range if price breaks by % of range size", group="Filters", minval=5.0, step=5.0)
 use_atr_filter  = input.bool(false, "ATR Volatility Filter (block when ATR < avg)",group="Filters")
 atr_avg_len     = input.int(50,    "ATR average length (above = entry allowed)",   group="Filters", minval=10, maxval=200)
 
@@ -94,12 +92,110 @@ atr_avg = ta.sma(atr_now, atr_avg_len)
 atr_ok  = not use_atr_filter or atr_now > atr_avg
 
 // =============================================================================
-// 1H AUTO-RANGE — highest high and lowest low of the last N 1H bars
+// 1H SWING DETECTION — defines range AND confirms quality
+// Range high = highest pivot high in pattern | Range low = lowest pivot low
+// Pattern A: PH → PL(≥N bars) → PH(≥N) → PL(≥N)  [down-up-down]
+// Pattern B: PL → PH(≥N bars) → PL(≥N) → PH(≥N)  [up-down-up]
+// Detects whichever starts first. Resets after each completion to catch the next range.
+// Same-direction anchor rule: if a same-type pivot appears mid-leg, anchor updates.
 // =============================================================================
-[range_high, range_low] = request.security(
-     syminfo.tickerid, "60",
-     [ta.highest(high, h1_lookback),
-      ta.lowest(low,   h1_lookback)],
+f_h1_swing() =>
+    _plen   = 2
+    _ph_raw = ta.pivothigh(high, _plen, _plen)
+    _pl_raw = ta.pivotlow(low,   _plen, _plen)
+
+    // Phases 0-3 = Pattern A (PH→PL→PH→PL), Phases 4-6 = Pattern B (PL→PH→PL→PH)
+    var int   _phase     = 0
+    var int   _last_bar  = 0
+    var bool  _confirmed = false  // stays true once first pattern done
+    var float _rng_high  = na    // highest pivot high of completed pattern
+    var float _rng_low   = na    // lowest  pivot low  of completed pattern
+    var float _cur_high  = na    // accumulator during current in-progress pattern
+    var float _cur_low   = na
+
+    _ph_bar = bar_index - _plen
+    _pl_bar = bar_index - _plen
+
+    if _phase == 0  // waiting for first pivot — either PH or PL starts a pattern
+        if not na(_ph_raw)
+            _phase    := 1
+            _last_bar := _ph_bar
+            _cur_high := _ph_raw
+            _cur_low  := na
+        else if not na(_pl_raw)
+            _phase    := 4
+            _last_bar := _pl_bar
+            _cur_low  := _pl_raw
+            _cur_high := na
+
+    // ── Pattern A: PH → PL → PH → PL ──────────────────────────────────────
+    else if _phase == 1  // down leg: looking for PL ≥N bars after PH
+        if not na(_ph_raw)  // new PH → update anchor
+            _last_bar := _ph_bar
+            _cur_high := math.max(nz(_cur_high, _ph_raw), _ph_raw)
+        if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
+            _phase    := 2
+            _last_bar := _pl_bar
+            _cur_low  := _pl_raw
+
+    else if _phase == 2  // up leg: looking for PH ≥N bars after PL
+        if not na(_pl_raw)  // new PL → update anchor
+            _last_bar := _pl_bar
+            _cur_low  := math.min(nz(_cur_low, _pl_raw), _pl_raw)
+        if not na(_ph_raw) and _ph_bar - _last_bar >= swing_up_bars
+            _phase    := 3
+            _last_bar := _ph_bar
+            _cur_high := math.max(nz(_cur_high, _ph_raw), _ph_raw)
+
+    else if _phase == 3  // final down leg: looking for PL ≥N bars after PH
+        if not na(_ph_raw)  // new PH → update anchor
+            _last_bar := _ph_bar
+            _cur_high := math.max(nz(_cur_high, _ph_raw), _ph_raw)
+        if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
+            _cur_low   := math.min(nz(_cur_low, _pl_raw), _pl_raw)
+            _rng_high  := _cur_high
+            _rng_low   := _cur_low
+            _confirmed := true
+            _phase     := 0  // reset → look for next range immediately
+            _cur_high  := na
+            _cur_low   := na
+
+    // ── Pattern B: PL → PH → PL → PH ──────────────────────────────────────
+    else if _phase == 4  // up leg: looking for PH ≥N bars after PL
+        if not na(_pl_raw)  // new PL → update anchor
+            _last_bar := _pl_bar
+            _cur_low  := math.min(nz(_cur_low, _pl_raw), _pl_raw)
+        if not na(_ph_raw) and _ph_bar - _last_bar >= swing_up_bars
+            _phase    := 5
+            _last_bar := _ph_bar
+            _cur_high := _ph_raw
+
+    else if _phase == 5  // down leg: looking for PL ≥N bars after PH
+        if not na(_ph_raw)  // new PH → update anchor
+            _last_bar := _ph_bar
+            _cur_high := math.max(nz(_cur_high, _ph_raw), _ph_raw)
+        if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
+            _phase    := 6
+            _last_bar := _pl_bar
+            _cur_low  := math.min(nz(_cur_low, _pl_raw), _pl_raw)
+
+    else if _phase == 6  // final up leg: looking for PH ≥N bars after PL
+        if not na(_pl_raw)  // new PL → update anchor
+            _last_bar := _pl_bar
+            _cur_low  := math.min(nz(_cur_low, _pl_raw), _pl_raw)
+        if not na(_ph_raw) and _ph_bar - _last_bar >= swing_up_bars
+            _cur_high  := math.max(nz(_cur_high, _ph_raw), _ph_raw)
+            _rng_high  := _cur_high
+            _rng_low   := _cur_low
+            _confirmed := true
+            _phase     := 0
+            _cur_high  := na
+            _cur_low   := na
+
+    [_confirmed, _rng_high, _rng_low]
+
+[h1_swing_ok, range_high, range_low] = request.security(
+     syminfo.tickerid, "60", f_h1_swing(),
      lookahead=barmerge.lookahead_off)
 
 htf_range = not na(range_high) and not na(range_low) and range_high > range_low ?
@@ -108,61 +204,7 @@ htf_mid   = not na(htf_range) ? (range_high + range_low) / 2 : na
 zone_size = not na(htf_range) ? htf_range * (zone_pct / 100.0) : na
 
 range_valid  = not na(range_high) and not na(range_low) and not na(htf_range)
-range_broken = range_valid and (close > range_high * (1 + max_break_pct / 100.0) or close < range_low * (1 - max_break_pct / 100.0))
-
-// =============================================================================
-// 1H SWING CONFIRMATION — down≥N → up≥N → down≥N
-// Scans the last `swing_lookback` 1H bars for a complete structural oscillation.
-// Consecutive lower closes = down bar. Consecutive higher closes = up bar.
-// Any bar in the opposite direction resets that leg's streak.
-// Called inside request.security so `close` refers to 1H closes.
-// =============================================================================
-f_h1_swing_confirmed() =>
-    // Pivot-based swing detection: direction is NET (pivot high → low = down, low → high = up).
-    // Individual candle colors inside each leg are irrelevant — any mix of red/green is fine.
-    // Pattern: swing_high → swing_low (≥N bars apart) → swing_high (≥N bars) → swing_low (≥N bars)
-    // When a same-type pivot appears during a leg search, the anchor updates to the latest one
-    // so the leg measurement always starts from the most recent relevant pivot.
-    _plen   = 2  // bars required on each side to confirm a pivot
-    _ph_raw = ta.pivothigh(high, _plen, _plen)
-    _pl_raw = ta.pivotlow(low,   _plen, _plen)
-
-    var int  _phase    = 0
-    var int  _last_bar = 0
-    var bool _done     = false
-
-    _ph_bar = bar_index - _plen  // actual bar the pivot occurred on
-    _pl_bar = bar_index - _plen
-
-    if not _done
-        if _phase == 0  // find first swing high to start the down leg
-            if not na(_ph_raw)
-                _phase    := 1
-                _last_bar := _ph_bar
-
-        else if _phase == 1  // find swing low ≥N bars after the high (down leg)
-            if not na(_ph_raw)   // new higher pivot high — update anchor
-                _last_bar := _ph_bar
-            if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
-                _phase    := 2
-                _last_bar := _pl_bar
-
-        else if _phase == 2  // find swing high ≥N bars after the low (up leg)
-            if not na(_pl_raw)   // new lower pivot low — update anchor
-                _last_bar := _pl_bar
-            if not na(_ph_raw) and _ph_bar - _last_bar >= swing_up_bars
-                _phase    := 3
-                _last_bar := _ph_bar
-
-        else if _phase == 3  // find swing low ≥N bars after the high (final down leg)
-            if not na(_ph_raw)   // new higher pivot high — update anchor
-                _last_bar := _ph_bar
-            if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
-                _done := true
-
-    _done
-
-h1_swing_ok = request.security(syminfo.tickerid, "60", f_h1_swing_confirmed())
+range_broken = range_valid and not na(htf_range) and (close > range_high + htf_range * (max_break_pct / 100.0) or close < range_low - htf_range * (max_break_pct / 100.0))
 
 // =============================================================================
 // ZONE DETECTION
@@ -196,8 +238,13 @@ var string mid_approach_from = "none"
 
 var float prev_range_high  = na
 var float prev_range_low   = na
+var bool  range_invalidated = false
+
+if range_broken
+    range_invalidated := true
 
 if range_high != prev_range_high or range_low != prev_range_low
+    range_invalidated  := false
     was_near_high      := false
     was_near_low       := false
     high_zone_touches  := 0
@@ -241,7 +288,7 @@ if not na(htf_mid)
 total_boundary_touches = high_zone_touches + low_zone_touches
 range_quality_ok = total_boundary_touches >= min_boundary_touches
 mid_filter_ok    = mid_crosses >= min_mid_crosses
-range_armed      = range_quality_ok and mid_filter_ok and h1_swing_ok
+range_armed      = range_quality_ok and mid_filter_ok and h1_swing_ok and not range_invalidated
 
 // =============================================================================
 // BOUNDARY ROTATION GATE
@@ -392,6 +439,49 @@ short_signal = short_retracing and short_rr_ok and not na(short_sl) and bear_ent
 long_signal  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken and atr_ok
 
 // =============================================================================
+// WYCKOFF SPRING / UPTHRUST SIGNALS
+// Spring  : wick below range_low (within 30% spring zone), bar closes back above → LONG
+// Upthrust: wick above range_high (within 30% upthrust zone), bar closes back below → SHORT
+// SL placed below spring wick / above upthrust wick + ATR buffer
+// =============================================================================
+spring_zone_floor  = range_valid and not na(htf_range) ? range_low  - htf_range * (max_break_pct / 100.0) : na
+upthrust_zone_ceil = range_valid and not na(htf_range) ? range_high + htf_range * (max_break_pct / 100.0) : na
+
+in_spring_zone   = range_valid and not na(spring_zone_floor)  and low  < range_low  and low  >= spring_zone_floor
+in_upthrust_zone = range_valid and not na(upthrust_zone_ceil) and high > range_high and high <= upthrust_zone_ceil
+
+spring_sl_raw   = in_spring_zone   ? low  - atr_now * atr_mult : na
+upthrust_sl_raw = in_upthrust_zone ? high + atr_now * atr_mult : na
+
+spring_tp1_p   = htf_mid
+spring_tp2_p   = range_high
+upthrust_tp1_p = htf_mid
+upthrust_tp2_p = range_low
+
+spring_risk_p   = not na(spring_sl_raw)   ? close - spring_sl_raw   : na
+spring_rwd_p    = not na(spring_tp1_p)    ? spring_tp1_p - close     : na
+spring_rr       = not na(spring_risk_p) and spring_risk_p > 0 ? spring_rwd_p / spring_risk_p : 0.0
+spring_rr_ok    = spring_rr >= min_rr
+
+upthrust_risk_p = not na(upthrust_sl_raw) ? upthrust_sl_raw - close  : na
+upthrust_rwd_p  = not na(upthrust_tp1_p)  ? close - upthrust_tp1_p   : na
+upthrust_rr     = not na(upthrust_risk_p) and upthrust_risk_p > 0 ? upthrust_rwd_p / upthrust_risk_p : 0.0
+upthrust_rr_ok  = upthrust_rr >= min_rr
+
+spring_signal = in_spring_zone and close > range_low and was_near_low and range_armed and
+     not range_invalidated and no_position and atr_ok and spring_rr_ok and not na(spring_sl_raw) and
+     not long_signal and not short_signal
+
+upthrust_signal = in_upthrust_zone and close < range_high and was_near_high and range_armed and
+     not range_invalidated and no_position and atr_ok and upthrust_rr_ok and not na(upthrust_sl_raw) and
+     not long_signal and not short_signal
+
+spring_lots       = _lots(close, spring_sl_raw)
+upthrust_lots     = _lots(close, upthrust_sl_raw)
+spring_tp1_lots   = math.max(0.01, math.floor(spring_lots   / 2 / 0.01) * 0.01)
+upthrust_tp1_lots = math.max(0.01, math.floor(upthrust_lots / 2 / 0.01) * 0.01)
+
+// =============================================================================
 // STRATEGY EXECUTION
 // =============================================================================
 if short_signal
@@ -446,6 +536,52 @@ if long_signal
         waiting_for_high := true
         armed_side       := "none"
 
+if spring_signal
+    strategy.entry("SPRING", strategy.long, qty=spring_lots,
+         comment="SPRING " + str.tostring(spring_lots) + "L RR:" + str.tostring(spring_rr,"#.#"))
+    strategy.exit("SPRING_TP1", from_entry="SPRING", qty=spring_tp1_lots,
+         limit=spring_tp1_p, stop=spring_sl_raw, comment="TP1")
+    strategy.exit("SPRING_TP2", from_entry="SPRING",
+         limit=spring_tp2_p, stop=spring_sl_raw, comment="TP2+SL")
+    if barstate.isrealtime
+        alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"LONG","setup":"spring","timeframe":"15"' +
+             ',"lot_size":'    + str.tostring(spring_lots) +
+             ',"entry_price":' + str.tostring(close,          price_format) +
+             ',"stop_loss":'   + str.tostring(spring_sl_raw,  price_format) +
+             ',"tp1":'         + str.tostring(spring_tp1_p,   price_format) +
+             ',"tp2":'         + str.tostring(spring_tp2_p,   price_format) +
+             ',"rr_to_tp1":'   + str.tostring(spring_rr,      "#.##") +
+             ',"range_high":'  + str.tostring(range_high,     price_format) +
+             ',"range_low":'   + str.tostring(range_low,      price_format) +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+    bull_entry_bar  := bar_index
+    bull_bos_active := false
+    was_near_low    := false
+
+if upthrust_signal
+    strategy.entry("UPTHRUST", strategy.short, qty=upthrust_lots,
+         comment="UPTHRUST " + str.tostring(upthrust_lots) + "L RR:" + str.tostring(upthrust_rr,"#.#"))
+    strategy.exit("UPTHRUST_TP1", from_entry="UPTHRUST", qty=upthrust_tp1_lots,
+         limit=upthrust_tp1_p, stop=upthrust_sl_raw, comment="TP1")
+    strategy.exit("UPTHRUST_TP2", from_entry="UPTHRUST",
+         limit=upthrust_tp2_p, stop=upthrust_sl_raw, comment="TP2+SL")
+    if barstate.isrealtime
+        alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"SHORT","setup":"upthrust","timeframe":"15"' +
+             ',"lot_size":'    + str.tostring(upthrust_lots) +
+             ',"entry_price":' + str.tostring(close,            price_format) +
+             ',"stop_loss":'   + str.tostring(upthrust_sl_raw,  price_format) +
+             ',"tp1":'         + str.tostring(upthrust_tp1_p,   price_format) +
+             ',"tp2":'         + str.tostring(upthrust_tp2_p,   price_format) +
+             ',"rr_to_tp1":'   + str.tostring(upthrust_rr,      "#.##") +
+             ',"range_high":'  + str.tostring(range_high,       price_format) +
+             ',"range_low":'   + str.tostring(range_low,        price_format) +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+    bear_entry_bar  := bar_index
+    bear_bos_active := false
+    was_near_high   := false
+
 // =============================================================================
 // TP1 → BREAKEVEN
 // =============================================================================
@@ -458,6 +594,12 @@ if short_signal
 if long_signal
     entry_price_stored := long_entry
     be_tp2             := long_tp2
+if spring_signal
+    entry_price_stored := close
+    be_tp2             := spring_tp2_p
+if upthrust_signal
+    entry_price_stored := close
+    be_tp2             := upthrust_tp2_p
 
 var float prev_pos = 0.0
 pos_changed   = strategy.position_size != prev_pos
@@ -465,9 +607,11 @@ tp1_short_hit = prev_pos < 0 and strategy.position_size < 0 and strategy.positio
 tp1_long_hit  = prev_pos > 0 and strategy.position_size > 0 and strategy.position_size < prev_pos and pos_changed
 
 if tp1_short_hit and not na(entry_price_stored)
-    strategy.exit("SHORT_BE", from_entry="SHORT", limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
+    strategy.exit("SHORT_BE",    from_entry="SHORT",    limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
+    strategy.exit("UPTHRUST_BE", from_entry="UPTHRUST", limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
 if tp1_long_hit  and not na(entry_price_stored)
-    strategy.exit("LONG_BE",  from_entry="LONG",  limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
+    strategy.exit("LONG_BE",     from_entry="LONG",     limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
+    strategy.exit("SPRING_BE",   from_entry="SPRING",   limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
 
 // =============================================================================
 // LIFECYCLE ALERTS
@@ -513,13 +657,13 @@ prev_pos := strategy.position_size
 // VISUALS
 // =============================================================================
 
-// Range levels
-plot(show_range and not na(range_high) ? range_high : na, "1H Range High", color=color.red,               linewidth=2)
-plot(show_range and not na(htf_mid)   ? htf_mid    : na, "Range Mid",      color=color.new(color.gray,0), linewidth=1, style=plot.style_linebr)
-plot(show_range and not na(range_low) ? range_low  : na, "1H Range Low",   color=color.green,             linewidth=2)
+// Range levels — hidden when range is invalidated
+plot(show_range and not range_invalidated and not na(range_high) ? range_high : na, "1H Range High", color=color.red,               linewidth=2)
+plot(show_range and not range_invalidated and not na(htf_mid)   ? htf_mid    : na, "Range Mid",      color=color.new(color.gray,0), linewidth=1, style=plot.style_linebr)
+plot(show_range and not range_invalidated and not na(range_low) ? range_low  : na, "1H Range Low",   color=color.green,             linewidth=2)
 
-bgcolor(near_high ? color.new(color.red,   92) : na, title="High zone")
-bgcolor(near_low  ? color.new(color.green, 92) : na, title="Low zone")
+bgcolor(near_high and not range_invalidated ? color.new(color.red,   92) : na, title="High zone")
+bgcolor(near_low  and not range_invalidated ? color.new(color.green, 92) : na, title="Low zone")
 
 plot(show_bos and bear_bos_active ? bear_bos_level : na, "Bear BOS", color=color.new(color.orange, 0), linewidth=1, style=plot.style_linebr)
 plot(show_bos and bull_bos_active ? bull_bos_level : na, "Bull BOS", color=color.new(color.blue,   0), linewidth=1, style=plot.style_linebr)
@@ -529,9 +673,22 @@ if show_bos and m15_bear_event
 if show_bos and m15_bull_event
     label.new(bar_index, low,  "15M BOS ^", color=color.blue,   textcolor=color.white, style=label.style_label_up,   size=size.small)
 
-// Entry signal arrows
-plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.abovebar, color.white, size=size.normal)
-plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.white, size=size.normal)
+// Entry signal arrows — BOS entries (white) and Spring/Upthrust entries (cyan/purple)
+plotshape(show_signals and short_signal,    "SHORT",    shape.triangledown, location.abovebar, color.white,  size=size.normal)
+plotshape(show_signals and long_signal,     "LONG",     shape.triangleup,   location.belowbar, color.white,  size=size.normal)
+plotshape(show_signals and spring_signal,   "SPRING",   shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
+plotshape(show_signals and upthrust_signal, "UPTHRUST", shape.triangledown, location.abovebar, color.purple, size=size.normal)
+
+// Spring/Upthrust zone shading (lighter than boundary zones)
+bgcolor(in_spring_zone   and not range_invalidated ? color.new(color.aqua,   88) : na, title="Spring zone")
+bgcolor(in_upthrust_zone and not range_invalidated ? color.new(color.purple,  88) : na, title="Upthrust zone")
+
+if show_signals and spring_signal
+    label.new(bar_index, low, "SPRING RR:" + str.tostring(spring_rr,"#.#"),
+         color=color.new(color.aqua,40), textcolor=color.white, style=label.style_label_up, size=size.small)
+if show_signals and upthrust_signal
+    label.new(bar_index, high, "UPTHRUST RR:" + str.tostring(upthrust_rr,"#.#"),
+         color=color.new(color.purple,40), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 if show_signals and short_retracing and not short_signal
     label.new(bar_index, high, "RR:" + str.tostring(short_rr1,"#.#") + (short_rr_ok ? "" : "x"),
@@ -548,11 +705,11 @@ var float active_sl    = na
 var float active_tp1   = na
 var float active_tp2   = na
 
-if short_signal or long_signal
-    active_entry := short_signal ? short_entry : long_entry
-    active_sl    := short_signal ? short_sl    : long_sl
-    active_tp1   := short_signal ? short_tp1   : long_tp1
-    active_tp2   := short_signal ? short_tp2   : long_tp2
+if short_signal or long_signal or spring_signal or upthrust_signal
+    active_entry := short_signal    ? short_entry     : long_signal ? long_entry     : spring_signal ? close          : close
+    active_sl    := short_signal    ? short_sl        : long_signal ? long_sl        : spring_signal ? spring_sl_raw  : upthrust_sl_raw
+    active_tp1   := short_signal    ? short_tp1       : long_signal ? long_tp1       : spring_signal ? spring_tp1_p   : upthrust_tp1_p
+    active_tp2   := short_signal    ? short_tp2       : long_signal ? long_tp2       : spring_signal ? spring_tp2_p   : upthrust_tp2_p
 
 if tp1_short_hit and not na(entry_price_stored)
     active_sl := entry_price_stored
@@ -566,7 +723,7 @@ var line line_sl    = na
 var line line_tp1   = na
 var line line_tp2   = na
 
-_make_lines = show_trade_lvls and ((short_signal or long_signal) or (in_trade and na(line_entry) and not na(active_entry)))
+_make_lines = show_trade_lvls and ((short_signal or long_signal or spring_signal or upthrust_signal) or (in_trade and na(line_entry) and not na(active_entry)))
 if _make_lines
     line.delete(line_entry)
     line.delete(line_sl)
@@ -588,13 +745,13 @@ var label lbl_sl    = na
 var label lbl_tp1   = na
 var label lbl_tp2   = na
 
-_make_labels = show_trade_lvls and ((short_signal or long_signal) or (in_trade and na(lbl_entry) and not na(active_entry)))
+_make_labels = show_trade_lvls and ((short_signal or long_signal or spring_signal or upthrust_signal) or (in_trade and na(lbl_entry) and not na(active_entry)))
 if _make_labels
     label.delete(lbl_entry)
     label.delete(lbl_sl)
     label.delete(lbl_tp1)
     label.delete(lbl_tp2)
-    _dir = strategy.position_size < 0 or short_signal ? "SHORT " : "LONG "
+    _dir = strategy.position_size < 0 or short_signal or upthrust_signal ? "SHORT " : "LONG "
     lbl_entry := label.new(bar_index, active_entry, _dir + str.tostring(active_entry, price_format),
                   color=color.new(color.white, 55), textcolor=color.white, style=label.style_label_right, size=size.tiny)
     lbl_sl    := label.new(bar_index, active_sl, "SL   " + str.tostring(active_sl, price_format),
@@ -658,7 +815,7 @@ if show_signals and sl_long_hit
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 18, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 20, bgcolor=color.new(color.black, 70), border_width=1)
 if show_info
     arm_display = not use_rotation ? "OFF" :
          armed_side == "none" ? "WAIT->" + (waiting_for_high ? "HIGH" : "LOW") :
@@ -667,8 +824,9 @@ if show_info
     retr_state  = short_retracing ? "SHORT RETEST" : long_retracing ? "LONG RETEST" : "--"
 
     _touches_str = str.tostring(high_zone_touches) + "H + " + str.tostring(low_zone_touches) + "L = " + str.tostring(total_boundary_touches)
-    _armed_color = range_armed ? color.green : color.orange
-    _armed_txt   = range_armed ? "YES" :
+    _armed_color = range_invalidated ? color.red : range_armed ? color.green : color.orange
+    _armed_txt   = range_invalidated ? "DISARMED — await new range" :
+         range_armed ? "YES" :
          (not range_quality_ok ? "NEED TOUCH" : not mid_filter_ok ? "NEED MID" : "NEED SWING")
 
     table.cell(info, 0, 0,  "PAPER MTF v4",                   text_color=color.white, text_size=size.normal)
@@ -676,36 +834,36 @@ if show_info
     table.cell(info, 0, 1,  "Symbol",                          text_color=color.gray)
     table.cell(info, 1, 1,  symbol_name,                       text_color=color.white)
     table.cell(info, 0, 2,  "Range High (1H)",                 text_color=color.gray)
-    table.cell(info, 1, 2,  not na(range_high) ? str.tostring(range_high, price_format) : "Waiting...", text_color=color.red)
+    table.cell(info, 1, 2,  range_invalidated ? "--" : not na(range_high) ? str.tostring(range_high, price_format) : "Waiting...", text_color=range_invalidated ? color.gray : color.red)
     table.cell(info, 0, 3,  "Range Mid",                       text_color=color.gray)
-    table.cell(info, 1, 3,  not na(htf_mid) ? str.tostring(htf_mid, price_format) : "--",               text_color=color.white)
+    table.cell(info, 1, 3,  range_invalidated ? "--" : not na(htf_mid) ? str.tostring(htf_mid, price_format) : "--",               text_color=color.gray)
     table.cell(info, 0, 4,  "Range Low  (1H)",                 text_color=color.gray)
-    table.cell(info, 1, 4,  not na(range_low) ? str.tostring(range_low, price_format) : "Waiting...",   text_color=color.green)
+    table.cell(info, 1, 4,  range_invalidated ? "--" : not na(range_low) ? str.tostring(range_low, price_format) : "Waiting...",   text_color=range_invalidated ? color.gray : color.green)
     table.cell(info, 0, 5,  "Boundary Touches",                text_color=color.gray)
-    table.cell(info, 1, 5,  _touches_str,                      text_color=range_quality_ok ? color.green : color.orange)
+    table.cell(info, 1, 5,  range_invalidated ? "--" : _touches_str,                      text_color=range_invalidated ? color.gray : range_quality_ok ? color.green : color.orange)
     table.cell(info, 0, 6,  "Mid Crosses",                     text_color=color.gray)
-    table.cell(info, 1, 6,  str.tostring(mid_crosses) + " / " + str.tostring(min_mid_crosses),
-         text_color=mid_filter_ok ? color.green : color.orange)
+    table.cell(info, 1, 6,  range_invalidated ? "--" : str.tostring(mid_crosses) + " / " + str.tostring(min_mid_crosses),
+         text_color=range_invalidated ? color.gray : mid_filter_ok ? color.green : color.orange)
     table.cell(info, 0, 7,  "Range Armed",                     text_color=color.gray)
     table.cell(info, 1, 7,  _armed_txt,                        text_color=_armed_color)
     table.cell(info, 0, 8,  "At Level",                        text_color=color.gray)
-    table.cell(info, 1, 8,  near_high ? "HIGH ZONE" : near_low ? "LOW ZONE" : "--",
-         text_color=near_high ? color.red : near_low ? color.green : color.gray)
+    table.cell(info, 1, 8,  range_invalidated ? "--" : near_high ? "HIGH ZONE" : near_low ? "LOW ZONE" : "--",
+         text_color=range_invalidated ? color.gray : near_high ? color.red : near_low ? color.green : color.gray)
     table.cell(info, 0, 9,  "Armed Side",                      text_color=color.gray)
-    table.cell(info, 1, 9,  arm_display,                       text_color=armed_side == "none" ? color.orange : color.green)
+    table.cell(info, 1, 9,  range_invalidated ? "--" : arm_display,                       text_color=range_invalidated ? color.gray : armed_side == "none" ? color.orange : color.green)
     table.cell(info, 0, 10, "15M BOS State",                   text_color=color.gray)
-    table.cell(info, 1, 10, bos_state,                         text_color=bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
+    table.cell(info, 1, 10, range_invalidated ? "--" : bos_state,                         text_color=range_invalidated ? color.gray : bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
     table.cell(info, 0, 11, "15M Retest",                      text_color=color.gray)
-    table.cell(info, 1, 11, retr_state,                         text_color=short_retracing ? color.red : long_retracing ? color.green : color.gray)
+    table.cell(info, 1, 11, range_invalidated ? "--" : retr_state,                        text_color=range_invalidated ? color.gray : short_retracing ? color.red : long_retracing ? color.green : color.gray)
     table.cell(info, 0, 12, "R:R",                              text_color=color.gray)
-    table.cell(info, 1, 12, short_retracing ? str.tostring(short_rr1,"#.##")+":1" :
-         long_retracing ? str.tostring(long_rr1,"#.##")+":1" : "--",                                    text_color=color.white)
+    table.cell(info, 1, 12, range_invalidated ? "--" : short_retracing ? str.tostring(short_rr1,"#.##")+":1" :
+         long_retracing ? str.tostring(long_rr1,"#.##")+":1" : "--",                                    text_color=color.gray)
     table.cell(info, 0, 13, "BOS Level",                       text_color=color.gray)
-    table.cell(info, 1, 13, bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
+    table.cell(info, 1, 13, range_invalidated ? "--" : bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
-         text_color=bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
-    table.cell(info, 0, 14, "1H Lookback",                     text_color=color.gray)
-    table.cell(info, 1, 14, str.tostring(h1_lookback),          text_color=color.gray)
+         text_color=range_invalidated ? color.gray : bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
+    table.cell(info, 0, 14, "Min Swing Bars",                   text_color=color.gray)
+    table.cell(info, 1, 14, str.tostring(swing_down_bars) + "+" + str.tostring(swing_up_bars) + "+" + str.tostring(swing_down_bars) + " = " + str.tostring(swing_down_bars + swing_up_bars + swing_down_bars), text_color=color.gray)
     _atr_pips     = math.round(atr_now / pip_size, 1)
     _atr_avg_pips = math.round(atr_avg / pip_size, 1)
     _atr_label    = not use_atr_filter ? "OFF" :
@@ -714,9 +872,19 @@ if show_info
     table.cell(info, 0, 15, "ATR Filter",                       text_color=color.gray)
     table.cell(info, 1, 15, _atr_label,
          text_color=not use_atr_filter ? color.gray : atr_ok ? color.green : color.red)
-    _swing_txt = h1_swing_ok ? "CONFIRMED (4d-4u-4d)" : "WAITING (4 down, 4 up, 4 down)"
+    _swing_txt = h1_swing_ok ? "CONFIRMED (↓↑↓ or ↑↓↑)" : "WAITING (4 down-up-down or up-down-up)"
     table.cell(info, 0, 16, "1H Swing Pattern",                  text_color=color.gray)
-    table.cell(info, 1, 16, _swing_txt,                          text_color=h1_swing_ok ? color.green : color.orange)
+    table.cell(info, 1, 16, range_invalidated ? "--" : _swing_txt,                        text_color=range_invalidated ? color.gray : h1_swing_ok ? color.green : color.orange)
     table.cell(info, 0, 17, "Range Broken",                      text_color=color.gray)
-    table.cell(info, 1, 17, range_broken ? "YES — paused" : "NO",
-         text_color=range_broken ? color.red : color.gray)
+    table.cell(info, 1, 17, range_invalidated ? "YES — await new range" : range_broken ? "BREAKING" : "NO",
+         text_color=range_invalidated ? color.red : range_broken ? color.orange : color.gray)
+    _su_zone = in_spring_zone ? "SPRING ZONE" : in_upthrust_zone ? "UPTHRUST ZONE" : "--"
+    _su_clr  = in_spring_zone ? color.aqua    : in_upthrust_zone ? color.purple     : color.gray
+    _su_rr   = in_spring_zone   ? "RR:" + str.tostring(spring_rr,   "#.##") + ":1" + (spring_rr_ok   ? " OK" : " LOW") :
+               in_upthrust_zone ? "RR:" + str.tostring(upthrust_rr, "#.##") + ":1" + (upthrust_rr_ok ? " OK" : " LOW") : "--"
+    _su_rr_clr = in_spring_zone ? (spring_rr_ok ? color.green : color.orange) :
+                 in_upthrust_zone ? (upthrust_rr_ok ? color.green : color.orange) : color.gray
+    table.cell(info, 0, 18, "Spring/Upthrust",  text_color=color.gray)
+    table.cell(info, 1, 18, range_invalidated ? "--" : _su_zone, text_color=range_invalidated ? color.gray : _su_clr)
+    table.cell(info, 0, 19, "Spring R:R",        text_color=color.gray)
+    table.cell(info, 1, 19, range_invalidated ? "--" : _su_rr,   text_color=range_invalidated ? color.gray : _su_rr_clr)

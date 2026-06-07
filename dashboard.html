@@ -106,11 +106,14 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .cg{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .cc{background:var(--bg2);border-radius:3px;padding:6px 8px}
 .csym{font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700}
-.cbias{font-size:12px;font-weight:700;margin:2px 0}
+.cpop{font-size:7px;color:var(--t3)}
+.cbias{font-size:11px;font-weight:700;margin:2px 0}
 .cbull{color:var(--g)}.cbear{color:var(--r)}.cneut{color:var(--t2)}
-.cconf{font-size:8px;color:var(--t3)}
-.cbg{background:var(--bg3);border-radius:1px;height:3px;margin-top:4px}
+.ctrend{font-size:9px;margin-left:4px}
+.cconf{font-size:8px;color:var(--t3);margin-bottom:3px}
+.cbg{background:var(--bg3);border-radius:1px;height:3px;position:relative}
 .cbf{height:3px;border-radius:1px}
+.cidx-marker{position:absolute;top:-1px;width:2px;height:5px;border-radius:1px;background:var(--t2);transform:translateX(-50%)}
 
 /* FOMC */
 .fcount{background:var(--bg2);border-radius:3px;padding:10px;text-align:center}
@@ -907,56 +910,174 @@ function renderCalendarFallback() {
   document.getElementById('week-events').innerHTML  = '<div class="ni"><div class="ntime" style="color:var(--t3)">Add key to script</div></div>';
 }
 
-// ── CFTC COT ───────────────────────────────────────────────
-const COT_FALLBACK = [
-  { sym:'ES',    long:213840, short:92140,  bias:'Bullish', pct:70 },
-  { sym:'NQ',    long:28950,  short:14200,  bias:'Bullish', pct:67 },
-  { sym:'GOLD',  long:287600, short:102400, bias:'Bullish', pct:74 },
-  { sym:'SILVER',long:58900,  short:41200,  bias:'Neutral', pct:59 },
-  { sym:'CRUDE', long:412000, short:298000, bias:'Bullish', pct:58 },
-  { sym:'USD',   long:38200,  short:58400,  bias:'Bearish', pct:60 },
-  { sym:'EUR',   long:214000, short:98000,  bias:'Bullish', pct:69 },
-  { sym:'VIX',   long:82000,  short:34000,  bias:'Rising',  pct:71 },
-];
-const COT_CODES = { 'ES':'13874+','NQ':'209742','GOLD':'088691','SILVER':'084691','CRUDE':'067651','USD':'098662','EUR':'099741','VIX':'1170E1' };
+// ── CFTC COT Index (Larry Williams method) ─────────────────
+// TFF dataset: ES, NQ, US30, BTC, USD, VIX → leveraged fund net position
+// Legacy dataset: GOLD, SILVER, CRUDE → non-commercial net position
+// Index = (current_net - 52wk_min) / (52wk_max - 52wk_min) × 100
+// Weekly Δ = this week's lev fund net change vs last week (upcoming week signal)
+// VIX is inverted: high lev-fund longs = high fear = bearish for market
+// MM signal: money managers closing longs faster than their 8-week avg
+const COT_TFF   = { 'ES':'13874+', 'NQ':'209742', 'US30':'12460+', 'BTC':'133741', 'USD':'098662', 'VIX':'1170E1' };
+const COT_LEG   = { 'GOLD':'088691', 'SILVER':'084691', 'CRUDE':'067651' };
+const COT_ORDER = ['ES','NQ','US30','BTC','GOLD','SILVER','CRUDE','USD','VIX'];
+
+function _cotIndex(nets) {
+  const min = Math.min(...nets), max = Math.max(...nets);
+  const range = max - min || 1;
+  return nets.map(n => Math.round(((n - min) / range) * 100));
+}
+
+// Returns 'closing'|'adding'|null vs 4-week average
+function _mmSignal(changes) {
+  if (changes.length < 4) return null;
+  const w       = changes.slice(-4);
+  const current = w[w.length - 1];
+  const avg     = w.reduce((s, v) => s + v, 0) / w.length;
+  const std     = Math.sqrt(w.reduce((s, v) => s + (v - avg) ** 2, 0) / w.length) || 1;
+  if (current < avg - std * 0.75) return 'closing';
+  if (current > avg + std * 0.75) return 'adding';
+  return null;
+}
+
+// Lev fund delta signal: are they covering/pressing vs their 4-week avg?
+// 'covering' = delta significantly more positive than avg (reducing bearish position)
+// 'pressing' = delta significantly more negative than avg (adding to bearish position)
+// 'flipped'  = direction reversal: last week negative, this week positive
+function _levSignal(deltas) {
+  if (deltas.length < 2) return null;
+  const prev    = deltas[deltas.length - 2];
+  const current = deltas[deltas.length - 1];
+  if (prev < 0 && current > 0) return 'flipped';
+  if (deltas.length < 4) return null;
+  const w   = deltas.slice(-4);
+  const avg = w.reduce((s, v) => s + v, 0) / w.length;
+  const std = Math.sqrt(w.reduce((s, v) => s + (v - avg) ** 2, 0) / w.length) || 1;
+  if (current > avg + std * 0.75) return 'covering';
+  if (current < avg - std * 0.75) return 'pressing';
+  return null;
+}
 
 async function fetchCOT() {
   try {
-    const BASE = 'https://publicreporting.cftc.gov/resource/gpe5-46if.json';
-    const codes = Object.values(COT_CODES).map(c=>`'${c}'`).join(',');
-    const res = await fetch(`${BASE}?$where=cftc_contract_market_code in(${codes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=50`,{headers:{'Accept':'application/json'}});
-    if (!res.ok) throw new Error('CFTC ' + res.status);
-    const rows = await res.json();
-    if (!rows.length) throw new Error('No data');
-    const latest = {};
-    rows.forEach(r => { const c = r.cftc_contract_market_code; if (!latest[c]) latest[c] = r; });
-    const results = Object.entries(COT_CODES).map(([sym, code]) => {
-      const row = latest[code];
-      if (!row) return COT_FALLBACK.find(f=>f.sym===sym) || { sym, long:0, short:0, bias:'N/A', pct:50 };
-      const longs  = parseInt(row.noncomm_positions_long_all  || row.asset_mgr_positions_long  || 0);
-      const shorts = parseInt(row.noncomm_positions_short_all || row.asset_mgr_positions_short || 0);
-      const total  = longs + shorts || 1;
-      const pct    = Math.round((longs/total)*100);
-      let bias = pct>=60?'Bullish':pct<=40?'Bearish':'Neutral';
-      if (sym==='VIX' && pct>=60) bias = 'Rising';
-      return { sym, long:longs, short:shorts, bias, pct };
-    });
-    const reportDate = rows[0]?.report_date_as_yyyy_mm_dd;
-    document.getElementById('cot-updated').textContent = reportDate ? 'CFTC ' + reportDate.slice(5).replace('-','/') : 'CFTC Live';
+    const tffCodes = Object.values(COT_TFF).map(c=>`'${c}'`).join(',');
+    const legCodes = Object.values(COT_LEG).map(c=>`'${c}'`).join(',');
+    const [tffRes, legRes] = await Promise.all([
+      fetch(`https://publicreporting.cftc.gov/resource/gpe5-46if.json?$where=cftc_contract_market_code in(${tffCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=300`, {headers:{Accept:'application/json'}}),
+      fetch(`https://publicreporting.cftc.gov/resource/6dca-aqww.json?$where=cftc_contract_market_code in(${legCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=200`, {headers:{Accept:'application/json'}}),
+    ]);
+    if (!tffRes.ok || !legRes.ok) throw new Error('CFTC API error');
+    const [tffRows, legRows] = await Promise.all([tffRes.json(), legRes.json()]);
+
+    const results = [];
+
+    // TFF instruments — leveraged fund COT index + weekly Δ + asset manager MM signal
+    for (const [sym, code] of Object.entries(COT_TFF)) {
+      const rows = tffRows
+        .filter(r => r.cftc_contract_market_code === code)
+        .sort((a, b) => a.report_date_as_yyyy_mm_dd.localeCompare(b.report_date_as_yyyy_mm_dd));
+      if (rows.length < 2) continue;
+      const nets = rows.map(r => parseInt(r.lev_money_positions_long || 0) - parseInt(r.lev_money_positions_short || 0));
+      let idxs = _cotIndex(nets);
+      if (sym === 'VIX') idxs = idxs.map(i => 100 - i);
+      const idx  = idxs[idxs.length - 1];
+      const bias = idx >= 60 ? 'Bullish' : idx <= 40 ? 'Bearish' : 'Neutral';
+      const date = rows[rows.length - 1].report_date_as_yyyy_mm_dd?.substring(0, 10);
+      // Weekly Δ: net contracts lev funds added/removed this week vs last week
+      const latestRow = rows[rows.length - 1];
+      let weeklyDelta = parseInt(latestRow.change_in_lev_money_long || 0) - parseInt(latestRow.change_in_lev_money_short || 0);
+      if (sym === 'VIX') weeklyDelta = -weeklyDelta;
+      // Lev fund signal: covering/pressing/flipped vs 4-week avg of weekly deltas
+      const levDeltas = rows.map(r => {
+        let d = parseInt(r.change_in_lev_money_long || 0) - parseInt(r.change_in_lev_money_short || 0);
+        return sym === 'VIX' ? -d : d;
+      });
+      const lev = _levSignal(levDeltas);
+      // MM signal: asset managers closing/adding longs vs their 4-week avg
+      const amChanges = rows.map(r => parseInt(r.change_in_asset_mgr_long || 0));
+      const mm = sym === 'VIX' ? null : _mmSignal(amChanges);
+      results.push({ sym, idx, bias, weeklyDelta, date, pop: sym === 'VIX' ? 'LevF (inv)' : 'Lev Funds', lev, mm });
+    }
+
+    // Legacy commodity instruments — non-commercial COT index + weekly Δ + MM signal
+    for (const [sym, code] of Object.entries(COT_LEG)) {
+      const rows = legRows
+        .filter(r => r.cftc_contract_market_code === code)
+        .sort((a, b) => a.report_date_as_yyyy_mm_dd.localeCompare(b.report_date_as_yyyy_mm_dd));
+      if (rows.length < 2) continue;
+      const nets = rows.map(r => parseInt(r.noncomm_positions_long_all || 0) - parseInt(r.noncomm_positions_short_all || 0));
+      const idxs = _cotIndex(nets);
+      const idx  = idxs[idxs.length - 1];
+      const bias = idx >= 60 ? 'Bullish' : idx <= 40 ? 'Bearish' : 'Neutral';
+      const date = rows[rows.length - 1].report_date_as_yyyy_mm_dd?.substring(0, 10);
+      // Weekly Δ: net contracts non-comm added/removed this week vs last week
+      const latestRow   = rows[rows.length - 1];
+      const weeklyDelta = parseInt(latestRow.change_in_noncomm_long_all || 0) - parseInt(latestRow.change_in_noncomm_short_all || 0);
+      // Lev signal on noncomm deltas (covering/pressing/flipped vs 4-week avg)
+      const ncDeltas = rows.map(r => parseInt(r.change_in_noncomm_long_all || 0) - parseInt(r.change_in_noncomm_short_all || 0));
+      const lev = _levSignal(ncDeltas);
+      // MM signal: non-commercial closing/adding longs vs their 4-week avg
+      const ncChanges = rows.map(r => parseInt(r.change_in_noncomm_long_all || 0));
+      const mm = _mmSignal(ncChanges);
+      results.push({ sym, idx, bias, weeklyDelta, date, pop: 'NonComm', lev, mm });
+    }
+
+    const latest = results.map(r => r.date).filter(Boolean).sort().reverse()[0];
+    document.getElementById('cot-updated').textContent = latest ? 'CFTC ' + latest.slice(5).replace('-', '/') : 'CFTC Live';
     renderCOT(results);
   } catch(e) {
-    console.warn('CFTC fallback:', e);
-    document.getElementById('cot-updated').textContent = 'Fallback data';
-    renderCOT(COT_FALLBACK);
+    console.warn('COT fetch failed:', e);
+    document.getElementById('cot-updated').textContent = 'Fetch error';
+    document.getElementById('cot-grid').innerHTML = '<div class="cc" style="grid-column:1/-1;text-align:center;padding:12px"><div style="font-size:8px;color:var(--r);letter-spacing:1px">COT DATA UNAVAILABLE</div></div>';
   }
 }
 
 function renderCOT(items) {
+  items.sort((a, b) => COT_ORDER.indexOf(a.sym) - COT_ORDER.indexOf(b.sym));
   const grid = document.getElementById('cot-grid');
   grid.innerHTML = items.map(item => {
-    const biasClass = item.bias==='Bullish'?'cbull':item.bias==='Bearish'||item.bias==='Rising'?'cbear':'cneut';
-    const barColor  = item.bias==='Bullish'?'var(--g)':item.bias==='Bearish'||item.bias==='Rising'?'var(--r)':'var(--t2)';
-    return `<div class="cc"><div class="csym">${item.sym}</div><div class="cbias ${biasClass}">${item.bias}</div><div class="cconf">${item.pct}%</div><div class="cbg"><div class="cbf" style="width:${item.pct}%;background:${barColor}"></div></div></div>`;
+    const biasClass = item.bias === 'Bullish' ? 'cbull' : item.bias === 'Bearish' ? 'cbear' : 'cneut';
+    const barColor  = item.bias === 'Bullish' ? 'var(--g)' : item.bias === 'Bearish' ? 'var(--r)' : 'var(--t2)';
+    // Weekly Δ: how many net contracts lev funds added/removed this week
+    let deltaHtml = '';
+    if (item.weeklyDelta !== undefined && item.weeklyDelta !== null) {
+      const dk    = (item.weeklyDelta / 1000).toFixed(1);
+      const sign  = item.weeklyDelta >= 0 ? '+' : '';
+      const arrow = item.weeklyDelta > 0 ? '▲' : '▼';
+      const col   = item.weeklyDelta > 0 ? 'var(--g)' : 'var(--r)';
+      deltaHtml = `<span class="ctrend" style="color:${col}">${arrow}${sign}${dk}k</span>`;
+    }
+    let levHtml = '';
+    if (item.lev === 'flipped') {
+      levHtml = `<div style="font-size:7px;color:var(--g);margin-top:3px;font-weight:700;letter-spacing:.5px">LEV ↑ FLIPPED — WATCH REVERSAL</div>`;
+    } else if (item.lev === 'covering') {
+      levHtml = `<div style="font-size:7px;color:var(--g);margin-top:3px;letter-spacing:.5px">Lev ↑ Covering above avg</div>`;
+    } else if (item.lev === 'pressing') {
+      levHtml = `<div style="font-size:7px;color:var(--r);margin-top:3px;letter-spacing:.5px">Lev ↓ Pressing below avg</div>`;
+    }
+    let mmHtml = '';
+    if (item.mm === 'closing') {
+      mmHtml = `<div style="font-size:7px;color:var(--r);margin-top:2px;letter-spacing:.5px">MM ▼ Closing Longs</div>`;
+    } else if (item.mm === 'adding') {
+      mmHtml = `<div style="font-size:7px;color:var(--g);margin-top:2px;letter-spacing:.5px">MM ▲ Adding Longs</div>`;
+    }
+    return `
+      <div class="cc">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div class="csym">${item.sym}</div>
+          <div class="cpop">${item.pop}</div>
+        </div>
+        <div style="display:flex;align-items:baseline">
+          <div class="cbias ${biasClass}">${item.bias}</div>
+          ${deltaHtml}
+        </div>
+        <div class="cconf">Index: ${item.idx}/100</div>
+        <div class="cbg">
+          <div class="cbf" style="width:${item.idx}%;background:${barColor}"></div>
+          <div class="cidx-marker" style="left:60%"></div>
+          <div class="cidx-marker" style="left:40%"></div>
+        </div>
+        ${levHtml}${mmHtml}
+      </div>`;
   }).join('');
 }
 
