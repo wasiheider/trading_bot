@@ -150,14 +150,18 @@ def _calc_sl_pips(instrument: str, entry_price, sl_price):
 
 
 def handle_paper_signal(data):
-    instrument = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
-    direction  = data.get("direction", "").upper()
-    price      = data.get("entry_price", data.get("price"))
-    sl         = data.get("stop_loss", data.get("sl"))
-    tp1        = data.get("tp1")
-    tp2        = data.get("tp2")
-    rr         = data.get("rr_to_tp1")
-    sl_pips    = _calc_sl_pips(instrument, price, sl) or data.get("sl_pips")
+    instrument  = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
+    direction   = data.get("direction", "").upper()
+    price       = data.get("entry_price", data.get("price"))
+    sl          = data.get("stop_loss", data.get("sl"))
+    tp1         = data.get("tp1")
+    tp2         = data.get("tp2")
+    rr          = data.get("rr_to_tp1")
+    timeframe   = data.get("timeframe", "?")       # "15" for v4, "5" for v3
+    bos_level   = data.get("bos_level")
+    range_high  = data.get("range_high")
+    range_low   = data.get("range_low")
+    sl_pips     = _calc_sl_pips(instrument, price, sl) or data.get("sl_pips")
 
     open_count = sum(1 for t in _load_trades_log().get("paper", []) if t.get("result") == "OPEN")
     if open_count >= 5:
@@ -198,7 +202,9 @@ def handle_paper_signal(data):
             print(f"[oanda] ERROR placing order: {e}", flush=True)
 
     emoji   = "🟢" if direction == "LONG" else "🔴"
-    rr_line = f"\nR:R: `{rr}`" if rr else ""
+    rr_line  = f"\nR:R: `{rr}`" if rr else ""
+    bos_line = f"\nBOS: `{bos_level}`" if bos_level else ""
+    tf_label = f"15M" if str(timeframe) == "15" else f"{timeframe}M"
     if limit_hit:
         exec_line = f"\n⚠️ *NOT EXECUTED — {limit_reason}*"
     elif not oanda_supported:
@@ -210,7 +216,7 @@ def handle_paper_signal(data):
 
     msg = (
         f"{_MASCOT}\n"
-        f"{emoji} *Paper — {instrument} {direction}*\n"
+        f"{emoji} *Paper — {instrument} {direction}* [{tf_label}]\n"
         f"Entry: `{price}`\n"
         f"SL: `{sl}`\n"
         f"TP1: `{tp1}`\n"
@@ -218,6 +224,7 @@ def handle_paper_signal(data):
         f"Lots: `{risk['lot_size']}`\n"
         f"Risk: `${risk['risk_dollars']}`"
         f"{rr_line}"
+        f"{bos_line}"
         f"{exec_line}"
     )
 
@@ -228,10 +235,14 @@ def handle_paper_signal(data):
             "date":           ct_now().strftime("%Y-%m-%d %H:%M"),
             "instrument":     instrument,
             "direction":      direction,
+            "timeframe":      timeframe,
             "price":          oanda_fill_price,
             "sl":             sl,
             "tp1":            tp1,
             "tp2":            tp2,
+            "bos_level":      bos_level,
+            "range_high":     range_high,
+            "range_low":      range_low,
             "lot_size":       risk["lot_size"],
             "result":         "OPEN",
             "pnl":            0,
@@ -517,4 +528,4 @@ def admin_reset():
 # ── Health ─────────────────────────────────────────────────
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "mode": "paper-trading", "time": ct_now().isoformat()}), 200
+    return jsonify({"status": "ok", "mode": "paper-trading", "strategy": "v4", "time": ct_now().isoformat()}), 200
