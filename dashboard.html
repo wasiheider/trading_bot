@@ -959,7 +959,7 @@ function _levSignal(deltas) {
 
 async function fetchCOT() {
   try {
-    const tffCodes = Object.values(COT_TFF).map(c=>`'${c}'`).join(',');
+    const tffCodes = Object.values(COT_TFF).map(c=>`'${c.replace(/\+/g,'%2B')}'`).join(',');
     const legCodes = Object.values(COT_LEG).map(c=>`'${c}'`).join(',');
     const [tffRes, legRes] = await Promise.all([
       fetch(`https://publicreporting.cftc.gov/resource/gpe5-46if.json?$where=cftc_contract_market_code in(${tffCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=300`, {headers:{Accept:'application/json'}}),
