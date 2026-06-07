@@ -118,36 +118,49 @@ range_broken = range_valid and (close > range_high * (1 + max_break_pct / 100.0)
 // Called inside request.security so `close` refers to 1H closes.
 // =============================================================================
 f_h1_swing_confirmed() =>
-    _found  = false
-    _phase  = 0   // 0=looking for first down leg, 1=looking for up leg, 2=looking for final down leg
-    _streak = 0
-    for i = swing_lookback to 1
-        _dir = close[i] < close[i + 1] ? -1 : close[i] > close[i + 1] ? 1 : 0
-        if _phase == 0
-            if _dir == -1
-                _streak := _streak + 1
-                if _streak >= swing_down_bars
-                    _phase  := 1
-                    _streak := 0
-            else if _dir == 1
-                _streak := 0
-        else if _phase == 1
-            if _dir == 1
-                _streak := _streak + 1
-                if _streak >= swing_up_bars
-                    _phase  := 2
-                    _streak := 0
-            else if _dir == -1
-                _streak := 0
-        else if _phase == 2
-            if _dir == -1
-                _streak := _streak + 1
-                if _streak >= swing_down_bars
-                    _found := true
-                    break
-            else if _dir == 1
-                _streak := 0
-    _found
+    // Pivot-based swing detection: direction is NET (pivot high → low = down, low → high = up).
+    // Individual candle colors inside each leg are irrelevant — any mix of red/green is fine.
+    // Pattern: swing_high → swing_low (≥N bars apart) → swing_high (≥N bars) → swing_low (≥N bars)
+    // When a same-type pivot appears during a leg search, the anchor updates to the latest one
+    // so the leg measurement always starts from the most recent relevant pivot.
+    _plen   = 2  // bars required on each side to confirm a pivot
+    _ph_raw = ta.pivothigh(high, _plen, _plen)
+    _pl_raw = ta.pivotlow(low,   _plen, _plen)
+
+    var int  _phase    = 0
+    var int  _last_bar = 0
+    var bool _done     = false
+
+    _ph_bar = bar_index - _plen  // actual bar the pivot occurred on
+    _pl_bar = bar_index - _plen
+
+    if not _done
+        if _phase == 0  // find first swing high to start the down leg
+            if not na(_ph_raw)
+                _phase    := 1
+                _last_bar := _ph_bar
+
+        else if _phase == 1  // find swing low ≥N bars after the high (down leg)
+            if not na(_ph_raw)   // new higher pivot high — update anchor
+                _last_bar := _ph_bar
+            if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
+                _phase    := 2
+                _last_bar := _pl_bar
+
+        else if _phase == 2  // find swing high ≥N bars after the low (up leg)
+            if not na(_pl_raw)   // new lower pivot low — update anchor
+                _last_bar := _pl_bar
+            if not na(_ph_raw) and _ph_bar - _last_bar >= swing_up_bars
+                _phase    := 3
+                _last_bar := _ph_bar
+
+        else if _phase == 3  // find swing low ≥N bars after the high (final down leg)
+            if not na(_ph_raw)   // new higher pivot high — update anchor
+                _last_bar := _ph_bar
+            if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
+                _done := true
+
+    _done
 
 h1_swing_ok = request.security(syminfo.tickerid, "60", f_h1_swing_confirmed())
 
