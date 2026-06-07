@@ -917,9 +917,9 @@ function renderCalendarFallback() {
 // Weekly Δ = this week's lev fund net change vs last week (upcoming week signal)
 // VIX is inverted: high lev-fund longs = high fear = bearish for market
 // MM signal: money managers closing longs faster than their 8-week avg
-const COT_TFF   = { 'ES':'13874+', 'NQ':'209742', 'US30':'12460+', 'BTC':'133741', 'USD':'098662', 'EUR':'099741', 'GBP':'096742', 'JPY':'097741', 'VIX':'1170E1' };
+const COT_TFF   = { 'ES':'13874+', 'NQ':'209742', 'RTY':'239742', 'US30':'12460+', 'BTC':'133741', 'USD':'098662', 'EUR':'099741', 'GBP':'096742', 'JPY':'097741', 'NZD':'112741', 'VIX':'1170E1' };
 const COT_LEG   = { 'GOLD':'088691', 'SILVER':'084691', 'CRUDE':'067651' };
-const COT_ORDER = ['ES','NQ','US30','BTC','GOLD','SILVER','CRUDE','USD','EUR','GBP','JPY','VIX'];
+const COT_ORDER = ['ES','NQ','RTY','US30','BTC','GOLD','SILVER','CRUDE','USD','EUR','GBP','JPY','NZD','VIX'];
 
 function _cotIndex(nets) {
   const min = Math.min(...nets), max = Math.max(...nets);
