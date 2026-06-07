@@ -84,7 +84,7 @@ is_us500      = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "S
 pip_value_per_001 = is_xauusd ? 0.01 : is_usoil ? 0.10 : is_us100 ? 0.01 : 0.10
 pip_size          = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0  : syminfo.mintick * 10
 price_format      = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
-risk_dollars      = 250.0
+risk_dollars      = 500.0
 
 // =============================================================================
 // ATR (15M native)
