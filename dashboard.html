@@ -230,9 +230,24 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="ct">Schedule</div>
     <div class="sr2"><span class="sl3">&#8635; Daily Reset</span><div class="st">00:00<div class="sd">Daily CT</div></div></div>
     <div class="sr2"><span class="sl3">&#9654; ATR Filter</span><div class="st">15M ATR<div class="sd">above 50-bar avg</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">15% beyond<div class="sd">boundary = pause</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">30% of range<div class="sd">outside boundary = pause</div></div></div>
     <div class="sr2"><span class="sl3">&#9825; Heartbeat</span><div class="st">Hourly<div class="sd">Railway keepalive</div></div></div>
     <div class="sr2"><span class="sl3">&#9654; POC Window</span><div class="st">Active<div class="sd">live signals</div></div></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">Strategy v4 Architecture</div>
+    <div class="row"><span class="rl">Range High/Low</span><span class="rv" style="color:var(--b)">1H · 20-bar rolling H/L</span></div>
+    <div class="row"><span class="rl">Range Mid</span><span class="rv" style="color:var(--t2)">(High + Low) / 2</span></div>
+    <div class="row"><span class="rl">Quality Gate</span><span class="rv" style="color:var(--a)">30M swing 4+4+4</span></div>
+    <div class="row"><span class="rl">+ Boundary Touches</span><span class="rv" style="color:var(--t2)">≥ 3 combined H+L</span></div>
+    <div class="row"><span class="rl">+ Mid Crosses</span><span class="rv" style="color:var(--t2)">≥ 5 from settled side</span></div>
+    <div class="row"><span class="rl">Entry A — BOS</span><span class="rv" style="color:var(--t2)">15M BOS + rejection candle</span></div>
+    <div class="row"><span class="rl">Entry B — Wyckoff</span><span class="rv" style="color:var(--pu)">Spring / Upthrust</span></div>
+    <div class="row"><span class="rl">TP1 / TP2</span><span class="rv" style="color:var(--g)">Range mid / opposite boundary</span></div>
+    <div class="row"><span class="rl">SL</span><span class="rv" style="color:var(--r)">15M swing + 1× ATR buffer</span></div>
+    <div class="row"><span class="rl">Risk / Trade</span><span class="rv">$250 · Min R:R 1.5</span></div>
+    <div class="row"><span class="rl">Range Reset</span><span class="rv" style="color:var(--t2)">On structural expansion only</span></div>
   </div>
 </div>
 
@@ -243,7 +258,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="exec-banner">
     <div>
       <div class="exec-mode">&#9654; Auto-Executing — OANDA Demo (Forex) · Log+Telegram (All Others)</div>
-      <div class="exec-sub">TradingView 15M alert → Railway webhook → OANDA market order · Forex: EURUSD, GBPUSD, USDJPY, EURNZD · Others: log only</div>
+      <div class="exec-sub">1H rolling range (20-bar H/L) · 30M swing quality gate · 15M BOS/Spring/Upthrust entry · Forex: EURUSD, GBPUSD, USDJPY, EURNZD · Others: log+Telegram only</div>
     </div>
     <span class="bd2 bg2">PAPER</span>
   </div>
