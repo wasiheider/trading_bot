@@ -10,7 +10,7 @@
 // Range Quality Gate (must pass before ANY entry):
 //   Boundary Touches: price must enter the high/low boundary zone ≥ 3 times total
 //   Mid Crosses:      price reaches mid from the opposite settled side ≥ 5 times
-//   1H Swing Pattern: last 50 1H bars must contain down≥4 → up≥4 → down≥4
+//   30M Swing Pattern: 30M bars must contain down≥4 → up≥4 → down≥4 (range levels stay 1H)
 //   Both counters reset whenever the 1H range updates to a new high/low.
 //   The swing pattern proves structural oscillation — trending markets can't pass it.
 //
@@ -43,6 +43,7 @@ strategy(
 // INPUTS
 // =============================================================================
 zone_pct        = input.float(8.0, "Boundary Zone % of Range",                    group="Range",   minval=1.0, maxval=20.0, step=0.5)
+range_bars      = input.int(20,    "1H Range Lookback (bars)",                     group="Range",   minval=5,   maxval=100)
 
 bos_pivot_len   = input.int(5,     "15M BOS Pivot Length",                        group="Entry",   minval=2,   maxval=10)
 min_rr          = input.float(1.5, "Min R:R to TP1",                              group="Entry",   minval=1.0, step=0.1)
@@ -51,8 +52,8 @@ max_retrace_pct = input.float(60.0,"Max Retrace — invalidate BOS (%)",        
 
 min_boundary_touches = input.int(3, "Min boundary touches to arm (combined H+L)", group="Filters", minval=1, maxval=10)
 min_mid_crosses      = input.int(5, "Min mid crosses to arm",                     group="Filters", minval=1, maxval=20)
-swing_down_bars      = input.int(4, "1H swing: min consecutive down bars",        group="Filters", minval=2, maxval=10)
-swing_up_bars        = input.int(4, "1H swing: min consecutive up bars",          group="Filters", minval=2, maxval=10)
+swing_down_bars      = input.int(4, "30M swing: min consecutive down bars",       group="Filters", minval=2, maxval=10)
+swing_up_bars        = input.int(4, "30M swing: min consecutive up bars",         group="Filters", minval=2, maxval=10)
 use_rotation    = input.bool(false, "Boundary Rotation Gate",                     group="Filters")
 max_break_pct   = input.float(30.0, "Invalidate range if price breaks by % of range size", group="Filters", minval=5.0, step=5.0)
 use_atr_filter  = input.bool(false, "ATR Volatility Filter (block when ATR < avg)",group="Filters")
@@ -92,111 +93,85 @@ atr_avg = ta.sma(atr_now, atr_avg_len)
 atr_ok  = not use_atr_filter or atr_now > atr_avg
 
 // =============================================================================
-// 1H SWING DETECTION — defines range AND confirms quality
-// Range high = highest pivot high in pattern | Range low = lowest pivot low
+// SWING DETECTION (shared function — called on both 1H and 30M timeframes)
+// Range high/low come from the 1H call (structural levels stay 1H).
+// Quality gate: 30M pivot sequence confirms structural oscillation.
 // Pattern A: PH → PL(≥N bars) → PH(≥N) → PL(≥N)  [down-up-down]
 // Pattern B: PL → PH(≥N bars) → PL(≥N) → PH(≥N)  [up-down-up]
-// Detects whichever starts first. Resets after each completion to catch the next range.
 // Same-direction anchor rule: if a same-type pivot appears mid-leg, anchor updates.
+// Range high/low defined separately via 1H ta.highest/ta.lowest — always available.
 // =============================================================================
-f_h1_swing() =>
+f_swing_quality() =>
     _plen   = 2
     _ph_raw = ta.pivothigh(high, _plen, _plen)
     _pl_raw = ta.pivotlow(low,   _plen, _plen)
 
-    // Phases 0-3 = Pattern A (PH→PL→PH→PL), Phases 4-6 = Pattern B (PL→PH→PL→PH)
-    var int   _phase     = 0
-    var int   _last_bar  = 0
-    var bool  _confirmed = false  // stays true once first pattern done
-    var float _rng_high  = na    // highest pivot high of completed pattern
-    var float _rng_low   = na    // lowest  pivot low  of completed pattern
-    var float _cur_high  = na    // accumulator during current in-progress pattern
-    var float _cur_low   = na
+    var int  _phase     = 0
+    var int  _last_bar  = 0
+    var bool _confirmed = false
 
     _ph_bar = bar_index - _plen
     _pl_bar = bar_index - _plen
 
-    if _phase == 0  // waiting for first pivot — either PH or PL starts a pattern
+    if _phase == 0
         if not na(_ph_raw)
             _phase    := 1
             _last_bar := _ph_bar
-            _cur_high := _ph_raw
-            _cur_low  := na
         else if not na(_pl_raw)
             _phase    := 4
             _last_bar := _pl_bar
-            _cur_low  := _pl_raw
-            _cur_high := na
 
-    // ── Pattern A: PH → PL → PH → PL ──────────────────────────────────────
     else if _phase == 1  // down leg: looking for PL ≥N bars after PH
-        if not na(_ph_raw)  // new PH → update anchor
+        if not na(_ph_raw)
             _last_bar := _ph_bar
-            _cur_high := math.max(nz(_cur_high, _ph_raw), _ph_raw)
         if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
             _phase    := 2
             _last_bar := _pl_bar
-            _cur_low  := _pl_raw
 
     else if _phase == 2  // up leg: looking for PH ≥N bars after PL
-        if not na(_pl_raw)  // new PL → update anchor
+        if not na(_pl_raw)
             _last_bar := _pl_bar
-            _cur_low  := math.min(nz(_cur_low, _pl_raw), _pl_raw)
         if not na(_ph_raw) and _ph_bar - _last_bar >= swing_up_bars
             _phase    := 3
             _last_bar := _ph_bar
-            _cur_high := math.max(nz(_cur_high, _ph_raw), _ph_raw)
 
     else if _phase == 3  // final down leg: looking for PL ≥N bars after PH
-        if not na(_ph_raw)  // new PH → update anchor
+        if not na(_ph_raw)
             _last_bar := _ph_bar
-            _cur_high := math.max(nz(_cur_high, _ph_raw), _ph_raw)
         if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
-            _cur_low   := math.min(nz(_cur_low, _pl_raw), _pl_raw)
-            _rng_high  := _cur_high
-            _rng_low   := _cur_low
             _confirmed := true
-            _phase     := 0  // reset → look for next range immediately
-            _cur_high  := na
-            _cur_low   := na
+            _phase     := 0
 
-    // ── Pattern B: PL → PH → PL → PH ──────────────────────────────────────
     else if _phase == 4  // up leg: looking for PH ≥N bars after PL
-        if not na(_pl_raw)  // new PL → update anchor
+        if not na(_pl_raw)
             _last_bar := _pl_bar
-            _cur_low  := math.min(nz(_cur_low, _pl_raw), _pl_raw)
         if not na(_ph_raw) and _ph_bar - _last_bar >= swing_up_bars
             _phase    := 5
             _last_bar := _ph_bar
-            _cur_high := _ph_raw
 
     else if _phase == 5  // down leg: looking for PL ≥N bars after PH
-        if not na(_ph_raw)  // new PH → update anchor
+        if not na(_ph_raw)
             _last_bar := _ph_bar
-            _cur_high := math.max(nz(_cur_high, _ph_raw), _ph_raw)
         if not na(_pl_raw) and _pl_bar - _last_bar >= swing_down_bars
             _phase    := 6
             _last_bar := _pl_bar
-            _cur_low  := math.min(nz(_cur_low, _pl_raw), _pl_raw)
 
     else if _phase == 6  // final up leg: looking for PH ≥N bars after PL
-        if not na(_pl_raw)  // new PL → update anchor
+        if not na(_pl_raw)
             _last_bar := _pl_bar
-            _cur_low  := math.min(nz(_cur_low, _pl_raw), _pl_raw)
         if not na(_ph_raw) and _ph_bar - _last_bar >= swing_up_bars
-            _cur_high  := math.max(nz(_cur_high, _ph_raw), _ph_raw)
-            _rng_high  := _cur_high
-            _rng_low   := _cur_low
             _confirmed := true
             _phase     := 0
-            _cur_high  := na
-            _cur_low   := na
 
-    [_confirmed, _rng_high, _rng_low]
+    _confirmed
 
-[h1_swing_ok, range_high, range_low] = request.security(
-     syminfo.tickerid, "60", f_h1_swing(),
-     lookahead=barmerge.lookahead_off)
+// =============================================================================
+// 1H RANGE — rolling highest/lowest, always defined from 1H structure
+// 30M swing quality gate — 4+4+4 pivot legs on 30M candles
+// =============================================================================
+range_high   = request.security(syminfo.tickerid, "60", ta.highest(high, range_bars), lookahead=barmerge.lookahead_off)
+range_low    = request.security(syminfo.tickerid, "60", ta.lowest(low,  range_bars),  lookahead=barmerge.lookahead_off)
+m30_swing_ok = request.security(syminfo.tickerid, "30", f_swing_quality(),             lookahead=barmerge.lookahead_off)
 
 htf_range = not na(range_high) and not na(range_low) and range_high > range_low ?
      range_high - range_low : na
@@ -226,7 +201,8 @@ if range_valid and not na(htf_mid) and close > htf_mid
 
 // =============================================================================
 // RANGE QUALITY GATE — boundary touches + mid crosses
-// Counters reset whenever the 1H range updates to a new structure level.
+// Counters reset only when the 1H rolling range EXPANDS (new structural high or low).
+// Contraction (old bars aging out of the window) preserves existing counters.
 // =============================================================================
 var int    high_zone_touches = 0
 var int    low_zone_touches  = 0
@@ -243,18 +219,21 @@ var bool  range_invalidated = false
 if range_broken
     range_invalidated := true
 
-if range_high != prev_range_high or range_low != prev_range_low
-    range_invalidated  := false
-    was_near_high      := false
-    was_near_low       := false
-    high_zone_touches  := 0
-    low_zone_touches   := 0
-    mid_crosses        := 0
-    prev_near_high_t   := false
-    prev_near_low_t    := false
-    mid_approach_from  := "none"
-    prev_range_high    := range_high
-    prev_range_low     := range_low
+// Only reset when range expands — new structural extreme means fresh range cycle
+range_high_expanded = not na(prev_range_high) and range_high > prev_range_high
+range_low_expanded  = not na(prev_range_low)  and range_low  < prev_range_low
+if range_high_expanded or range_low_expanded
+    range_invalidated := false
+    was_near_high     := false
+    was_near_low      := false
+    high_zone_touches := 0
+    low_zone_touches  := 0
+    mid_crosses       := 0
+    prev_near_high_t  := false
+    prev_near_low_t   := false
+    mid_approach_from := "none"
+prev_range_high := range_high
+prev_range_low  := range_low
 
 // Count boundary touches: rising edge of near_high / near_low
 if near_high and not prev_near_high_t
@@ -288,7 +267,7 @@ if not na(htf_mid)
 total_boundary_touches = high_zone_touches + low_zone_touches
 range_quality_ok = total_boundary_touches >= min_boundary_touches
 mid_filter_ok    = mid_crosses >= min_mid_crosses
-range_armed      = range_quality_ok and mid_filter_ok and h1_swing_ok and not range_invalidated
+range_armed      = range_quality_ok and mid_filter_ok and m30_swing_ok and not range_invalidated
 
 // =============================================================================
 // BOUNDARY ROTATION GATE
@@ -366,8 +345,8 @@ if m15_bull_event
     was_near_low    := false
     bull_sl_swing   := last_m15_pl
 
-// Invalidate if range updates (new 1H structure)
-if range_high != prev_range_high or range_low != prev_range_low
+// Invalidate BOS when 1H range expands to a new structural extreme
+if range_high_expanded or range_low_expanded
     bear_bos_active := false
     bull_bos_active := false
     bear_sl_swing   := na
@@ -862,7 +841,7 @@ if show_info
     table.cell(info, 1, 13, range_invalidated ? "--" : bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
          text_color=range_invalidated ? color.gray : bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
-    table.cell(info, 0, 14, "Min Swing Bars",                   text_color=color.gray)
+    table.cell(info, 0, 14, "30M Swing Bars",                   text_color=color.gray)
     table.cell(info, 1, 14, str.tostring(swing_down_bars) + "+" + str.tostring(swing_up_bars) + "+" + str.tostring(swing_down_bars) + " = " + str.tostring(swing_down_bars + swing_up_bars + swing_down_bars), text_color=color.gray)
     _atr_pips     = math.round(atr_now / pip_size, 1)
     _atr_avg_pips = math.round(atr_avg / pip_size, 1)
@@ -872,9 +851,9 @@ if show_info
     table.cell(info, 0, 15, "ATR Filter",                       text_color=color.gray)
     table.cell(info, 1, 15, _atr_label,
          text_color=not use_atr_filter ? color.gray : atr_ok ? color.green : color.red)
-    _swing_txt = h1_swing_ok ? "CONFIRMED (↓↑↓ or ↑↓↑)" : "WAITING (4 down-up-down or up-down-up)"
-    table.cell(info, 0, 16, "1H Swing Pattern",                  text_color=color.gray)
-    table.cell(info, 1, 16, range_invalidated ? "--" : _swing_txt,                        text_color=range_invalidated ? color.gray : h1_swing_ok ? color.green : color.orange)
+    _swing_txt = m30_swing_ok ? "CONFIRMED (↓↑↓ or ↑↓↑)" : "WAITING (4 down-up-down or up-down-up)"
+    table.cell(info, 0, 16, "30M Swing Pattern",                 text_color=color.gray)
+    table.cell(info, 1, 16, range_invalidated ? "--" : _swing_txt,                        text_color=range_invalidated ? color.gray : m30_swing_ok ? color.green : color.orange)
     table.cell(info, 0, 17, "Range Broken",                      text_color=color.gray)
     table.cell(info, 1, 17, range_invalidated ? "YES — await new range" : range_broken ? "BREAKING" : "NO",
          text_color=range_invalidated ? color.red : range_broken ? color.orange : color.gray)
