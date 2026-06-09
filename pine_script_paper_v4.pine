@@ -51,7 +51,7 @@ atr_mult        = input.float(1.0, "ATR Buffer above/below swing SL (x ATR)",   
 max_retrace_pct = input.float(60.0,"Max Retrace — invalidate BOS (%)",            group="Entry",   minval=10.0,maxval=90.0, step=5.0)
 
 min_boundary_touches = input.int(3, "Min boundary touches to arm (combined H+L)", group="Filters", minval=1, maxval=10)
-min_mid_crosses      = input.int(5, "Min mid crosses to arm",                     group="Filters", minval=1, maxval=20)
+min_mid_crosses      = input.int(3, "Min mid crosses to arm",                     group="Filters", minval=1, maxval=20)
 swing_down_bars      = input.int(4, "30M swing: min consecutive down bars",       group="Filters", minval=2, maxval=10)
 swing_up_bars        = input.int(4, "30M swing: min consecutive up bars",         group="Filters", minval=2, maxval=10)
 use_rotation    = input.bool(false, "Boundary Rotation Gate",                     group="Filters")
@@ -226,8 +226,8 @@ if range_high_expanded or range_low_expanded
     range_invalidated := false
     was_near_high     := false
     was_near_low      := false
-    high_zone_touches := 0
-    low_zone_touches  := 0
+    high_zone_touches := range_high_expanded ? 1 : high_zone_touches
+    low_zone_touches  := range_low_expanded  ? 1 : low_zone_touches
     mid_crosses       := 0
     prev_near_high_t  := false
     prev_near_low_t   := false
@@ -235,23 +235,22 @@ if range_high_expanded or range_low_expanded
 prev_range_high := range_high
 prev_range_low  := range_low
 
-// Count boundary touches: rising edge of near_high / near_low
-if near_high and not prev_near_high_t
+// Count boundary touches using wicks — any bar whose high/low reaches the zone counts,
+// not just bars that close inside it. Rising edge only (one count per zone entry).
+touch_near_high = range_valid and not na(zone_size) and high >= range_high - zone_size
+touch_near_low  = range_valid and not na(zone_size) and low  <= range_low  + zone_size
+if touch_near_high and not prev_near_high_t
     high_zone_touches := high_zone_touches + 1
-if near_low and not prev_near_low_t
+if touch_near_low and not prev_near_low_t
     low_zone_touches := low_zone_touches + 1
-prev_near_high_t := near_high
-prev_near_low_t  := near_low
+prev_near_high_t := touch_near_high
+prev_near_low_t  := touch_near_low
 
-// Count mid touches — a touch is when price REACHES mid from the opposite settled side.
-// Wicks count (high >= mid from below, low <= mid from above). Price closing above mid
-// for several bars then rejecting also counts: first bar up counts as touch from below,
-// return wick/cross counts as touch from above.
+// Count mid touches — price reaches mid from the opposite settled side.
+// Wicks count. Settled side is determined by the close (not strict wick test) so that
+// bars straddling the mid can still establish/re-establish the approach direction.
 // Logic: count FIRST, then update settled side — so the crossing bar itself is counted.
 if not na(htf_mid)
-    fully_above = low  > htf_mid   // bar is fully above mid — settled above
-    fully_below = high < htf_mid   // bar is fully below mid — settled below
-
     if mid_approach_from == "below" and high >= htf_mid
         mid_crosses       := mid_crosses + 1
         mid_approach_from := "none"
@@ -259,9 +258,9 @@ if not na(htf_mid)
         mid_crosses       := mid_crosses + 1
         mid_approach_from := "none"
 
-    if fully_below
+    if close < htf_mid
         mid_approach_from := "below"
-    if fully_above
+    if close > htf_mid
         mid_approach_from := "above"
 
 total_boundary_touches = high_zone_touches + low_zone_touches
@@ -841,7 +840,7 @@ if show_info
     table.cell(info, 1, 13, range_invalidated ? "--" : bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
          text_color=range_invalidated ? color.gray : bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
-    table.cell(info, 0, 14, "30M Swing Bars",                   text_color=color.gray)
+    table.cell(info, 0, 14, "30M Min Leg Bars",                  text_color=color.gray)
     table.cell(info, 1, 14, str.tostring(swing_down_bars) + "+" + str.tostring(swing_up_bars) + "+" + str.tostring(swing_down_bars) + " = " + str.tostring(swing_down_bars + swing_up_bars + swing_down_bars), text_color=color.gray)
     _atr_pips     = math.round(atr_now / pip_size, 1)
     _atr_avg_pips = math.round(atr_avg / pip_size, 1)
