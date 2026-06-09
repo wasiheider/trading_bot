@@ -152,6 +152,7 @@ def _calc_sl_pips(instrument: str, entry_price, sl_price):
 def handle_paper_signal(data):
     instrument  = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
     direction   = data.get("direction", "").upper()
+    setup       = data.get("setup", "").lower()    # "spring" | "upthrust" | "" (BOS)
     price       = data.get("entry_price", data.get("price"))
     sl          = data.get("stop_loss", data.get("sl"))
     tp1         = data.get("tp1")
@@ -201,10 +202,11 @@ def handle_paper_signal(data):
             oanda_error = str(e)
             print(f"[oanda] ERROR placing order: {e}", flush=True)
 
-    emoji   = "🟢" if direction == "LONG" else "🔴"
+    emoji    = "🟢" if direction == "LONG" else "🔴"
     rr_line  = f"\nR:R: `{rr}`" if rr else ""
     bos_line = f"\nBOS: `{bos_level}`" if bos_level else ""
     tf_label = f"15M" if str(timeframe) == "15" else f"{timeframe}M"
+    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST"}.get(setup, "")
     if limit_hit:
         exec_line = f"\n⚠️ *NOT EXECUTED — {limit_reason}*"
     elif not oanda_supported:
@@ -216,7 +218,7 @@ def handle_paper_signal(data):
 
     msg = (
         f"{_MASCOT}\n"
-        f"{emoji} *Paper — {instrument} {direction}* [{tf_label}]\n"
+        f"{emoji} *Paper — {instrument} {direction}* [{tf_label}{setup_label}]\n"
         f"Entry: `{price}`\n"
         f"SL: `{sl}`\n"
         f"TP1: `{tp1}`\n"

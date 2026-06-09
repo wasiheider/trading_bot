@@ -11,7 +11,7 @@
 //   Boundary Touches: price must enter the high/low boundary zone ≥ 3 times total
 //   Mid Crosses:      price reaches mid from the opposite settled side ≥ 5 times
 //   30M Swing Pattern: 30M bars must contain down≥4 → up≥4 → down≥4 (range levels stay 1H)
-//   Both counters reset whenever the 1H range updates to a new high/low.
+//   Both counters reset only when range is fully invalidated (price breaks 30% beyond boundary).
 //   The swing pattern proves structural oscillation — trending markets can't pass it.
 //
 // Entry Logic:
@@ -69,10 +69,10 @@ show_info       = input.bool(true,  "Show info table",                          
 // INSTRUMENT CONFIG
 // =============================================================================
 raw_ticker    = syminfo.tickerid
-clean_ticker  = str.replace(str.replace(raw_ticker, ".SIM", ""), "SIM", "")
-_colon_pos    = str.pos(clean_ticker, ":")
-_after_colon  = _colon_pos >= 0 ? str.substring(clean_ticker, _colon_pos + 1) : clean_ticker
-symbol_name   = str.replace(str.replace(_after_colon, "1!", ""), "!", "")
+// syminfo.ticker is always just the bare symbol (no exchange prefix, no JSON metadata)
+// Some CME/COMEX contracts return a JSON-like string from syminfo.tickerid which breaks
+// the old colon-split approach — using syminfo.ticker is safe for all instrument types
+symbol_name   = str.replace(str.replace(syminfo.ticker, "1!", ""), "!", "")
 
 is_xauusd     = str.contains(raw_ticker, "XAU") or str.contains(raw_ticker, "GC")
 is_usoil      = str.contains(raw_ticker, "OIL") or str.contains(raw_ticker, "WTI") or str.contains(raw_ticker, "CL")
@@ -201,8 +201,8 @@ if range_valid and not na(htf_mid) and close > htf_mid
 
 // =============================================================================
 // RANGE QUALITY GATE — boundary touches + mid crosses
-// Counters reset only when the 1H rolling range EXPANDS (new structural high or low).
-// Contraction (old bars aging out of the window) preserves existing counters.
+// mid_crosses never resets mid-session — only at chart load (var init).
+// mid_approach_from resets on expansion (close-based) and on range_broken (to "none").
 // =============================================================================
 var int    high_zone_touches = 0
 var int    low_zone_touches  = 0
@@ -218,6 +218,7 @@ var bool  range_invalidated = false
 
 if range_broken
     range_invalidated := true
+    mid_approach_from := "none"
 
 // Only reset when range expands — new structural extreme means fresh range cycle
 range_high_expanded = not na(prev_range_high) and range_high > prev_range_high
@@ -228,10 +229,12 @@ if range_high_expanded or range_low_expanded
     was_near_low      := false
     high_zone_touches := range_high_expanded ? 1 : high_zone_touches
     low_zone_touches  := range_low_expanded  ? 1 : low_zone_touches
-    mid_crosses       := 0
+    // mid_crosses preserved — oscillation evidence carries forward on expansion
     prev_near_high_t  := false
     prev_near_low_t   := false
-    mid_approach_from := "none"
+    // Re-anchor approach direction to current close vs new mid (not "none") so counting
+    // can resume immediately — forcing "none" after every expansion blocks crosses indefinitely
+    mid_approach_from := not na(htf_mid) ? (close < htf_mid ? "below" : close > htf_mid ? "above" : "none") : "none"
 prev_range_high := range_high
 prev_range_low  := range_low
 
