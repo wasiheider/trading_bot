@@ -476,8 +476,7 @@ if short_signal
          limit=short_tp1, stop=short_sl, comment="TP1")
     strategy.exit("SHORT_TP2", from_entry="SHORT",
          limit=short_tp2, stop=short_sl, comment="TP2+SL")
-    if barstate.isrealtime
-        alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"SHORT","timeframe":"15"' +
              ',"lot_size":'        + str.tostring(short_lots) +
              ',"entry_price":'     + str.tostring(short_entry,    price_format) +
@@ -502,8 +501,7 @@ if long_signal
          limit=long_tp1, stop=long_sl, comment="TP1")
     strategy.exit("LONG_TP2", from_entry="LONG",
          limit=long_tp2, stop=long_sl, comment="TP2+SL")
-    if barstate.isrealtime
-        alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"LONG","timeframe":"15"' +
              ',"lot_size":'        + str.tostring(long_lots) +
              ',"entry_price":'     + str.tostring(long_entry,    price_format) +
@@ -528,8 +526,7 @@ if spring_signal
          limit=spring_tp1_p, stop=spring_sl_raw, comment="TP1")
     strategy.exit("SPRING_TP2", from_entry="SPRING",
          limit=spring_tp2_p, stop=spring_sl_raw, comment="TP2+SL")
-    if barstate.isrealtime
-        alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"LONG","setup":"spring","timeframe":"15"' +
              ',"lot_size":'    + str.tostring(spring_lots) +
              ',"entry_price":' + str.tostring(close,          price_format) +
@@ -551,8 +548,7 @@ if upthrust_signal
          limit=upthrust_tp1_p, stop=upthrust_sl_raw, comment="TP1")
     strategy.exit("UPTHRUST_TP2", from_entry="UPTHRUST",
          limit=upthrust_tp2_p, stop=upthrust_sl_raw, comment="TP2+SL")
-    if barstate.isrealtime
-        alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"SHORT","setup":"upthrust","timeframe":"15"' +
              ',"lot_size":'    + str.tostring(upthrust_lots) +
              ',"entry_price":' + str.tostring(close,            price_format) +
@@ -612,8 +608,7 @@ last_pnl        = _n >= 0 ? strategy.closedtrades.profit(_n) : 0.0
 last_exit_price = _n >= 0 ? strategy.closedtrades.exit_price(_n) : close
 
 _lc(evt, dir) =>
-    if barstate.isrealtime
-        alert('{"event":"' + evt + '","account":"PAPER","symbol":"' + symbol_name +
+    alert('{"event":"' + evt + '","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"' + dir +
              '","price":'  + str.tostring(last_exit_price, price_format) +
              ',"pnl":'     + str.tostring(last_pnl) +
