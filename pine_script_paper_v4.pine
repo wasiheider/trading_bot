@@ -468,7 +468,15 @@ upthrust_tp1_lots = math.max(0.01, math.floor(upthrust_lots / 2 / 0.01) * 0.01)
 
 // =============================================================================
 // STRATEGY EXECUTION
+// Entry alert() cannot fire inside the signal block — strategy.entry() updates
+// strategy.opentrades within the bar, making no_position=false at bar close so
+// the signal evaluates to false and alert() is never called at close.
+// Fix: capture the message when the signal fires; fire alert() via a pending flag
+// that persists to bar close independent of the signal condition.
 // =============================================================================
+var bool   _entry_alert_pending = false
+var string _entry_alert_msg     = ""
+
 if short_signal
     strategy.entry("SHORT", strategy.short, qty=short_lots,
          comment="SHORT " + str.tostring(short_lots) + "L RR:" + str.tostring(short_rr1,"#.#"))
@@ -476,7 +484,8 @@ if short_signal
          limit=short_tp1, stop=short_sl, comment="TP1")
     strategy.exit("SHORT_TP2", from_entry="SHORT",
          limit=short_tp2, stop=short_sl, comment="TP2+SL")
-    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+    _entry_alert_pending := true
+    _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"SHORT","timeframe":"15"' +
              ',"lot_size":'        + str.tostring(short_lots) +
              ',"entry_price":'     + str.tostring(short_entry,    price_format) +
@@ -487,7 +496,7 @@ if short_signal
              ',"bos_level":'       + str.tostring(bear_bos_level, price_format) +
              ',"range_high":'      + str.tostring(range_high,     price_format) +
              ',"range_low":'       + str.tostring(range_low,      price_format) +
-             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}'
     bear_entry_bar  := bar_index
     bear_bos_active := false
     if use_rotation
@@ -501,7 +510,8 @@ if long_signal
          limit=long_tp1, stop=long_sl, comment="TP1")
     strategy.exit("LONG_TP2", from_entry="LONG",
          limit=long_tp2, stop=long_sl, comment="TP2+SL")
-    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+    _entry_alert_pending := true
+    _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"LONG","timeframe":"15"' +
              ',"lot_size":'        + str.tostring(long_lots) +
              ',"entry_price":'     + str.tostring(long_entry,    price_format) +
@@ -512,7 +522,7 @@ if long_signal
              ',"bos_level":'       + str.tostring(bull_bos_level, price_format) +
              ',"range_high":'      + str.tostring(range_high,    price_format) +
              ',"range_low":'       + str.tostring(range_low,     price_format) +
-             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}'
     bull_entry_bar  := bar_index
     bull_bos_active := false
     if use_rotation
@@ -526,7 +536,8 @@ if spring_signal
          limit=spring_tp1_p, stop=spring_sl_raw, comment="TP1")
     strategy.exit("SPRING_TP2", from_entry="SPRING",
          limit=spring_tp2_p, stop=spring_sl_raw, comment="TP2+SL")
-    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+    _entry_alert_pending := true
+    _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"LONG","setup":"spring","timeframe":"15"' +
              ',"lot_size":'    + str.tostring(spring_lots) +
              ',"entry_price":' + str.tostring(close,          price_format) +
@@ -536,7 +547,7 @@ if spring_signal
              ',"rr_to_tp1":'   + str.tostring(spring_rr,      "#.##") +
              ',"range_high":'  + str.tostring(range_high,     price_format) +
              ',"range_low":'   + str.tostring(range_low,      price_format) +
-             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}'
     bull_entry_bar  := bar_index
     bull_bos_active := false
     was_near_low    := false
@@ -548,7 +559,8 @@ if upthrust_signal
          limit=upthrust_tp1_p, stop=upthrust_sl_raw, comment="TP1")
     strategy.exit("UPTHRUST_TP2", from_entry="UPTHRUST",
          limit=upthrust_tp2_p, stop=upthrust_sl_raw, comment="TP2+SL")
-    alert('{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+    _entry_alert_pending := true
+    _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"SHORT","setup":"upthrust","timeframe":"15"' +
              ',"lot_size":'    + str.tostring(upthrust_lots) +
              ',"entry_price":' + str.tostring(close,            price_format) +
@@ -558,7 +570,7 @@ if upthrust_signal
              ',"rr_to_tp1":'   + str.tostring(upthrust_rr,      "#.##") +
              ',"range_high":'  + str.tostring(range_high,       price_format) +
              ',"range_low":'   + str.tostring(range_low,        price_format) +
-             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}'
     bear_entry_bar  := bar_index
     bear_bos_active := false
     was_near_high   := false
@@ -630,6 +642,14 @@ if sl_long_hit
     _lc("sl_hit", "LONG")
     armed_side       := "both"
     waiting_for_high := false
+
+// Fire the deferred entry alert at bar close — pending flag persists across ticks
+// so this fires even though signal is false at close (opentrades updated by strategy.entry).
+// Placed after lifecycle so lifecycle takes priority if both coincide on the same bar.
+if _entry_alert_pending
+    alert(_entry_alert_msg, alert.freq_once_per_bar_close)
+if barstate.isconfirmed
+    _entry_alert_pending := false
 
 prev_pos := strategy.position_size
 
