@@ -223,6 +223,10 @@ if range_broken
 // Only reset when range expands — new structural extreme means fresh range cycle
 range_high_expanded = not na(prev_range_high) and range_high > prev_range_high
 range_low_expanded  = not na(prev_range_low)  and range_low  < prev_range_low
+// Snapshot was_near before the expansion clears them — spring/upthrust conditions
+// evaluated later in the bar must see the pre-expansion state (wick caused the expansion).
+was_near_high_pre = was_near_high
+was_near_low_pre  = was_near_low
 if range_high_expanded or range_low_expanded
     range_invalidated := false
     was_near_high     := false
@@ -449,11 +453,11 @@ upthrust_rwd_p  = not na(upthrust_tp1_p)  ? close - upthrust_tp1_p   : na
 upthrust_rr     = not na(upthrust_risk_p) and upthrust_risk_p > 0 ? upthrust_rwd_p / upthrust_risk_p : 0.0
 upthrust_rr_ok  = upthrust_rr >= min_rr
 
-spring_signal = in_spring_zone and close > range_low and was_near_low and range_armed and
+spring_signal = in_spring_zone and close > range_low and was_near_low_pre and range_armed and
      not range_invalidated and no_position and atr_ok and spring_rr_ok and not na(spring_sl_raw) and
      not long_signal and not short_signal
 
-upthrust_signal = in_upthrust_zone and close < range_high and was_near_high and range_armed and
+upthrust_signal = in_upthrust_zone and close < range_high and was_near_high_pre and range_armed and
      not range_invalidated and no_position and atr_ok and upthrust_rr_ok and not na(upthrust_sl_raw) and
      not long_signal and not short_signal
 
