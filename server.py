@@ -12,8 +12,6 @@ from risk import (
     record_paper_trade,
     update_paper_outcome,
     reset_paper_full,
-    record_sl_hit,
-    get_sl_hits,
     is_daily_limit_hit,
     is_weekly_limit_hit,
 )
@@ -164,18 +162,6 @@ def handle_paper_signal(data):
     range_low   = data.get("range_low")
     sl_pips     = _calc_sl_pips(instrument, price, sl) or data.get("sl_pips")
 
-    open_count = sum(1 for t in _load_trades_log().get("paper", []) if t.get("result") == "OPEN")
-    if open_count >= 5:
-        reason = f"max open trades reached ({open_count}/5)"
-        send_telegram(f"{_MASCOT}\n🚫 *Paper Signal Blocked — Max Open Trades*\n`{instrument} {direction}`\n{reason}")
-        return jsonify({"status": "blocked", "reason": reason}), 200
-
-    sl_count = get_sl_hits(instrument)
-    if sl_count >= 3:
-        reason = f"3 SL hits today on {instrument} — sitting out for the session"
-        send_telegram(f"{_MASCOT}\n🚫 *Paper Signal Blocked — Session Cooldown*\n`{instrument} {direction}`\n{reason}")
-        return jsonify({"status": "blocked", "reason": reason}), 200
-
     risk = check_paper_risk(instrument, sl_pips)
     if not risk["allowed"]:
         msg = f"{_MASCOT}\n🚫 *Paper Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
@@ -289,8 +275,6 @@ def handle_paper_lifecycle(data, event):
     # ── Update stats + trades.json (forex and log-only) ──────
     locally_tracked = bool(oanda_trade_id) or _has_local_open_trade(instrument, direction)
     if locally_tracked:
-        if event == "sl_hit":
-            record_sl_hit(instrument)
         won = event in ("tp1_hit", "tp2_hit")
         update_paper_outcome(won=won, pnl=final_pnl)
         result_map = {"tp1_hit": "TP1", "tp2_hit": "TP2", "sl_hit": "SL"}
