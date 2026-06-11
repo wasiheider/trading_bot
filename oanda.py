@@ -59,7 +59,7 @@ def place_order(instrument: str, direction: str, lot_size: float) -> dict:
             "type":         "MARKET",
             "instrument":   oanda_instrument,
             "units":        str(units),
-            "timeInForce":  "FOK",
+            "timeInForce":  "GFD",
             "positionFill": "DEFAULT",
         }
     })

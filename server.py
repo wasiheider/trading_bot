@@ -201,6 +201,7 @@ def handle_paper_signal(data):
         except Exception as e:
             oanda_error = str(e)
             print(f"[oanda] ERROR placing order: {e}", flush=True)
+            send_telegram(f"{_MASCOT}\n🔴 *OANDA ORDER FAILED*\n`{instrument} {direction}`\nError: `{oanda_error}`")
 
     emoji    = "🟢" if direction == "LONG" else "🔴"
     rr_line  = f"\nR:R: `{rr}`" if rr else ""

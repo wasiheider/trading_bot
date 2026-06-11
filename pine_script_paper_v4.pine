@@ -474,8 +474,9 @@ upthrust_tp1_lots = math.max(0.01, math.floor(upthrust_lots / 2 / 0.01) * 0.01)
 // Fix: capture the message when the signal fires; fire alert() via a pending flag
 // that persists to bar close independent of the signal condition.
 // =============================================================================
-var bool   _entry_alert_pending = false
-var string _entry_alert_msg     = ""
+var bool   _entry_alert_pending  = false
+var string _entry_alert_msg      = ""
+var bool   _lc_fired_this_bar    = false  // tracks if a lifecycle alert consumed this bar's slot
 
 if short_signal
     strategy.entry("SHORT", strategy.short, qty=short_lots,
@@ -628,28 +629,36 @@ _lc(evt, dir) =>
 
 if tp1_short_hit
     _lc("tp1_hit", "SHORT")
+    _lc_fired_this_bar := true
 if tp1_long_hit
     _lc("tp1_hit", "LONG")
+    _lc_fired_this_bar := true
 if tp2_short_hit
     _lc("tp2_hit", "SHORT")
+    _lc_fired_this_bar := true
 if tp2_long_hit
     _lc("tp2_hit", "LONG")
+    _lc_fired_this_bar := true
 if sl_short_hit
     _lc("sl_hit", "SHORT")
+    _lc_fired_this_bar := true
     armed_side      := "both"
     waiting_for_low := false
 if sl_long_hit
     _lc("sl_hit", "LONG")
+    _lc_fired_this_bar := true
     armed_side       := "both"
     waiting_for_high := false
 
-// Fire the deferred entry alert at bar close — pending flag persists across ticks
-// so this fires even though signal is false at close (opentrades updated by strategy.entry).
-// Placed after lifecycle so lifecycle takes priority if both coincide on the same bar.
-if _entry_alert_pending
+// Fire the deferred entry alert at bar close.
+// If a lifecycle alert fired this bar, it consumed TV's one-alert-per-bar slot — defer entry
+// to the next bar by keeping _entry_alert_pending alive. It fires on the next bar close.
+if _entry_alert_pending and not _lc_fired_this_bar
     alert(_entry_alert_msg, alert.freq_once_per_bar_close)
 if barstate.isconfirmed
-    _entry_alert_pending := false
+    if _entry_alert_pending and not _lc_fired_this_bar
+        _entry_alert_pending := false
+    _lc_fired_this_bar := false
 
 prev_pos := strategy.position_size
 
