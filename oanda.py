@@ -17,6 +17,7 @@ INSTRUMENT_MAP = {
     "GBPUSD": "GBP_USD",
     "USDJPY": "USD_JPY",
     "EURNZD": "EUR_NZD",
+    "NZDUSD": "NZD_USD",
 }
 
 # OANDA units per 1 standard lot from risk.py (forex: 1 lot = 100,000 units)
@@ -25,6 +26,7 @@ _UNITS_PER_LOT = {
     "GBP_USD": 100000,
     "USD_JPY": 100000,
     "EUR_NZD": 100000,
+    "NZD_USD": 100000,
 }
 
 
