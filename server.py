@@ -108,7 +108,7 @@ def ct_now():
 # ── Paper Trading Webhook ──────────────────────────────────
 @app.route("/webhook/paper", methods=["POST"])
 def webhook_paper():
-    data = request.json or {}
+    data = request.get_json(force=True, silent=True) or {}
 
     if data.get("token") != PAPER_WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
