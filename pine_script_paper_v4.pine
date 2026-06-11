@@ -85,11 +85,22 @@ is_usoil      = str.contains(raw_ticker, "OIL") or str.contains(raw_ticker, "WTI
 is_us100      = str.contains(raw_ticker, "US100") or str.contains(raw_ticker, "NAS") or str.contains(raw_ticker, "NQ")
 is_us30       = str.contains(raw_ticker, "US30") or str.contains(raw_ticker, "DJI") or str.contains(raw_ticker, "YM1")
 is_us500      = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "SPX") or str.contains(raw_ticker, "ES")
+is_usdjpy     = str.contains(raw_ticker, "USDJPY") or str.contains(raw_ticker, "USD_JPY")
+is_eurnzd     = str.contains(raw_ticker, "EURNZD") or str.contains(raw_ticker, "EUR_NZD")
 
-pip_value_per_001 = is_xauusd ? 0.01 : is_usoil ? 0.10 : is_us100 ? 0.01 : 0.10
-pip_size          = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0  : syminfo.mintick * 10
-price_format      = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
-risk_dollars      = 500.0
+// pip_value_per_001: USD P&L per 1-pip move per 0.01 lot
+// USD-quoted (EURUSD, GBPUSD, NZDUSD): 0.01 lot × 0.0001 = $0.10
+// USDJPY: 0.01 lot × 0.01 JPY × (1/USDJPY) ≈ $0.065 at ~154 JPY
+// EURNZD: 0.01 lot × 0.0001 NZD × NZDUSD ≈ $0.060 at NZDUSD ~0.60
+pip_value_per_001 = is_xauusd ? 0.01  :
+                    is_usoil  ? 0.10  :
+                    is_us100  ? 0.01  :
+                    is_usdjpy ? 0.065 :
+                    is_eurnzd ? 0.060 :
+                    0.10
+pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
+price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
+risk_dollars  = 250.0
 
 // =============================================================================
 // ATR (15M native)

@@ -105,8 +105,8 @@ PAPER_INSTRUMENT_CONFIG = {
     # Forex
     "EURUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
     "GBPUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
-    "USDJPY": {"pip_value": 9.00,  "pip_size": 0.01,   "default_sl_pips": 20},
-    "EURNZD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
+    "USDJPY": {"pip_value": 6.50,  "pip_size": 0.01,   "default_sl_pips": 20},  # ~$6.50/pip/lot at ~154 JPY
+    "EURNZD": {"pip_value": 6.00,  "pip_size": 0.0001, "default_sl_pips": 20},  # ~$6.00/pip/lot at NZDUSD ~0.60
     "NZDUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
     # Crypto
     "BTCUSD": {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
