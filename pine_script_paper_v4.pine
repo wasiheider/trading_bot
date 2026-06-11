@@ -536,7 +536,7 @@ if short_signal
          limit=short_tp2, stop=short_sl, comment="TP2+SL")
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-             '","direction":"SHORT","timeframe":"15"' +
+             '","direction":"SHORT","setup":"bos","timeframe":"15"' +
              ',"lot_size":'        + str.tostring(short_lots) +
              ',"entry_price":'     + str.tostring(short_entry,    price_format) +
              ',"stop_loss":'       + str.tostring(short_sl,       price_format) +
@@ -562,7 +562,7 @@ if long_signal
          limit=long_tp2, stop=long_sl, comment="TP2+SL")
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-             '","direction":"LONG","timeframe":"15"' +
+             '","direction":"LONG","setup":"bos","timeframe":"15"' +
              ',"lot_size":'        + str.tostring(long_lots) +
              ',"entry_price":'     + str.tostring(long_entry,    price_format) +
              ',"stop_loss":'       + str.tostring(long_sl,       price_format) +

@@ -244,6 +244,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="row"><span class="rl">+ Mid Crosses</span><span class="rv" style="color:var(--t2)">≥ 3 · settled side by close</span></div>
     <div class="row"><span class="rl">Entry A — BOS</span><span class="rv" style="color:var(--t2)">15M BOS + rejection candle</span></div>
     <div class="row"><span class="rl">Entry B — Wyckoff</span><span class="rv" style="color:var(--pu)">Spring / Upthrust</span></div>
+    <div class="row"><span class="rl">Entry C — BOS+Div</span><span class="rv" style="color:#ffd600">BOS + RSI divergence · RSI 30–70</span></div>
     <div class="row"><span class="rl">TP1 / TP2</span><span class="rv" style="color:var(--g)">Range mid / opposite boundary</span></div>
     <div class="row"><span class="rl">SL</span><span class="rv" style="color:var(--r)">15M swing + 1× ATR buffer</span></div>
     <div class="row"><span class="rl">Risk / Trade</span><span class="rv">$250 · Min R:R 1.5</span></div>
@@ -780,6 +781,16 @@ function renderSessionBreakdown(trades) {
   const sBuckets = bucket(closed, t => inferSession(t));
   const iBuckets = bucket(closed, t => t.instrument || 'Unknown');
 
+  function setupToModel(s) {
+    s = (s || '').toLowerCase();
+    if (s === 'bos' || s === '') return 'A — BOS';
+    if (s === 'spring' || s === 'upthrust') return 'B — Wyckoff';
+    if (s === 'bos_div') return 'C — BOS+Div';
+    return 'A — BOS';
+  }
+  const mBuckets = bucket(closed, t => setupToModel(t.setup));
+  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div'];
+
   const totalTrades = closed.length;
   const totalWins   = closed.filter(t => (t.result||'').includes('TP')).length;
   const totalWR     = totalTrades ? Math.round((totalWins/totalTrades)*100) : 0;
@@ -820,7 +831,13 @@ function renderSessionBreakdown(trades) {
     <td style="text-align:right;font-weight:800;color:${tpnlColor}">${fmt$(totalPnl)}</td>
   </tr></tfoot>`;
 
-  el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+  const mKeys = [...MODEL_ORDER.filter(m => mBuckets[m]), ...Object.keys(mBuckets).filter(m => !MODEL_ORDER.includes(m))];
+
+  el.innerHTML = `<div style="margin-bottom:16px">
+    <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Entry Model</div>
+    <table class="tbl">${thead}<tbody>${mKeys.map(m => mkRow(m, mBuckets[m])).join('')}</tbody>${tfoot}</table>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
     <div>
       <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Session</div>
       <table class="tbl">${thead}<tbody>${sKeys.map(s => mkRow(s, sBuckets[s])).join('')}</tbody>${tfoot}</table>

@@ -193,7 +193,7 @@ def handle_paper_signal(data):
     rr_line  = f"\nR:R: `{rr}`" if rr else ""
     bos_line = f"\nBOS: `{bos_level}`" if bos_level else ""
     tf_label = f"15M" if str(timeframe) == "15" else f"{timeframe}M"
-    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST"}.get(setup, "")
+    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV"}.get(setup, "")
     if limit_hit:
         exec_line = f"\n⚠️ *NOT EXECUTED — {limit_reason}*"
     elif not oanda_supported:
@@ -233,6 +233,7 @@ def handle_paper_signal(data):
             "range_high":     range_high,
             "range_low":      range_low,
             "lot_size":       risk["lot_size"],
+            "setup":          setup,
             "result":         "OPEN",
             "pnl":            0,
             "oanda_trade_id": oanda_trade_id,
@@ -411,6 +412,32 @@ def state():
     except Exception as e:
         print(f"[state] unrealized PNL fetch failed: {e}", flush=True)
 
+    # ── Per-model breakdown from trades.json ─────────────────
+    def _setup_to_model(s):
+        s = (s or "").lower()
+        if s in ("bos", ""):           return "A"
+        if s in ("spring", "upthrust"): return "B"
+        if s == "bos_div":             return "C"
+        return "A"  # fallback for legacy trades with no setup field
+
+    model_stats = {"A": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
+                   "B": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
+                   "C": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0}}
+    for t in _load_trades_log().get("paper", []):
+        res = t.get("result", "OPEN")
+        if res == "OPEN":
+            continue
+        m = _setup_to_model(t.get("setup", ""))
+        model_stats[m]["trades"] += 1
+        if res in ("TP1", "TP2"):
+            model_stats[m]["wins"] += 1
+        else:
+            model_stats[m]["losses"] += 1
+        model_stats[m]["pnl"] = round(model_stats[m]["pnl"] + (t.get("pnl") or 0), 2)
+    for m in model_stats:
+        n = model_stats[m]["trades"]
+        model_stats[m]["win_rate"] = round(model_stats[m]["wins"] / n * 100) if n else 0
+
     return jsonify({
         "time_ct":                now.strftime("%Y-%m-%d %H:%M:%S"),
         "paper_account_balance":  round(oanda_balance, 2),
@@ -428,6 +455,7 @@ def state():
         "paper_open_trades":      open_count,
         "paper_last_signal":      paper_state.get("last_signal"),
         "paper_trades":           paper_state.get("trades", [])[-10:],
+        "model_stats":            model_stats,
     }), 200
 
 
