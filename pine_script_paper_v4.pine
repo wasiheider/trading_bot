@@ -65,6 +65,12 @@ show_signals    = input.bool(true,  "Show entry signals",                       
 show_trade_lvls = input.bool(true,  "Show SL/TP on trade",                        group="Display")
 show_info       = input.bool(true,  "Show info table",                             group="Display")
 
+use_entry_c   = input.bool(true,   "Enable Entry C (BOS + RSI Divergence)",       group="Entry C")
+rsi_period    = input.int(14,      "RSI Period",                                   group="Entry C", minval=2, maxval=50)
+div_pivot_len = input.int(5,       "Divergence Pivot Length",                      group="Entry C", minval=2, maxval=10)
+rsi_c_lower   = input.float(30.0,  "RSI Lower Bound at Retest",                   group="Entry C", minval=1,  maxval=49, step=1)
+rsi_c_upper   = input.float(70.0,  "RSI Upper Bound at Retest",                   group="Entry C", minval=51, maxval=99, step=1)
+
 // =============================================================================
 // INSTRUMENT CONFIG
 // =============================================================================
@@ -91,6 +97,41 @@ risk_dollars      = 500.0
 atr_now = ta.atr(14)
 atr_avg = ta.sma(atr_now, atr_avg_len)
 atr_ok  = not use_atr_filter or atr_now > atr_avg
+
+// =============================================================================
+// RSI + DIVERGENCE (Entry C)
+// Bearish div: price higher high, RSI lower high → weakening bullish momentum at top
+// Bullish div: price lower low,  RSI higher low  → weakening bearish momentum at bottom
+// =============================================================================
+rsi_val = ta.rsi(close, rsi_period)
+
+var float _ph1_price = na
+var float _ph1_rsi   = na
+var float _ph2_price = na
+var float _ph2_rsi   = na
+var float _pl1_price = na
+var float _pl1_rsi   = na
+var float _pl2_price = na
+var float _pl2_rsi   = na
+
+_ph_div = ta.pivothigh(high, div_pivot_len, div_pivot_len)
+_pl_div = ta.pivotlow(low,   div_pivot_len, div_pivot_len)
+
+if not na(_ph_div)
+    _ph2_price := _ph1_price
+    _ph2_rsi   := _ph1_rsi
+    _ph1_price := _ph_div
+    _ph1_rsi   := rsi_val[div_pivot_len]
+
+if not na(_pl_div)
+    _pl2_price := _pl1_price
+    _pl2_rsi   := _pl1_rsi
+    _pl1_price := _pl_div
+    _pl1_rsi   := rsi_val[div_pivot_len]
+
+bear_div = not na(_ph1_price) and not na(_ph2_price) and _ph1_price > _ph2_price and _ph1_rsi < _ph2_rsi
+bull_div = not na(_pl1_price) and not na(_pl2_price) and _pl1_price < _pl2_price and _pl1_rsi > _pl2_rsi
+rsi_c_ok = rsi_val >= rsi_c_lower and rsi_val <= rsi_c_upper
 
 // =============================================================================
 // SWING DETECTION (shared function — called on both 1H and 30M timeframes)
@@ -420,8 +461,16 @@ long_tp1_lots  = math.max(0.01, math.floor(long_lots  / 2 / 0.01) * 0.01)
 // FINAL SIGNALS
 // =============================================================================
 no_position  = strategy.opentrades == 0
-short_signal = short_retracing and short_rr_ok and not na(short_sl) and bear_entry_bar < bear_bos_bar and no_position and not range_broken and atr_ok
-long_signal  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken and atr_ok
+_bos_short_base = short_retracing and short_rr_ok and not na(short_sl) and bear_entry_bar < bear_bos_bar and no_position and not range_broken and atr_ok
+_bos_long_base  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken and atr_ok
+
+// Entry C — BOS + RSI divergence (higher confluence, takes priority over Entry A)
+short_signal_c = use_entry_c and _bos_short_base and bear_div and rsi_c_ok
+long_signal_c  = use_entry_c and _bos_long_base  and bull_div and rsi_c_ok
+
+// Entry A — plain BOS (fires only when Entry C does not qualify)
+short_signal = _bos_short_base and not short_signal_c
+long_signal  = _bos_long_base  and not long_signal_c
 
 // =============================================================================
 // WYCKOFF SPRING / UPTHRUST SIGNALS
@@ -530,6 +579,60 @@ if long_signal
         waiting_for_high := true
         armed_side       := "none"
 
+if short_signal_c
+    strategy.entry("SHORT_C", strategy.short, qty=short_lots,
+         comment="SHORT_C " + str.tostring(short_lots) + "L RR:" + str.tostring(short_rr1,"#.#"))
+    strategy.exit("SHORT_C_TP1", from_entry="SHORT_C", qty=short_tp1_lots,
+         limit=short_tp1, stop=short_sl, comment="TP1")
+    strategy.exit("SHORT_C_TP2", from_entry="SHORT_C",
+         limit=short_tp2, stop=short_sl, comment="TP2+SL")
+    _entry_alert_pending := true
+    _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"SHORT","setup":"bos_div","timeframe":"15"' +
+             ',"lot_size":'        + str.tostring(short_lots) +
+             ',"entry_price":'     + str.tostring(short_entry,    price_format) +
+             ',"stop_loss":'       + str.tostring(short_sl,       price_format) +
+             ',"tp1":'             + str.tostring(short_tp1,      price_format) +
+             ',"tp2":'             + str.tostring(short_tp2,      price_format) +
+             ',"rr_to_tp1":'       + str.tostring(short_rr1,      "#.##") +
+             ',"bos_level":'       + str.tostring(bear_bos_level, price_format) +
+             ',"range_high":'      + str.tostring(range_high,     price_format) +
+             ',"range_low":'       + str.tostring(range_low,      price_format) +
+             ',"rsi":'             + str.tostring(rsi_val,        "#.##") +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}'
+    bear_entry_bar  := bar_index
+    bear_bos_active := false
+    if use_rotation
+        waiting_for_low := true
+        armed_side      := "none"
+
+if long_signal_c
+    strategy.entry("LONG_C", strategy.long, qty=long_lots,
+         comment="LONG_C " + str.tostring(long_lots) + "L RR:" + str.tostring(long_rr1,"#.#"))
+    strategy.exit("LONG_C_TP1", from_entry="LONG_C", qty=long_tp1_lots,
+         limit=long_tp1, stop=long_sl, comment="TP1")
+    strategy.exit("LONG_C_TP2", from_entry="LONG_C",
+         limit=long_tp2, stop=long_sl, comment="TP2+SL")
+    _entry_alert_pending := true
+    _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"LONG","setup":"bos_div","timeframe":"15"' +
+             ',"lot_size":'        + str.tostring(long_lots) +
+             ',"entry_price":'     + str.tostring(long_entry,    price_format) +
+             ',"stop_loss":'       + str.tostring(long_sl,       price_format) +
+             ',"tp1":'             + str.tostring(long_tp1,      price_format) +
+             ',"tp2":'             + str.tostring(long_tp2,      price_format) +
+             ',"rr_to_tp1":'       + str.tostring(long_rr1,      "#.##") +
+             ',"bos_level":'       + str.tostring(bull_bos_level, price_format) +
+             ',"range_high":'      + str.tostring(range_high,     price_format) +
+             ',"range_low":'       + str.tostring(range_low,      price_format) +
+             ',"rsi":'             + str.tostring(rsi_val,        "#.##") +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}'
+    bull_entry_bar  := bar_index
+    bull_bos_active := false
+    if use_rotation
+        waiting_for_high := true
+        armed_side       := "none"
+
 if spring_signal
     strategy.entry("SPRING", strategy.long, qty=spring_lots,
          comment="SPRING " + str.tostring(spring_lots) + "L RR:" + str.tostring(spring_rr,"#.#"))
@@ -582,10 +685,10 @@ if upthrust_signal
 var float entry_price_stored = na
 var float be_tp2             = na
 
-if short_signal
+if short_signal or short_signal_c
     entry_price_stored := short_entry
     be_tp2             := short_tp2
-if long_signal
+if long_signal or long_signal_c
     entry_price_stored := long_entry
     be_tp2             := long_tp2
 if spring_signal
@@ -602,9 +705,11 @@ tp1_long_hit  = prev_pos > 0 and strategy.position_size > 0 and strategy.positio
 
 if tp1_short_hit and not na(entry_price_stored)
     strategy.exit("SHORT_BE",    from_entry="SHORT",    limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
+    strategy.exit("SHORT_C_BE",  from_entry="SHORT_C",  limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
     strategy.exit("UPTHRUST_BE", from_entry="UPTHRUST", limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
 if tp1_long_hit  and not na(entry_price_stored)
     strategy.exit("LONG_BE",     from_entry="LONG",     limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
+    strategy.exit("LONG_C_BE",   from_entry="LONG_C",   limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
     strategy.exit("SPRING_BE",   from_entry="SPRING",   limit=be_tp2, stop=entry_price_stored, comment="TP2 BE")
 
 // =============================================================================
@@ -685,6 +790,8 @@ if show_bos and m15_bull_event
 // Entry signal arrows — BOS entries (white) and Spring/Upthrust entries (cyan/purple)
 plotshape(show_signals and short_signal,    "SHORT",    shape.triangledown, location.abovebar, color.white,  size=size.normal)
 plotshape(show_signals and long_signal,     "LONG",     shape.triangleup,   location.belowbar, color.white,  size=size.normal)
+plotshape(show_signals and short_signal_c,  "SHORT_C",  shape.triangledown, location.abovebar, color.yellow, size=size.normal)
+plotshape(show_signals and long_signal_c,   "LONG_C",   shape.triangleup,   location.belowbar, color.yellow, size=size.normal)
 plotshape(show_signals and spring_signal,   "SPRING",   shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
 plotshape(show_signals and upthrust_signal, "UPTHRUST", shape.triangledown, location.abovebar, color.purple, size=size.normal)
 
@@ -699,14 +806,21 @@ if show_signals and upthrust_signal
     label.new(bar_index, high, "UPTHRUST RR:" + str.tostring(upthrust_rr,"#.#"),
          color=color.new(color.purple,40), textcolor=color.white, style=label.style_label_down, size=size.small)
 
-if show_signals and short_retracing and not short_signal
+if show_signals and short_retracing and not short_signal and not short_signal_c
     label.new(bar_index, high, "RR:" + str.tostring(short_rr1,"#.#") + (short_rr_ok ? "" : "x"),
          color=short_rr_ok ? color.new(color.red,70) : color.new(color.gray,70),
          textcolor=color.white, style=label.style_label_down, size=size.tiny)
-if show_signals and long_retracing and not long_signal
+if show_signals and long_retracing and not long_signal and not long_signal_c
     label.new(bar_index, low, "RR:" + str.tostring(long_rr1,"#.#") + (long_rr_ok ? "" : "x"),
          color=long_rr_ok ? color.new(color.green,70) : color.new(color.gray,70),
          textcolor=color.white, style=label.style_label_up, size=size.tiny)
+
+if show_signals and short_signal_c
+    label.new(bar_index, high, "C RR:" + str.tostring(short_rr1,"#.#") + " RSI:" + str.tostring(rsi_val,"#.#"),
+         color=color.new(color.yellow,30), textcolor=color.black, style=label.style_label_down, size=size.small)
+if show_signals and long_signal_c
+    label.new(bar_index, low, "C RR:" + str.tostring(long_rr1,"#.#") + " RSI:" + str.tostring(rsi_val,"#.#"),
+         color=color.new(color.yellow,30), textcolor=color.black, style=label.style_label_up, size=size.small)
 
 // Open-trade level lines
 var float active_entry = na
@@ -714,11 +828,11 @@ var float active_sl    = na
 var float active_tp1   = na
 var float active_tp2   = na
 
-if short_signal or long_signal or spring_signal or upthrust_signal
-    active_entry := short_signal    ? short_entry     : long_signal ? long_entry     : spring_signal ? close          : close
-    active_sl    := short_signal    ? short_sl        : long_signal ? long_sl        : spring_signal ? spring_sl_raw  : upthrust_sl_raw
-    active_tp1   := short_signal    ? short_tp1       : long_signal ? long_tp1       : spring_signal ? spring_tp1_p   : upthrust_tp1_p
-    active_tp2   := short_signal    ? short_tp2       : long_signal ? long_tp2       : spring_signal ? spring_tp2_p   : upthrust_tp2_p
+if short_signal or short_signal_c or long_signal or long_signal_c or spring_signal or upthrust_signal
+    active_entry := short_signal or short_signal_c ? short_entry  : long_signal or long_signal_c ? long_entry    : spring_signal ? close          : close
+    active_sl    := short_signal or short_signal_c ? short_sl     : long_signal or long_signal_c ? long_sl       : spring_signal ? spring_sl_raw  : upthrust_sl_raw
+    active_tp1   := short_signal or short_signal_c ? short_tp1    : long_signal or long_signal_c ? long_tp1      : spring_signal ? spring_tp1_p   : upthrust_tp1_p
+    active_tp2   := short_signal or short_signal_c ? short_tp2    : long_signal or long_signal_c ? long_tp2      : spring_signal ? spring_tp2_p   : upthrust_tp2_p
 
 if tp1_short_hit and not na(entry_price_stored)
     active_sl := entry_price_stored
@@ -732,7 +846,7 @@ var line line_sl    = na
 var line line_tp1   = na
 var line line_tp2   = na
 
-_make_lines = show_trade_lvls and ((short_signal or long_signal or spring_signal or upthrust_signal) or (in_trade and na(line_entry) and not na(active_entry)))
+_make_lines = show_trade_lvls and ((short_signal or short_signal_c or long_signal or long_signal_c or spring_signal or upthrust_signal) or (in_trade and na(line_entry) and not na(active_entry)))
 if _make_lines
     line.delete(line_entry)
     line.delete(line_sl)
@@ -754,13 +868,13 @@ var label lbl_sl    = na
 var label lbl_tp1   = na
 var label lbl_tp2   = na
 
-_make_labels = show_trade_lvls and ((short_signal or long_signal or spring_signal or upthrust_signal) or (in_trade and na(lbl_entry) and not na(active_entry)))
+_make_labels = show_trade_lvls and ((short_signal or short_signal_c or long_signal or long_signal_c or spring_signal or upthrust_signal) or (in_trade and na(lbl_entry) and not na(active_entry)))
 if _make_labels
     label.delete(lbl_entry)
     label.delete(lbl_sl)
     label.delete(lbl_tp1)
     label.delete(lbl_tp2)
-    _dir = strategy.position_size < 0 or short_signal or upthrust_signal ? "SHORT " : "LONG "
+    _dir = strategy.position_size < 0 or short_signal or short_signal_c or upthrust_signal ? "SHORT " : "LONG "
     lbl_entry := label.new(bar_index, active_entry, _dir + str.tostring(active_entry, price_format),
                   color=color.new(color.white, 55), textcolor=color.white, style=label.style_label_right, size=size.tiny)
     lbl_sl    := label.new(bar_index, active_sl, "SL   " + str.tostring(active_sl, price_format),
@@ -824,7 +938,7 @@ if show_signals and sl_long_hit
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 20, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 23, bgcolor=color.new(color.black, 70), border_width=1)
 if show_info
     arm_display = not use_rotation ? "OFF" :
          armed_side == "none" ? "WAIT->" + (waiting_for_high ? "HIGH" : "LOW") :
@@ -897,3 +1011,9 @@ if show_info
     table.cell(info, 1, 18, range_invalidated ? "--" : _su_zone, text_color=range_invalidated ? color.gray : _su_clr)
     table.cell(info, 0, 19, "Spring R:R",        text_color=color.gray)
     table.cell(info, 1, 19, range_invalidated ? "--" : _su_rr,   text_color=range_invalidated ? color.gray : _su_rr_clr)
+    table.cell(info, 0, 20, "RSI (" + str.tostring(rsi_period) + ")", text_color=color.gray)
+    table.cell(info, 1, 20, str.tostring(rsi_val, "#.##"), text_color=rsi_val < 30 ? color.green : rsi_val > 70 ? color.red : color.white)
+    table.cell(info, 0, 21, "Bear Divergence",   text_color=color.gray)
+    table.cell(info, 1, 21, bear_div ? "YES" : "NO", text_color=bear_div ? color.orange : color.gray)
+    table.cell(info, 0, 22, "Bull Divergence",   text_color=color.gray)
+    table.cell(info, 1, 22, bull_div ? "YES" : "NO", text_color=bull_div ? color.blue : color.gray)
