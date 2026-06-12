@@ -760,14 +760,13 @@ if sl_long_hit
     waiting_for_high := false
 
 // Fire the deferred entry alert at bar close.
-// If a lifecycle alert fired this bar, it consumed TV's one-alert-per-bar slot — defer entry
-// to the next bar by keeping _entry_alert_pending alive. It fires on the next bar close.
-if _entry_alert_pending and not _lc_fired_this_bar
+// Pine Script v6: multiple alert() calls each fire independently — lifecycle and entry
+// do NOT compete for a shared slot. Fire unconditionally when pending.
+if _entry_alert_pending
     alert(_entry_alert_msg, alert.freq_once_per_bar_close)
 if barstate.isconfirmed
-    if _entry_alert_pending and not _lc_fired_this_bar
-        _entry_alert_pending := false
-    _lc_fired_this_bar := false
+    _entry_alert_pending := false
+    _lc_fired_this_bar   := false
 
 prev_pos := strategy.position_size
 
