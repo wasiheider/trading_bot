@@ -521,6 +521,32 @@ def news():
     return jsonify({"articles": unique, "cached": False}), 200
 
 
+# ── Calendar Endpoint — ForexFactory proxy ────────────────
+_cal_cache = {"data": [], "ts": 0}
+CAL_TTL = 3600  # 1 hour
+
+@app.route("/calendar", methods=["GET"])
+def calendar():
+    global _cal_cache
+    now = _time.time()
+    if now - _cal_cache["ts"] < CAL_TTL and _cal_cache["data"]:
+        return jsonify(_cal_cache["data"]), 200
+    try:
+        req = urllib.request.Request(
+            "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        _cal_cache = {"data": data, "ts": now}
+        return jsonify(data), 200
+    except Exception as e:
+        print(f"[calendar] fetch failed: {e}", flush=True)
+        if _cal_cache["data"]:
+            return jsonify(_cal_cache["data"]), 200
+        return jsonify([]), 200
+
+
 # ── Dashboard ──────────────────────────────────────────────
 @app.route("/dashboard", methods=["GET"])
 def dashboard():

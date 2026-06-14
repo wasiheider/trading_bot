@@ -873,7 +873,7 @@ async function fetchCalendar() {
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
     const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-    const res = await fetch('https://nfs.faireconomy.media/ff_calendar_thisweek.json', {cache:'no-store'});
+    const res = await fetch(RAILWAY_URL + '/calendar', {cache:'no-store'});
     if (!res.ok) throw new Error('FF calendar ' + res.status);
     const raw = await res.json();
     // Map ForexFactory fields to the shape renderers expect
