@@ -81,8 +81,7 @@ risk_dollars      = 500.0
 // Forex sizing — output is UNITS of base currency (e.g. 250,000 for EURUSD at 20-pip SL on $500 risk)
 is_forex      = syminfo.type == "forex"
 _nzdusd_rate  = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off)
-_quote_to_usd = syminfo.currency == "USD" ? 1.0 :
-                syminfo.currency == "JPY"  ? 1.0 / close : _nzdusd_rate
+_quote_to_usd = syminfo.currency == "USD" ? 1.0 : syminfo.currency == "JPY" ? 1.0 / close : _nzdusd_rate
 
 // =============================================================================
 // SESSION + NEWS FILTERS
