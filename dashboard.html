@@ -380,6 +380,24 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     </div>
     <div style="font-size:7px;color:var(--t3);margin-top:5px">✦ includes dot plot &amp; projections</div>
   </div>
+
+  <div class="card">
+    <div class="ct">Next NFP — Jul 2</div>
+    <div class="fcount">
+      <div class="fc-lbl">Days Until NFP Release</div>
+      <div class="fc-val" id="nfp-days">--</div>
+      <div class="fc-sub">Jul 2, 2026 &nbsp;|&nbsp; 7:30 CT &nbsp;|&nbsp; Jun jobs report</div>
+    </div>
+    <div style="margin-top:8px">
+      <div class="row"><span class="rl">Apr 3</span><span class="rv" style="color:var(--t3)">DONE ✓</span></div>
+      <div class="row"><span class="rl">May 1</span><span class="rv" style="color:var(--t3)">DONE ✓</span></div>
+      <div class="row"><span class="rl">Jun 5</span><span class="rv" style="color:var(--t3)">DONE ✓</span></div>
+      <div class="row"><span class="rl" style="color:var(--a)">Jul 2 ★</span><span class="bd2 ba2">NEXT</span></div>
+      <div class="row"><span class="rl">Aug 7</span><span class="rv" style="color:var(--t3)">—</span></div>
+      <div class="row"><span class="rl">Sep 4</span><span class="rv" style="color:var(--t3)">—</span></div>
+    </div>
+    <div style="font-size:7px;color:var(--t3);margin-top:5px">★ holiday-adjusted — Jul 4 (Sat) observed Fri Jul 3</div>
+  </div>
 </div>
 
 <!-- COL 4: NEWS + COT + ANALYTICS -->
@@ -450,6 +468,13 @@ function updateFOMC() {
   document.getElementById('fomc-days').textContent = days + ' days';
 }
 updateFOMC();
+
+// ── NFP countdown ──────────────────────────────────────────
+function updateNFP() {
+  const days = Math.ceil((new Date('2026-07-02') - new Date()) / 86400000);
+  document.getElementById('nfp-days').textContent = days + ' days';
+}
+updateNFP();
 
 // ── Format helpers ─────────────────────────────────────────
 const fmt$ = v => (v >= 0 ? '+$' : '-$') + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
