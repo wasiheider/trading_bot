@@ -382,8 +382,8 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </div>
 
-<!-- COL 4: NEWS + COT -->
-<div class="col">
+<!-- COL 4: NEWS + COT + ANALYTICS -->
+<div class="col" style="overflow-y:auto">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span class="ct" style="margin:0">Market News</span>
@@ -403,6 +403,16 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       <div class="cc" style="grid-column:1/-1;text-align:center;padding:12px">
         <div style="font-size:8px;color:var(--t3);letter-spacing:1px">FETCHING CFTC DATA...</div>
       </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="ct" style="margin:0">Analytics</span>
+      <span class="bd2 ba2">POC</span>
+    </div>
+    <div id="col4-analytics-body">
+      <div class="empty" style="padding:12px"><div style="font-size:8px;color:var(--t3)">Waiting for trade data...</div></div>
     </div>
   </div>
 </div>
@@ -755,11 +765,14 @@ function inferSession(trade) {
 }
 
 function renderSessionBreakdown(trades) {
-  const el = document.getElementById('session-breakdown-body');
+  const el  = document.getElementById('session-breakdown-body');
+  const el4 = document.getElementById('col4-analytics-body');
   if (!el) return;
   const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN');
   if (!closed.length) {
-    el.innerHTML = '<div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No closed trades yet — populates automatically as trades close</div></div>';
+    const empty = '<div class="empty" style="padding:12px"><div style="font-size:8px;color:var(--t3)">No closed trades yet</div></div>';
+    el.innerHTML = empty;
+    if (el4) el4.innerHTML = empty;
     return;
   }
 
@@ -833,6 +846,12 @@ function renderSessionBreakdown(trades) {
 
   const mKeys = [...MODEL_ORDER.filter(m => mBuckets[m]), ...Object.keys(mBuckets).filter(m => !MODEL_ORDER.includes(m))];
 
+  const section = (label, rows) => `
+    <div style="margin-bottom:10px">
+      <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:5px;text-transform:uppercase">${label}</div>
+      <table class="tbl">${thead}<tbody>${rows}</tbody>${tfoot}</table>
+    </div>`;
+
   el.innerHTML = `<div style="margin-bottom:16px">
     <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Entry Model</div>
     <table class="tbl">${thead}<tbody>${mKeys.map(m => mkRow(m, mBuckets[m])).join('')}</tbody>${tfoot}</table>
@@ -847,6 +866,11 @@ function renderSessionBreakdown(trades) {
       <table class="tbl">${thead}<tbody>${iKeys.map(i => mkRow(i, iBuckets[i])).join('')}</tbody>${tfoot}</table>
     </div>
   </div>`;
+
+  if (el4) el4.innerHTML =
+    section('By Entry Model',  mKeys.map(m => mkRow(m, mBuckets[m])).join('')) +
+    section('By Session',      sKeys.map(s => mkRow(s, sBuckets[s])).join('')) +
+    section('By Instrument',   iKeys.map(i => mkRow(i, iBuckets[i])).join(''));
 }
 
 // ── Equity chart init ──────────────────────────────────────
