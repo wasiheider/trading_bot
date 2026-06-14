@@ -75,6 +75,12 @@ pip_size          = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0  : symin
 price_format      = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
 risk_dollars      = 250.0
 
+// Forex sizing — output is UNITS of base currency (e.g. 125,000 for EURUSD at 20-pip SL)
+is_forex      = syminfo.type == "forex"
+_nzdusd_rate  = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off)
+_quote_to_usd = syminfo.currency == "USD" ? 1.0 :
+                syminfo.currency == "JPY"  ? 1.0 / close : _nzdusd_rate
+
 // =============================================================================
 // ATR (5M native)
 // =============================================================================
@@ -269,15 +275,24 @@ long_rr_ok = long_rr1 >= min_rr
 // =============================================================================
 // LOT SIZING
 // =============================================================================
+// Non-forex: lots in 0.01 increments
 _lots(entry_p, sl_p) =>
     sl_pips = not na(sl_p) ? math.max(math.abs(entry_p - sl_p) / pip_size, 0.01) : 0.01
     rp001   = sl_pips * pip_value_per_001
     math.max(0.01, rp001 > 0 ? math.floor(risk_dollars / rp001) * 0.01 : 0.01)
 
-short_lots     = _lots(short_entry, short_sl)
-long_lots      = _lots(long_entry,  long_sl)
-short_tp1_lots = math.max(0.01, math.floor(short_lots / 2 / 0.01) * 0.01)
-long_tp1_lots  = math.max(0.01, math.floor(long_lots  / 2 / 0.01) * 0.01)
+// Forex: integer units of base currency
+_units(entry_p, sl_p) =>
+    sl_dist = not na(sl_p) ? math.max(math.abs(entry_p - sl_p), syminfo.mintick) : syminfo.mintick
+    math.max(1, math.round(risk_dollars / (sl_dist * _quote_to_usd)))
+
+_size(entry_p, sl_p) =>
+    is_forex ? _units(entry_p, sl_p) : _lots(entry_p, sl_p)
+
+short_lots     = _size(short_entry, short_sl)
+long_lots      = _size(long_entry,  long_sl)
+short_tp1_lots = is_forex ? math.max(1, math.round(short_lots / 2)) : math.max(0.01, math.floor(short_lots / 2 / 0.01) * 0.01)
+long_tp1_lots  = is_forex ? math.max(1, math.round(long_lots  / 2)) : math.max(0.01, math.floor(long_lots  / 2 / 0.01) * 0.01)
 
 // =============================================================================
 // FINAL SIGNALS
