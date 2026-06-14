@@ -968,7 +968,7 @@ function renderCalendarFallback() {
 
 // ── CFTC COT Index (Larry Williams method) ─────────────────
 // TFF dataset: ES, NQ, US30, BTC, USD, VIX → leveraged fund net position
-// Legacy dataset: GOLD, SILVER, CRUDE → non-commercial net position
+// Disaggregated dataset: GOLD, SILVER, CRUDE → managed money net position
 // Index = (current_net - 52wk_min) / (52wk_max - 52wk_min) × 100
 // Weekly Δ = this week's lev fund net change vs last week (upcoming week signal)
 // VIX is inverted: high lev-fund longs = high fear = bearish for market
@@ -1019,7 +1019,7 @@ async function fetchCOT() {
     const legCodes = Object.values(COT_LEG).map(c=>`'${c}'`).join(',');
     const [tffRes, legRes] = await Promise.all([
       fetch(`https://publicreporting.cftc.gov/resource/gpe5-46if.json?$where=cftc_contract_market_code in(${tffCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=600`, {headers:{Accept:'application/json'}}),
-      fetch(`https://publicreporting.cftc.gov/resource/6dca-aqww.json?$where=cftc_contract_market_code in(${legCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=200`, {headers:{Accept:'application/json'}}),
+      fetch(`https://publicreporting.cftc.gov/resource/kh3c-gbw2.json?$where=cftc_contract_market_code in(${legCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=200`, {headers:{Accept:'application/json'}}),
     ]);
     if (!tffRes.ok || !legRes.ok) throw new Error('CFTC API error');
     const [tffRows, legRows] = await Promise.all([tffRes.json(), legRes.json()]);
@@ -1060,21 +1060,21 @@ async function fetchCOT() {
         .filter(r => r.cftc_contract_market_code === code)
         .sort((a, b) => a.report_date_as_yyyy_mm_dd.localeCompare(b.report_date_as_yyyy_mm_dd));
       if (rows.length < 2) continue;
-      const nets = rows.map(r => parseInt(r.noncomm_positions_long_all || 0) - parseInt(r.noncomm_positions_short_all || 0));
+      const nets = rows.map(r => parseInt(r.m_money_positions_long_all || 0) - parseInt(r.m_money_positions_short_all || 0));
       const idxs = _cotIndex(nets);
       const idx  = idxs[idxs.length - 1];
       const bias = idx >= 60 ? 'Bullish' : idx <= 40 ? 'Bearish' : 'Neutral';
       const date = rows[rows.length - 1].report_date_as_yyyy_mm_dd?.substring(0, 10);
-      // Weekly Δ: net contracts non-comm added/removed this week vs last week
+      // Weekly Δ: net contracts managed money added/removed this week vs last week
       const latestRow   = rows[rows.length - 1];
-      const weeklyDelta = parseInt(latestRow.change_in_noncomm_long_all || 0) - parseInt(latestRow.change_in_noncomm_short_all || 0);
-      // Lev signal on noncomm deltas (covering/pressing/flipped vs 4-week avg)
-      const ncDeltas = rows.map(r => parseInt(r.change_in_noncomm_long_all || 0) - parseInt(r.change_in_noncomm_short_all || 0));
-      const lev = _levSignal(ncDeltas);
-      // MM signal: non-commercial closing/adding longs vs their 4-week avg
-      const ncChanges = rows.map(r => parseInt(r.change_in_noncomm_long_all || 0));
-      const mm = _mmSignal(ncChanges);
-      results.push({ sym, idx, bias, weeklyDelta, date, pop: 'NonComm', lev, mm });
+      const weeklyDelta = parseInt(latestRow.change_in_m_money_long_all || 0) - parseInt(latestRow.change_in_m_money_short_all || 0);
+      // Lev signal on managed money deltas (covering/pressing/flipped vs 4-week avg)
+      const mmDeltas = rows.map(r => parseInt(r.change_in_m_money_long_all || 0) - parseInt(r.change_in_m_money_short_all || 0));
+      const lev = _levSignal(mmDeltas);
+      // MM signal: managed money closing/adding longs vs their 4-week avg
+      const mmChanges = rows.map(r => parseInt(r.change_in_m_money_long_all || 0));
+      const mm = _mmSignal(mmChanges);
+      results.push({ sym, idx, bias, weeklyDelta, date, pop: 'Mgd Money', lev, mm });
     }
 
     const latest = results.map(r => r.date).filter(Boolean).sort().reverse()[0];
