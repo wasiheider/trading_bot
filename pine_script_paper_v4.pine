@@ -85,20 +85,9 @@ is_usoil      = str.contains(raw_ticker, "OIL") or str.contains(raw_ticker, "WTI
 is_us100      = str.contains(raw_ticker, "US100") or str.contains(raw_ticker, "NAS") or str.contains(raw_ticker, "NQ")
 is_us30       = str.contains(raw_ticker, "US30") or str.contains(raw_ticker, "DJI") or str.contains(raw_ticker, "YM1")
 is_us500      = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "SPX") or str.contains(raw_ticker, "ES")
-is_usdjpy     = str.contains(raw_ticker, "USDJPY") or str.contains(raw_ticker, "USD_JPY")
-is_eurnzd     = str.contains(raw_ticker, "EURNZD") or str.contains(raw_ticker, "EUR_NZD")
-
-// Non-forex sizing: USD P&L per 1-pip move per 0.01 contract
-pip_value_per_001 = is_xauusd ? 0.01 : is_usoil ? 0.10 : is_us100 ? 0.01 : 0.10
 pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
 risk_dollars  = 250.0
-
-// Forex sizing — output is UNITS of base currency (e.g. 125,000 for EURUSD at 20-pip SL)
-// Converts quote currency P&L to USD so risk_dollars / (sl_dist * _quote_to_usd) = units
-is_forex      = syminfo.type == "forex"
-_nzdusd_rate  = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off)
-_quote_to_usd = syminfo.currency == "USD" ? 1.0 : syminfo.currency == "JPY" ? 1.0 / close : _nzdusd_rate
 
 // =============================================================================
 // ATR (15M native)
@@ -456,24 +445,19 @@ long_rr_ok = long_rr1 >= min_rr
 // =============================================================================
 // LOT SIZING
 // =============================================================================
-// Non-forex: lots in 0.01 increments
-_lots(entry_p, sl_p) =>
-    sl_pips = not na(sl_p) ? math.max(math.abs(entry_p - sl_p) / pip_size, 0.01) : 0.01
-    rp001   = sl_pips * pip_value_per_001
-    math.max(0.01, rp001 > 0 ? math.floor(risk_dollars / rp001) * 0.01 : 0.01)
-
-// Forex: integer units of base currency
-_units(entry_p, sl_p) =>
-    sl_dist = not na(sl_p) ? math.max(math.abs(entry_p - sl_p), syminfo.mintick) : syminfo.mintick
-    math.max(1, math.round(risk_dollars / (sl_dist * _quote_to_usd)))
-
+// Universal formula: qty = risk_dollars / (sl_distance * syminfo.pointvalue)
+// syminfo.pointvalue is USD per price-point per contract for any instrument
+// (handles forex, futures, CFDs, metals, oil, crypto automatically)
 _size(entry_p, sl_p) =>
-    is_forex ? _units(entry_p, sl_p) : _lots(entry_p, sl_p)
+    sl_dist = not na(sl_p) ? math.max(math.abs(entry_p - sl_p), syminfo.mintick) : syminfo.mintick
+    math.max(1, math.round(risk_dollars / (sl_dist * syminfo.pointvalue)))
+
+_half(sz) => math.max(1, math.round(sz / 2))
 
 short_lots     = _size(short_entry, short_sl)
 long_lots      = _size(long_entry,  long_sl)
-short_tp1_lots = is_forex ? math.max(1, math.round(short_lots / 2)) : math.max(0.01, math.floor(short_lots / 2 / 0.01) * 0.01)
-long_tp1_lots  = is_forex ? math.max(1, math.round(long_lots  / 2)) : math.max(0.01, math.floor(long_lots  / 2 / 0.01) * 0.01)
+short_tp1_lots = _half(short_lots)
+long_tp1_lots  = _half(long_lots)
 
 // =============================================================================
 // FINAL SIGNALS
@@ -530,8 +514,8 @@ upthrust_signal = in_upthrust_zone and close < range_high and was_near_high_pre 
 
 spring_lots       = _size(close, spring_sl_raw)
 upthrust_lots     = _size(close, upthrust_sl_raw)
-spring_tp1_lots   = is_forex ? math.max(1, math.round(spring_lots   / 2)) : math.max(0.01, math.floor(spring_lots   / 2 / 0.01) * 0.01)
-upthrust_tp1_lots = is_forex ? math.max(1, math.round(upthrust_lots / 2)) : math.max(0.01, math.floor(upthrust_lots / 2 / 0.01) * 0.01)
+spring_tp1_lots   = _half(spring_lots)
+upthrust_tp1_lots = _half(upthrust_lots)
 
 // =============================================================================
 // STRATEGY EXECUTION
