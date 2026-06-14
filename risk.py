@@ -81,7 +81,11 @@ paper_state = {
 
 _save_state()
 
-# ── Instrument config (pip values for lot sizing) ──────────
+# ── Instrument config ──────────────────────────────────────
+# Non-forex: pip_value = USD per pip per CONTRACT. lot_size output = contracts.
+# Forex:     pip_value = USD per pip per UNIT (base currency).
+#            lot_size output = UNITS of base currency (integer).
+#            "forex": True flag triggers integer rounding in check_paper_risk().
 PAPER_INSTRUMENT_CONFIG = {
     # Metals
     "XAUUSD": {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
@@ -91,23 +95,26 @@ PAPER_INSTRUMENT_CONFIG = {
     # Indices
     "US100":  {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
     "NQ":     {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
-    "MNQ":    {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
+    "MNQ":    {"pip_value": 2.00,  "pip_size": 0.25,   "default_sl_pips": 20},
     "US30":   {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
     "YM":     {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
-    "MYM":    {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
+    "MYM":    {"pip_value": 0.50,  "pip_size": 1.0,    "default_sl_pips": 20},
     "US500":  {"pip_value": 1.00,  "pip_size": 0.1,    "default_sl_pips": 20},
-    "ES":     {"pip_value": 1.00,  "pip_size": 0.1,    "default_sl_pips": 20},
-    "MES":    {"pip_value": 1.00,  "pip_size": 0.1,    "default_sl_pips": 20},
+    "ES":     {"pip_value": 50.00, "pip_size": 0.25,   "default_sl_pips": 20},
+    "MES":    {"pip_value": 5.00,  "pip_size": 0.25,   "default_sl_pips": 20},
     # Commodities
     "USOIL":  {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
     "CL":     {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
     "MCL":    {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
-    # Forex
-    "EURUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
-    "GBPUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
-    "USDJPY": {"pip_value": 6.50,  "pip_size": 0.01,   "default_sl_pips": 20},  # ~$6.50/pip/lot at ~154 JPY
-    "EURNZD": {"pip_value": 6.00,  "pip_size": 0.0001, "default_sl_pips": 20},  # ~$6.00/pip/lot at NZDUSD ~0.60
-    "NZDUSD": {"pip_value": 10.00, "pip_size": 0.0001, "default_sl_pips": 20},
+    # Forex — pip_value per UNIT per pip; output = UNITS (integer)
+    # USD-quoted pairs: 1 pip = $0.0001 per unit (always fixed)
+    "EURUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "forex": True},
+    "GBPUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "forex": True},
+    "NZDUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "forex": True},
+    # JPY-quoted: pip = 0.01; pip_value = 0.01 / USDJPY_rate  (~0.0000625 at 160 JPY)
+    "USDJPY": {"pip_value": 0.0000625, "pip_size": 0.01,   "default_sl_pips": 20, "forex": True},
+    # Cross with NZD quote: pip_value = 0.0001 × NZDUSD  (~0.0000583 at NZDUSD 0.583)
+    "EURNZD": {"pip_value": 0.0000583, "pip_size": 0.0001, "default_sl_pips": 20, "forex": True},
     # Crypto
     "BTCUSD": {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
 }
@@ -120,8 +127,14 @@ def check_paper_risk(instrument: str, sl_pips: int = None) -> dict:
 
     sl = sl_pips or cfg["default_sl_pips"]
     risk_dollars = paper_state["account_balance"] * RISK_PER_TRADE
-    lot_size = round(risk_dollars / (sl * cfg["pip_value"]), 2)
-    lot_size = max(0.01, lot_size)
+    raw = risk_dollars / (sl * cfg["pip_value"])
+
+    if cfg.get("forex"):
+        # Forex: output is integer units of base currency (e.g. 125000 for EURUSD)
+        lot_size = max(1, round(raw))
+    else:
+        # Futures/indices/metals: output is contracts (decimal lots)
+        lot_size = max(0.01, round(raw, 2))
 
     return {
         "allowed":      True,

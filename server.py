@@ -77,7 +77,7 @@ def _sync_oanda_on_startup():
                 "sl":             None,
                 "tp1":            None,
                 "tp2":            None,
-                "lot_size":       round(abs(units) / 100000, 2),
+                "lot_size":       int(abs(units)),
                 "result":         "OPEN",
                 "pnl":            0,
                 "oanda_trade_id": trade_id,
@@ -210,7 +210,7 @@ def handle_paper_signal(data):
         f"SL: `{sl}`\n"
         f"TP1: `{tp1}`\n"
         f"TP2: `{tp2}`\n"
-        f"Lots: `{risk['lot_size']}`\n"
+        f"Units: `{risk['lot_size']}`\n"
         f"Risk: `${risk['risk_dollars']}`"
         f"{rr_line}"
         f"{bos_line}"

@@ -20,13 +20,14 @@ INSTRUMENT_MAP = {
     "NZDUSD": "NZD_USD",
 }
 
-# OANDA units per 1 standard lot from risk.py (forex: 1 lot = 100,000 units)
+# risk.py now outputs UNITS directly for forex (lot_size = units of base currency).
+# Multiplier is 1 — pass units straight through to OANDA.
 _UNITS_PER_LOT = {
-    "EUR_USD": 100000,
-    "GBP_USD": 100000,
-    "USD_JPY": 100000,
-    "EUR_NZD": 100000,
-    "NZD_USD": 100000,
+    "EUR_USD": 1,
+    "GBP_USD": 1,
+    "USD_JPY": 1,
+    "EUR_NZD": 1,
+    "NZD_USD": 1,
 }
 
 
