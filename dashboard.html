@@ -867,30 +867,39 @@ function initChart() {
   });
 }
 
-// ── Finnhub calendar ───────────────────────────────────────
+// ── ForexFactory calendar (via community JSON proxy) ───────
 async function fetchCalendar() {
   try {
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
-    const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    const todayStr = fmt(now);
-    const weekEnd  = new Date(now); weekEnd.setDate(now.getDate() + (7 - now.getDay()));
-    const url = `https://finnhub.io/api/v1/calendar/economic?from=${todayStr}&to=${fmt(weekEnd)}&token=${FINNHUB_KEY}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Finnhub ' + res.status);
-    const data = await res.json();
-    const events = (data.economicCalendar || []).filter(e => e.country === 'US' || e.country === 'United States');
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const res = await fetch('https://nfs.faireconomy.media/ff_calendar_thisweek.json', {cache:'no-store'});
+    if (!res.ok) throw new Error('FF calendar ' + res.status);
+    const raw = await res.json();
+    // Map ForexFactory fields to the shape renderers expect
+    const events = raw
+      .filter(e => e.country === 'USD')
+      .map(e => ({
+        time:     e.date,
+        event:    e.title,
+        impact:   e.impact,
+        prev:     e.previous || null,
+        estimate: e.forecast || null,
+        actual:   null,
+        country:  'US',
+      }));
     const todayEvents = events.filter(e => e.time && e.time.startsWith(todayStr));
     const weekEvents  = events.filter(e => e.time && !e.time.startsWith(todayStr));
     renderTodayEvents(todayEvents, todayStr);
     renderWeekEvents(weekEvents);
-  } catch(e) { console.warn('Finnhub fetch failed:', e); renderCalendarFallback(); }
+  } catch(e) { console.warn('Calendar fetch failed:', e); renderCalendarFallback(); }
 }
 
 function impactClass(i) { const s = String(i||'').toLowerCase(); return s==='high'||s==='3'?'nhigh':s==='medium'||s==='2'?'nmed':'nlow'; }
 function impactLabel(i) { const s = String(i||'').toLowerCase(); return s==='high'||s==='3'?'HIGH':s==='medium'||s==='2'?'MEDIUM':'LOW'; }
-function fmtEventTime(t) { if (!t) return ''; const d = new Date(t.replace(' ','T')+'Z'); const ct = new Date(d.toLocaleString('en-US',{timeZone:'America/Chicago'})); const pad=n=>String(n).padStart(2,'0'); return `${pad(ct.getHours())}:${pad(ct.getMinutes())} CT`; }
-function fmtEventDate(t) { if (!t) return ''; return new Date(t.replace(' ','T')+'Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'America/Chicago'}); }
+function toISO(t) { return t.includes('T') ? t : t.replace(' ','T')+'Z'; }
+function fmtEventTime(t) { if (!t) return ''; const d = new Date(toISO(t)); const ct = new Date(d.toLocaleString('en-US',{timeZone:'America/Chicago'})); const pad=n=>String(n).padStart(2,'0'); return `${pad(ct.getHours())}:${pad(ct.getMinutes())} CT`; }
+function fmtEventDate(t) { if (!t) return ''; return new Date(toISO(t)).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'America/Chicago'}); }
 
 function renderTodayEvents(events, todayStr) {
   const el = document.getElementById('today-events');
@@ -904,7 +913,7 @@ function renderTodayEvents(events, todayStr) {
   if (!events.length) { el.innerHTML = '<div class="ni"><div class="ntime">No US events today</div></div>'; return; }
   const sorted = [...events].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
   el.innerHTML = sorted.map(e => {
-    const evTime = e.time ? new Date(e.time.replace(' ','T')+'Z') : null;
+    const evTime = e.time ? new Date(toISO(e.time)) : null;
     const isPast = evTime && evTime < new Date();
     const isNext = !isPast && evTime && (evTime - new Date()) < 3600000;
     const tColor = isPast?'var(--t3)':isNext?'var(--a)':'var(--t2)';
@@ -938,9 +947,9 @@ function renderWeekEvents(events) {
 }
 
 function renderCalendarFallback() {
-  ['today-impact-badge','week-impact-badge'].forEach(id => { const el=document.getElementById(id); el.textContent='NO KEY'; el.className='bd2 ba2'; });
-  document.getElementById('today-events').innerHTML = '<div class="ni"><div class="ntime" style="color:var(--a)">Finnhub key not set</div></div>';
-  document.getElementById('week-events').innerHTML  = '<div class="ni"><div class="ntime" style="color:var(--t3)">Add key to script</div></div>';
+  ['today-impact-badge','week-impact-badge'].forEach(id => { const el=document.getElementById(id); el.textContent='UNAVAILABLE'; el.className='bd2 bdim'; });
+  document.getElementById('today-events').innerHTML = '<div class="ni"><div class="ntime" style="color:var(--t3)">Calendar unavailable</div></div>';
+  document.getElementById('week-events').innerHTML  = '<div class="ni"><div class="ntime" style="color:var(--t3)">Calendar unavailable</div></div>';
 }
 
 // ── CFTC COT Index (Larry Williams method) ─────────────────
