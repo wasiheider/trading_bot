@@ -73,6 +73,8 @@ is_us500      = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "S
 pip_size          = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0  : syminfo.mintick * 10
 price_format      = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
 risk_dollars      = 250.0
+_nzdusd_rate      = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off)
+_quote_to_usd     = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "NZD" ? _nzdusd_rate : 1.0
 
 // =============================================================================
 // ATR (5M native)
@@ -268,13 +270,14 @@ long_rr_ok = long_rr1 >= min_rr
 // =============================================================================
 // LOT SIZING
 // =============================================================================
-// Universal formula: qty = risk_dollars / (sl_distance * syminfo.pointvalue)
-// syminfo.pointvalue is USD per price-point per contract for any instrument
+// qty = risk / (sl_dist * pointvalue * quote_to_usd)
+// pointvalue = quote-currency per price-point per contract (Pine built-in)
+// quote_to_usd = 1.0 for USD-quoted pairs, 1/close for JPY, NZDUSD rate for NZD
 _size(entry_p, sl_p) =>
     sl_dist = not na(sl_p) ? math.max(math.abs(entry_p - sl_p), syminfo.mintick) : syminfo.mintick
-    math.max(1, math.round(risk_dollars / (sl_dist * syminfo.pointvalue)))
+    math.max(0.01, math.round(risk_dollars / (sl_dist * syminfo.pointvalue * _quote_to_usd), 2))
 
-_half(sz) => math.max(1, math.round(sz / 2))
+_half(sz) => math.max(0.01, math.round(sz / 2, 2))
 
 short_lots     = _size(short_entry, short_sl)
 long_lots      = _size(long_entry,  long_sl)
