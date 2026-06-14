@@ -1098,12 +1098,14 @@ function renderCOT(items) {
           <div class="csym">${item.sym}</div>
           <div class="cpop">${item.pop}</div>
         </div>
-        <div style="display:flex;align-items:baseline">
-          <div class="cbias ${biasClass}">${item.bias}</div>
-          ${deltaHtml}
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="display:flex;align-items:baseline;gap:3px">
+            <div class="cbias ${biasClass}">${item.bias}</div>
+            ${deltaHtml}
+          </div>
+          <div style="font-size:11px;font-weight:700;color:${barColor};letter-spacing:-0.5px">${item.idx}<span style="font-size:7px;color:var(--t3);font-weight:400">/100</span></div>
         </div>
-        <div class="cconf">Index: ${item.idx}/100</div>
-        <div class="cbg">
+        <div class="cbg" style="margin-top:3px">
           <div class="cbf" style="width:${item.idx}%;background:${barColor}"></div>
           <div class="cidx-marker" style="left:60%"></div>
           <div class="cidx-marker" style="left:40%"></div>
