@@ -605,9 +605,16 @@ if short_signal
          limit=short_tp2, stop=short_sl, comment="TP2 1:2")
     strategy.exit("SHORT_TP3", from_entry="SHORT",
          limit=short_tp3, stop=short_sl, comment="TP3 1:10")
-    s_entry := short_entry; s_tp1 := short_tp1; s_tp2 := short_tp2
-    s_tp3 := short_tp3; s_tp5 := short_tp5; s_tp3sl := short_tp3sl
-    s_tp2q := short_tp2_lots; tp1_hit := false; tp2_hit := false; tp5_hit := false
+    s_entry := short_entry
+    s_tp1   := short_tp1
+    s_tp2   := short_tp2
+    s_tp3   := short_tp3
+    s_tp5   := short_tp5
+    s_tp3sl := short_tp3sl
+    s_tp2q  := short_tp2_lots
+    tp1_hit := false
+    tp2_hit := false
+    tp5_hit := false
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"SHORT","setup":"bos","timeframe":"15"' +
@@ -636,9 +643,16 @@ if long_signal
          limit=long_tp2, stop=long_sl, comment="TP2 1:2")
     strategy.exit("LONG_TP3", from_entry="LONG",
          limit=long_tp3, stop=long_sl, comment="TP3 1:10")
-    s_entry := long_entry; s_tp1 := long_tp1; s_tp2 := long_tp2
-    s_tp3 := long_tp3; s_tp5 := long_tp5; s_tp3sl := long_tp3sl
-    s_tp2q := long_tp2_lots; tp1_hit := false; tp2_hit := false; tp5_hit := false
+    s_entry := long_entry
+    s_tp1   := long_tp1
+    s_tp2   := long_tp2
+    s_tp3   := long_tp3
+    s_tp5   := long_tp5
+    s_tp3sl := long_tp3sl
+    s_tp2q  := long_tp2_lots
+    tp1_hit := false
+    tp2_hit := false
+    tp5_hit := false
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"LONG","setup":"bos","timeframe":"15"' +
@@ -667,9 +681,16 @@ if short_signal_c
          limit=short_tp2, stop=short_sl, comment="TP2 1:2")
     strategy.exit("SHORT_C_TP3", from_entry="SHORT_C",
          limit=short_tp3, stop=short_sl, comment="TP3 1:10")
-    s_entry := short_entry; s_tp1 := short_tp1; s_tp2 := short_tp2
-    s_tp3 := short_tp3; s_tp5 := short_tp5; s_tp3sl := short_tp3sl
-    s_tp2q := short_tp2_lots; tp1_hit := false; tp2_hit := false; tp5_hit := false
+    s_entry := short_entry
+    s_tp1   := short_tp1
+    s_tp2   := short_tp2
+    s_tp3   := short_tp3
+    s_tp5   := short_tp5
+    s_tp3sl := short_tp3sl
+    s_tp2q  := short_tp2_lots
+    tp1_hit := false
+    tp2_hit := false
+    tp5_hit := false
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"SHORT","setup":"bos_div","timeframe":"15"' +
@@ -699,9 +720,16 @@ if long_signal_c
          limit=long_tp2, stop=long_sl, comment="TP2 1:2")
     strategy.exit("LONG_C_TP3", from_entry="LONG_C",
          limit=long_tp3, stop=long_sl, comment="TP3 1:10")
-    s_entry := long_entry; s_tp1 := long_tp1; s_tp2 := long_tp2
-    s_tp3 := long_tp3; s_tp5 := long_tp5; s_tp3sl := long_tp3sl
-    s_tp2q := long_tp2_lots; tp1_hit := false; tp2_hit := false; tp5_hit := false
+    s_entry := long_entry
+    s_tp1   := long_tp1
+    s_tp2   := long_tp2
+    s_tp3   := long_tp3
+    s_tp5   := long_tp5
+    s_tp3sl := long_tp3sl
+    s_tp2q  := long_tp2_lots
+    tp1_hit := false
+    tp2_hit := false
+    tp5_hit := false
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"LONG","setup":"bos_div","timeframe":"15"' +
@@ -741,9 +769,16 @@ if spring_signal
          limit=_sp_tp2, stop=spring_sl_stored, comment="TP2 1:2")
     strategy.exit("SPRING_TP3", from_entry="SPRING",
          limit=_sp_tp3, stop=spring_sl_stored, comment="TP3 1:10")
-    s_entry := _sp_ent; s_tp1 := _sp_tp1; s_tp2 := _sp_tp2
-    s_tp3 := _sp_tp3; s_tp5 := _sp_tp5; s_tp3sl := _sp_t3sl
-    s_tp2q := _sp_tp2l; tp1_hit := false; tp2_hit := false; tp5_hit := false
+    s_entry := _sp_ent
+    s_tp1   := _sp_tp1
+    s_tp2   := _sp_tp2
+    s_tp3   := _sp_tp3
+    s_tp5   := _sp_tp5
+    s_tp3sl := _sp_t3sl
+    s_tp2q  := _sp_tp2l
+    tp1_hit := false
+    tp2_hit := false
+    tp5_hit := false
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"LONG","setup":"spring","timeframe":"15"' +
@@ -781,9 +816,16 @@ if upthrust_signal
          limit=_ut_tp2, stop=upthrust_sl_stored, comment="TP2 1:2")
     strategy.exit("UPTHRUST_TP3", from_entry="UPTHRUST",
          limit=_ut_tp3, stop=upthrust_sl_stored, comment="TP3 1:10")
-    s_entry := _ut_ent; s_tp1 := _ut_tp1; s_tp2 := _ut_tp2
-    s_tp3 := _ut_tp3; s_tp5 := _ut_tp5; s_tp3sl := _ut_t3sl
-    s_tp2q := _ut_tp2l; tp1_hit := false; tp2_hit := false; tp5_hit := false
+    s_entry := _ut_ent
+    s_tp1   := _ut_tp1
+    s_tp2   := _ut_tp2
+    s_tp3   := _ut_tp3
+    s_tp5   := _ut_tp5
+    s_tp3sl := _ut_t3sl
+    s_tp2q  := _ut_tp2l
+    tp1_hit := false
+    tp2_hit := false
+    tp5_hit := false
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
              '","direction":"SHORT","setup":"upthrust","timeframe":"15"' +
