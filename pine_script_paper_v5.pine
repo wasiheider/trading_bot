@@ -64,8 +64,8 @@ max_retrace_pct = input.float(60.0,"Max Retrace — invalidate BOS (%)",        
 
 min_boundary_touches = input.int(3, "Min boundary touches to arm (combined H+L)", group="Filters", minval=1, maxval=10)
 min_mid_crosses      = input.int(3, "Min mid crosses to arm",                     group="Filters", minval=1, maxval=20)
-swing_down_bars      = input.int(4, "30M swing: min consecutive down bars",       group="Filters", minval=2, maxval=10)
-swing_up_bars        = input.int(4, "30M swing: min consecutive up bars",         group="Filters", minval=2, maxval=10)
+swing_down_bars      = input.int(4, "1H swing: min consecutive down bars",        group="Filters", minval=2, maxval=10)
+swing_up_bars        = input.int(4, "1H swing: min consecutive up bars",          group="Filters", minval=2, maxval=10)
 use_rotation    = input.bool(false, "Boundary Rotation Gate",                     group="Filters")
 max_break_pct   = input.float(30.0, "Invalidate range if price breaks by % of range size", group="Filters", minval=5.0, step=5.0)
 use_atr_filter   = input.bool(false, "ATR Volatility Filter (block when ATR < avg)", group="Filters")
@@ -140,7 +140,10 @@ bull_div = not na(_pl1_price) and not na(_pl2_price) and _pl1_price < _pl2_price
 rsi_c_ok = rsi_val >= rsi_c_lower and rsi_val <= rsi_c_upper
 
 // =============================================================================
-// 30M SWING QUALITY GATE
+// 1H SWING QUALITY GATE
+// Validates range structure using 1H candle legs.
+// Requires 3 legs of >= swing_bars each: up→down→up or down→up→down on 1H.
+// Each leg = at least 4 × 1H bars between confirmed 1H pivot points (= 4H+ per leg).
 // =============================================================================
 f_swing_quality() =>
     _plen   = 2
@@ -214,7 +217,7 @@ f_swing_quality() =>
 // =============================================================================
 _1h_ph_raw   = request.security(syminfo.tickerid, "240", ta.pivothigh(high, pivot_len, pivot_len), lookahead=barmerge.lookahead_off)
 _1h_pl_raw   = request.security(syminfo.tickerid, "240", ta.pivotlow(low,  pivot_len, pivot_len),  lookahead=barmerge.lookahead_off)
-m30_swing_ok = request.security(syminfo.tickerid, "30", f_swing_quality(), lookahead=barmerge.lookahead_off)
+m30_swing_ok = request.security(syminfo.tickerid, "60", f_swing_quality(), lookahead=barmerge.lookahead_off)
 
 var float range_high  = na
 var float range_low   = na
@@ -1210,8 +1213,8 @@ if show_info
     table.cell(info, 1, 15, range_invalidated ? "--" : bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
          text_color=range_invalidated ? color.gray : bear_bos_active ? color.orange : bull_bos_active ? color.blue : color.gray)
-    table.cell(info, 0, 16, "30M Min Leg Bars",                text_color=color.gray)
-    table.cell(info, 1, 16, str.tostring(swing_down_bars) + "+" + str.tostring(swing_up_bars) + "+" + str.tostring(swing_down_bars), text_color=color.gray)
+    table.cell(info, 0, 16, "1H Min Leg Bars",                 text_color=color.gray)
+    table.cell(info, 1, 16, str.tostring(swing_down_bars) + "+" + str.tostring(swing_up_bars) + "+" + str.tostring(swing_down_bars) + " × 1H", text_color=color.gray)
     _atr_pips     = math.round(atr_now / pip_size, 1)
     _atr_avg_pips = math.round(atr_avg / pip_size, 1)
     _atr_label    = not use_atr_filter ? "OFF" :
@@ -1219,8 +1222,8 @@ if show_info
          "BLOCK " + str.tostring(_atr_pips, "#.#") + " < " + str.tostring(_atr_avg_pips, "#.#") + " pips"
     table.cell(info, 0, 17, "ATR Filter",                      text_color=color.gray)
     table.cell(info, 1, 17, _atr_label,                        text_color=not use_atr_filter ? color.gray : atr_ok ? color.green : color.red)
-    _swing_txt = m30_swing_ok ? "CONFIRMED (↓↑↓ or ↑↓↑)" : "WAITING"
-    table.cell(info, 0, 18, "30M Swing Pattern",               text_color=color.gray)
+    _swing_txt = m30_swing_ok ? "CONFIRMED 1H (↓↑↓ or ↑↓↑)" : "WAITING"
+    table.cell(info, 0, 18, "1H Swing Pattern",                text_color=color.gray)
     table.cell(info, 1, 18, range_invalidated ? "--" : _swing_txt, text_color=range_invalidated ? color.gray : m30_swing_ok ? color.green : color.orange)
     table.cell(info, 0, 19, "Range Broken",                    text_color=color.gray)
     table.cell(info, 1, 19, range_invalidated ? "YES — await new pivots" : range_broken ? "BREAKING" : "NO",
