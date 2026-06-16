@@ -1066,7 +1066,7 @@ if show_signals and sl_long_hit
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 24, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 25, bgcolor=color.new(color.black, 70), border_width=1)
 if show_info
     arm_display = not use_rotation ? "OFF" :
          armed_side == "none" ? "WAIT->" + (waiting_for_high ? "HIGH" : "LOW") :
