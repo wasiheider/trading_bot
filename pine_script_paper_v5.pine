@@ -23,14 +23,14 @@
 //   Counters reset when range is invalidated (price breaks 30% beyond boundary).
 //
 // Entry Logic:
-//   BOS  : Near HIGH zone -> 15M bearish BOS -> 15M retest rejection -> SHORT
-//          Near LOW  zone -> 15M bullish BOS -> 15M retest rejection -> LONG
-//   UPTHRUST: Wick above range_high, close back below -> PENDING -> next bar
-//             confirms price back inside range body -> SHORT
-//   SPRING  : Wick below range_low,  close back above -> PENDING -> next bar
-//             confirms price back inside range body -> LONG
+//   BOS  : Near HIGH zone -> close < most recent 15M swing HIGH (zone-specific) -> 15M retest rejection -> SHORT
+//          Near LOW  zone -> close > most recent 15M swing LOW  (zone-specific) -> 15M retest rejection -> LONG
+//          BOS level = swing HIGH (for short) / swing LOW (for long); SL just beyond that same level.
+//          Gives tighter entries right at the zone boundary vs waiting for a full swing low/high break.
+//   UPTHRUST: Wick above range_high, close back below -> PENDING -> BOS fires when close < last 15M swing LOW -> SHORT
+//   SPRING  : Wick below range_low,  close back above -> PENDING -> BOS fires when close > last 15M swing HIGH -> LONG
 //   TP1 = range mid  |  TP2 = opposite boundary
-//   SL  = 15M swing high/low + ATR(14)*mult buffer
+//   SL  = BOS swing level + ATR(14)*mult buffer
 //   At TP1: close 50% of position, move SL to breakeven
 //
 // Chart       : Load on 15M
@@ -347,8 +347,26 @@ if not na(m15_ph_src)
 if not na(m15_pl_src)
     last_m15_pl := m15_pl_src
 
-m15_bear_raw = not na(last_m15_pl) and close < last_m15_pl
-m15_bull_raw = not na(last_m15_ph) and close > last_m15_ph
+// Zone-specific swing levels: most recent 15M pivot HIGH while near the high zone (for bear BOS),
+// and most recent 15M pivot LOW while near the low zone (for bull BOS).
+// Using the same-side pivot gives tighter, earlier entries right at the range boundary.
+var float zone_m15_ph = na
+var float zone_m15_pl = na
+
+if (near_high or was_near_high) and not na(m15_ph_src)
+    zone_m15_ph := m15_ph_src
+if not near_high and not was_near_high
+    zone_m15_ph := na
+
+if (near_low or was_near_low) and not na(m15_pl_src)
+    zone_m15_pl := m15_pl_src
+if not near_low and not was_near_low
+    zone_m15_pl := na
+
+// Bear BOS: close below the most recent swing HIGH near the high zone (price failed to hold above it)
+// Bull BOS: close above the most recent swing LOW near the low zone  (price rejected and bounced)
+m15_bear_raw = not na(zone_m15_ph) and close < zone_m15_ph
+m15_bull_raw = not na(zone_m15_pl) and close > zone_m15_pl
 
 var bool m15_bear_prev = false
 var bool m15_bull_prev = false
@@ -376,20 +394,20 @@ var float bull_sl_swing   = na
 max_retrace_dist = not na(htf_range) ? htf_range * (max_retrace_pct / 100.0) : na
 
 if m15_bear_event
-    bear_bos_level  := last_m15_pl
+    bear_bos_level  := zone_m15_ph
     bear_bos_active := true
     bear_bos_bar    := bar_index
     bull_bos_active := false
     was_near_high   := false
-    bear_sl_swing   := last_m15_ph
+    bear_sl_swing   := zone_m15_ph
 
 if m15_bull_event
-    bull_bos_level  := last_m15_ph
+    bull_bos_level  := zone_m15_pl
     bull_bos_active := true
     bull_bos_bar    := bar_index
     bear_bos_active := false
     was_near_low    := false
-    bull_sl_swing   := last_m15_pl
+    bull_sl_swing   := zone_m15_pl
 
 if bear_bos_active and not na(max_retrace_dist) and not na(bear_bos_level)
     if close < bear_bos_level - max_retrace_dist or close > bear_bos_level + max_retrace_dist
