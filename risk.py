@@ -243,6 +243,7 @@ def reset_paper_full():
     paper_state["total_wins"]      = 0
     paper_state["total_losses"]    = 0
     paper_state["last_signal"]     = None
+    paper_state["trades"]          = []
     _save_state()
     try:
         with open(TRADES_FILE, "w") as f:

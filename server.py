@@ -569,4 +569,4 @@ def admin_reset():
 # ── Health ─────────────────────────────────────────────────
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "mode": "paper-trading", "strategy": "v4", "time": ct_now().isoformat()}), 200
+    return jsonify({"status": "ok", "mode": "paper-trading", "strategy": "v5", "time": ct_now().isoformat()}), 200
