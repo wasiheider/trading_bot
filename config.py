@@ -24,8 +24,8 @@ OANDA_BASE_URL   = os.getenv("OANDA_BASE_URL", "https://api-fxpractice.oanda.com
 DATA_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
 
 # ── Risk ──────────────────────────────────────────────────
-RISK_PER_TRADE = 0.0025  # 0.25% per trade ($250 on $100k)
+RISK_PER_TRADE = 0.005   # 0.5% per trade ($500 on $100k)
 
 # ── Risk Limits (breach = signals still fire, OANDA skipped) ──
-MAX_DAILY_LOSS  = 2000.0  # $2,000 daily loss (2% of $100k)
-MAX_WEEKLY_LOSS = 5000.0  # $5,000 weekly loss
+MAX_DAILY_LOSS  = 4000.0  # $4,000 daily loss (4% of $100k)
+MAX_WEEKLY_LOSS = 10000.0  # $10,000 weekly loss (10% of $100k)
