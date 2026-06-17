@@ -928,9 +928,9 @@ if short_signal_d
              ',"stop_loss":'   + str.tostring(d_short_sl,    price_format) +
              ',"tp1":'         + str.tostring(d_short_tp1,   price_format) +
              ',"tp2":'         + str.tostring(d_short_tp2,   price_format) +
-             ',"bos_level":'   + str.tostring(htf_mid,       price_format) +
-             ',"range_high":'  + str.tostring(range_high,    price_format) +
-             ',"range_low":'   + str.tostring(range_low,     price_format) +
+             ',"bos_level":'   + str.tostring(_d_bos_short_level, price_format) +
+             ',"range_high":'  + str.tostring(range_high,       price_format) +
+             ',"range_low":'   + str.tostring(range_low,        price_format) +
              ',"token":"paper_wasirizvi_wyckoffstrategy"}'
     _d_bos_short_active := false
 
@@ -959,9 +959,9 @@ if long_signal_d
              ',"stop_loss":'   + str.tostring(d_long_sl,    price_format) +
              ',"tp1":'         + str.tostring(d_long_tp1,   price_format) +
              ',"tp2":'         + str.tostring(d_long_tp2,   price_format) +
-             ',"bos_level":'   + str.tostring(htf_mid,      price_format) +
-             ',"range_high":'  + str.tostring(range_high,   price_format) +
-             ',"range_low":'   + str.tostring(range_low,    price_format) +
+             ',"bos_level":'   + str.tostring(_d_bos_long_level, price_format) +
+             ',"range_high":'  + str.tostring(range_high,      price_format) +
+             ',"range_low":'   + str.tostring(range_low,       price_format) +
              ',"token":"paper_wasirizvi_wyckoffstrategy"}'
     _d_bos_long_active  := false
 
