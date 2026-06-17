@@ -71,6 +71,7 @@ max_break_pct   = input.float(30.0, "Invalidate range if price breaks by % of ra
 use_atr_filter   = input.bool(false, "ATR Volatility Filter (block when ATR < avg)", group="Filters")
 atr_avg_len      = input.int(50,    "ATR average length (above = entry allowed)",   group="Filters", minval=10, maxval=200)
 entry_a_enabled  = input.bool(false, "Enable Entry A (BOS+Boundary Reject)",        group="Filters")
+entry_b_enabled  = input.bool(false, "Enable Entry B (Spring/Upthrust)",             group="Filters")
 
 show_range      = input.bool(true,  "Show range levels",                           group="Display")
 show_bos        = input.bool(true,  "Show BOS level",                              group="Display")
@@ -491,8 +492,8 @@ no_position  = strategy.opentrades == 0
 _bos_short_base = short_retracing and short_rr_ok and not na(short_sl) and bear_entry_bar < bear_bos_bar and no_position and not range_broken and atr_ok
 _bos_long_base  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken and atr_ok
 
-short_signal_c = _bos_short_base and bear_div and rsi_c_ok
-long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok
+short_signal_c = _bos_short_base and bear_div and rsi_c_ok and not (is_usoil or is_xagusd)
+long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and not (is_usoil or is_xagusd)
 short_signal   = _bos_short_base and not short_signal_c and entry_a_enabled
 long_signal    = _bos_long_base  and not long_signal_c  and entry_a_enabled
 
@@ -629,7 +630,7 @@ _ut_bos_event = _ut_bos_raw and not _ut_bos_prev
 _ut_bos_prev := _ut_bos_raw
 
 upthrust_signal = _ut_bos_event and not range_invalidated and no_position and atr_ok and
-     _ut_rr_ok and not na(upthrust_sl_stored) and not is_gbpusd and
+     _ut_rr_ok and not na(upthrust_sl_stored) and entry_b_enabled and
      not long_signal and not short_signal and not long_signal_c and not short_signal_c
 
 // --- Spring pending state ---
@@ -665,7 +666,7 @@ _sp_bos_event = _sp_bos_raw and not _sp_bos_prev
 _sp_bos_prev := _sp_bos_raw
 
 spring_signal = _sp_bos_event and not range_invalidated and no_position and atr_ok and
-     _sp_rr_ok and not na(spring_sl_stored) and not is_gbpusd and
+     _sp_rr_ok and not na(spring_sl_stored) and entry_b_enabled and
      not long_signal and not short_signal and not long_signal_c and not short_signal_c
 
 
@@ -1369,8 +1370,10 @@ if show_info
     table.cell(info, 1, 26, _d_ret_txt,                       text_color=_d_ret_clr)
     _ea_txt = entry_a_enabled ? "ENABLED" : "DISABLED"
     _ea_clr = entry_a_enabled ? color.green : color.gray
-    table.cell(info, 0, 27, "Entry A",                        text_color=color.gray)
-    table.cell(info, 1, 27, _ea_txt,                          text_color=_ea_clr)
+    _eb_txt = entry_b_enabled ? "ENABLED" : "DISABLED"
+    _eb_clr = entry_b_enabled ? color.green : color.gray
+    table.cell(info, 0, 27, "Entry A / B",                    text_color=color.gray)
+    table.cell(info, 1, 27, "A:" + _ea_txt + "  B:" + _eb_txt, text_color=entry_a_enabled or entry_b_enabled ? color.green : color.gray)
     _ed_inst_txt = is_xagusd ? "BLOCKED (XAGUSD)" : is_usoil ? "BLOCKED (USOIL)" : is_btcusd ? "BLOCKED (BTCUSD)" : "OK"
     _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd) ? color.red : color.green
     table.cell(info, 0, 28, "Entry D Filter",                 text_color=color.gray)
