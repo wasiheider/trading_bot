@@ -573,7 +573,7 @@ d_short_lots     = _size(d_short_entry, d_short_sl)
 d_long_tp1_lots  = _tp1q(d_long_lots)
 d_short_tp1_lots = _tp1q(d_short_lots)
 
-_entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd)
+_entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd or is_gbpusd)
 
 short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok
 long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok
@@ -1374,7 +1374,7 @@ if show_info
     _eb_clr = entry_b_enabled ? color.green : color.gray
     table.cell(info, 0, 27, "Entry A / B",                    text_color=color.gray)
     table.cell(info, 1, 27, "A:" + _ea_txt + "  B:" + _eb_txt, text_color=entry_a_enabled or entry_b_enabled ? color.green : color.gray)
-    _ed_inst_txt = is_xagusd ? "BLOCKED (XAGUSD)" : is_usoil ? "BLOCKED (USOIL)" : is_btcusd ? "BLOCKED (BTCUSD)" : "OK"
-    _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd) ? color.red : color.green
+    _ed_inst_txt = is_xagusd ? "BLOCKED (XAGUSD)" : is_usoil ? "BLOCKED (USOIL)" : is_btcusd ? "BLOCKED (BTCUSD)" : is_gbpusd ? "BLOCKED (GBPUSD)" : "OK"
+    _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd or is_gbpusd) ? color.red : color.green
     table.cell(info, 0, 28, "Entry D Filter",                 text_color=color.gray)
     table.cell(info, 1, 28, _ed_inst_txt,                     text_color=_ed_inst_clr)
