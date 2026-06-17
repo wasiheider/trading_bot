@@ -492,82 +492,80 @@ short_signal   = _bos_short_base and not short_signal_c
 long_signal    = _bos_long_base  and not long_signal_c
 
 // =============================================================================
-// ENTRY D — MID-POINT BOS RETEST
-// Price crosses the range mid (BOS). Bot waits for price to pull back and
-// retest the mid as the new S/R level, then enters on a rejection candle.
-// Bear mid cross → mid becomes resistance → retest rejection → SHORT
-// Bull mid cross → mid becomes support   → retest rejection → LONG
+// ENTRY D — MID-ZONE 15M BOS + RETEST
+// Near the range mid, watch for a 15M structural break-of-structure.
+// Bull BOS: close > most recent 15M swing high near mid → arm long pending
+//           retest: wick touches bos_level, close holds above → LONG
+// Bear BOS: close < most recent 15M swing low  near mid → arm short pending
+//           retest: wick touches bos_level, close holds below → SHORT
+// SL: Long  = bos_level - ATR  |  Short = bos_level + ATR
 // =============================================================================
-var bool  _d_prev_above    = false
-var bool  mid_bear_bos     = false
-var bool  mid_bull_bos     = false
-var int   mid_bear_bar     = -1
-var int   mid_bull_bar     = -1
-var int   d_bear_entry_bar = -1
-var int   d_bull_entry_bar = -1
-var float d_bear_sl_swing  = na
-var float d_bull_sl_swing  = na
+var bool  _d_bos_long_active  = false
+var bool  _d_bos_short_active = false
+var float _d_bos_long_level   = na
+var float _d_bos_short_level  = na
+var int   _d_bos_long_bar     = -1
+var int   _d_bos_short_bar    = -1
 
-_d_cur_above = not na(htf_mid) and close > htf_mid
+_d_range_h = range_high - range_low
 
-mid_bear_cross_evt = range_armed and not range_broken and not range_invalidated and
-     _d_prev_above and not _d_cur_above and no_position and atr_ok
-mid_bull_cross_evt = range_armed and not range_broken and not range_invalidated and
-     not _d_prev_above and _d_cur_above and no_position and atr_ok
+// Near-mid filter: swing level must be within ±35% of range height from mid
+_d_ph_near_mid = not na(last_m15_ph) and not na(htf_mid) and not na(range_high) and not na(range_low) and
+     math.abs(last_m15_ph - htf_mid) < _d_range_h * 0.35
+_d_pl_near_mid = not na(last_m15_pl) and not na(htf_mid) and not na(range_high) and not na(range_low) and
+     math.abs(last_m15_pl - htf_mid) < _d_range_h * 0.35
 
-if mid_bear_cross_evt
-    mid_bear_bos    := true
-    mid_bear_bar    := bar_index
-    mid_bull_bos    := false
-    d_bull_sl_swing := na
-if mid_bull_cross_evt
-    mid_bull_bos    := true
-    mid_bull_bar    := bar_index
-    mid_bear_bos    := false
-    d_bear_sl_swing := na
+// Bull BOS: close breaks above a near-mid 15M swing high
+_d_bull_bos_evt = range_armed and not range_broken and not range_invalidated and
+     _d_ph_near_mid and close > last_m15_ph and no_position and atr_ok and
+     not _d_bos_long_active
 
-// Track 15M swing levels during pending state for SL placement
-if mid_bear_bos and not na(m15_ph_src)
-    d_bear_sl_swing := m15_ph_src
-if mid_bull_bos and not na(m15_pl_src)
-    d_bull_sl_swing := m15_pl_src
+// Bear BOS: close breaks below a near-mid 15M swing low
+_d_bear_bos_evt = range_armed and not range_broken and not range_invalidated and
+     _d_pl_near_mid and close < last_m15_pl and no_position and atr_ok and
+     not _d_bos_short_active
+
+if _d_bull_bos_evt
+    _d_bos_long_active := true
+    _d_bos_long_level  := last_m15_ph
+    _d_bos_long_bar    := bar_index
+
+if _d_bear_bos_evt
+    _d_bos_short_active := true
+    _d_bos_short_level  := last_m15_pl
+    _d_bos_short_bar    := bar_index
 
 if range_invalidated or range_broken
-    mid_bear_bos    := false
-    mid_bull_bos    := false
-    d_bear_sl_swing := na
-    d_bull_sl_swing := na
+    _d_bos_long_active  := false
+    _d_bos_short_active := false
+    _d_bos_long_level   := na
+    _d_bos_short_level  := na
 
-_d_prev_above := _d_cur_above
+// Retest rejection candle at BOS level
+d_long_retest  = _d_bos_long_active  and not na(_d_bos_long_level)  and
+     low  <= _d_bos_long_level  and close > _d_bos_long_level  and bar_index > _d_bos_long_bar
+d_short_retest = _d_bos_short_active and not na(_d_bos_short_level) and
+     high >= _d_bos_short_level and close < _d_bos_short_level and bar_index > _d_bos_short_bar
 
-// Retest rejection candle at mid
-d_short_retest = mid_bear_bos and not na(htf_mid) and
-     high >= htf_mid and close < htf_mid and d_bear_entry_bar < mid_bear_bar
-d_long_retest  = mid_bull_bos and not na(htf_mid) and
-     low <= htf_mid and close > htf_mid and d_bull_entry_bar < mid_bull_bar
+// SL anchored to BOS level ± ATR
+d_long_entry  = close
+d_long_sl     = _d_bos_long_level  - atr_now * atr_mult
+d_long_risk   = d_long_entry - d_long_sl
+d_long_tp1    = d_long_risk  > 0 ? d_long_entry + d_long_risk  * 1.0 : na
+d_long_tp2    = d_long_risk  > 0 ? d_long_entry + d_long_risk  * 3.0 : na
+d_long_rr_ok  = d_long_risk  > 0
 
-// SL / TP for Entry D
-_d_short_sl_base = not na(d_bear_sl_swing) ? d_bear_sl_swing : not na(last_m15_ph) ? last_m15_ph : range_high
-_d_long_sl_base  = not na(d_bull_sl_swing) ? d_bull_sl_swing : not na(last_m15_pl) ? last_m15_pl : range_low
+d_short_entry = close
+d_short_sl    = _d_bos_short_level + atr_now * atr_mult
+d_short_risk  = d_short_sl - d_short_entry
+d_short_tp1   = d_short_risk > 0 ? d_short_entry - d_short_risk * 1.0 : na
+d_short_tp2   = d_short_risk > 0 ? d_short_entry - d_short_risk * 3.0 : na
+d_short_rr_ok = d_short_risk > 0
 
-d_short_entry    = close
-d_short_sl       = _d_short_sl_base + atr_now * atr_mult
-d_short_risk     = d_short_sl - d_short_entry
-d_short_tp1      = d_short_risk > 0 ? d_short_entry - d_short_risk * 1.0 : na
-d_short_tp2      = d_short_risk > 0 ? d_short_entry - d_short_risk * 3.0 : na
-d_short_rr_ok    = d_short_risk > 0
-
-d_long_entry     = close
-d_long_sl        = _d_long_sl_base - atr_now * atr_mult
-d_long_risk      = d_long_entry - d_long_sl
-d_long_tp1       = d_long_risk > 0 ? d_long_entry + d_long_risk * 1.0 : na
-d_long_tp2       = d_long_risk > 0 ? d_long_entry + d_long_risk * 3.0 : na
-d_long_rr_ok     = d_long_risk > 0
-
-d_short_lots     = _size(d_short_entry, d_short_sl)
 d_long_lots      = _size(d_long_entry,  d_long_sl)
-d_short_tp1_lots = _tp1q(d_short_lots)
+d_short_lots     = _size(d_short_entry, d_short_sl)
 d_long_tp1_lots  = _tp1q(d_long_lots)
+d_short_tp1_lots = _tp1q(d_short_lots)
 
 short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken
 long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken
@@ -934,8 +932,7 @@ if short_signal_d
              ',"range_high":'  + str.tostring(range_high,    price_format) +
              ',"range_low":'   + str.tostring(range_low,     price_format) +
              ',"token":"paper_wasirizvi_wyckoffstrategy"}'
-    d_bear_entry_bar := bar_index
-    mid_bear_bos     := false
+    _d_bos_short_active := false
 
 if long_signal_d
     strategy.entry("LONG_D", strategy.long, qty=d_long_lots,
@@ -966,8 +963,7 @@ if long_signal_d
              ',"range_high":'  + str.tostring(range_high,   price_format) +
              ',"range_low":'   + str.tostring(range_low,    price_format) +
              ',"token":"paper_wasirizvi_wyckoffstrategy"}'
-    d_bull_entry_bar := bar_index
-    mid_bull_bos     := false
+    _d_bos_long_active  := false
 
 // =============================================================================
 // TP CASCADE — PROGRESSIVE SL MANAGEMENT
@@ -1110,10 +1106,10 @@ bgcolor(in_spring_zone   and not range_invalidated ? color.new(color.aqua,   88)
 bgcolor(in_upthrust_zone and not range_invalidated ? color.new(color.purple,  88) : na, title="Upthrust zone")
 
 if show_signals and spring_signal
-    label.new(bar_index, low, "SPRING TP1:1:1(50%) | SL→TP1@1:2 | TP2:1:3(50%)",
+    label.new(bar_index, low, "SPRING TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.aqua,40), textcolor=color.white, style=label.style_label_up, size=size.small)
 if show_signals and upthrust_signal
-    label.new(bar_index, high, "UPTHRUST TP1:1:1(50%) | SL→TP1@1:2 | TP2:1:3(50%)",
+    label.new(bar_index, high, "UPTHRUST TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.purple,40), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 if show_signals and short_retracing and not short_signal and not short_signal_c
@@ -1126,17 +1122,19 @@ if show_signals and long_retracing and not long_signal and not long_signal_c
          textcolor=color.white, style=label.style_label_up, size=size.tiny)
 
 if show_signals and short_signal_c
-    label.new(bar_index, high, "C RSI:" + str.tostring(rsi_val,"#.#") + " TP1:1:1(50%) | SL→TP1@1:2 | TP2:1:3(50%)",
+    label.new(bar_index, high, "C RSI:" + str.tostring(rsi_val,"#.#") + " TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.yellow,30), textcolor=color.black, style=label.style_label_down, size=size.small)
 if show_signals and long_signal_c
-    label.new(bar_index, low, "C RSI:" + str.tostring(rsi_val,"#.#") + " TP1:1:1(50%) | SL→TP1@1:2 | TP2:1:3(50%)",
+    label.new(bar_index, low, "C RSI:" + str.tostring(rsi_val,"#.#") + " TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.yellow,30), textcolor=color.black, style=label.style_label_up, size=size.small)
 
-// Entry D — mid BOS cross markers and signals
-if show_bos and mid_bear_cross_evt
-    label.new(bar_index, high, "MID ↓", color=color.teal, textcolor=color.white, style=label.style_label_down, size=size.tiny)
-if show_bos and mid_bull_cross_evt
-    label.new(bar_index, low,  "MID ↑", color=color.teal, textcolor=color.white, style=label.style_label_up,   size=size.tiny)
+// Entry D — 15M BOS markers and signals
+if show_bos and _d_bear_bos_evt
+    label.new(bar_index, high, "D BOS ↓ " + str.tostring(_d_bos_short_level, price_format),
+         color=color.teal, textcolor=color.white, style=label.style_label_down, size=size.tiny)
+if show_bos and _d_bull_bos_evt
+    label.new(bar_index, low,  "D BOS ↑ " + str.tostring(_d_bos_long_level, price_format),
+         color=color.teal, textcolor=color.white, style=label.style_label_up,   size=size.tiny)
 
 if show_signals and d_short_retest and not short_signal_d
     label.new(bar_index, high, "D retest" + (d_short_rr_ok ? "" : " [no SL]"),
@@ -1151,10 +1149,10 @@ plotshape(show_signals and short_signal_d, "SHORT_D", shape.triangledown, locati
 plotshape(show_signals and long_signal_d,  "LONG_D",  shape.triangleup,   location.belowbar, color.teal, size=size.normal)
 
 if show_signals and short_signal_d
-    label.new(bar_index, high, "D TP1:1:1(50%) | SL→TP1@1:2 | TP2:1:3(50%)",
+    label.new(bar_index, high, "D TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.teal,30), textcolor=color.white, style=label.style_label_down, size=size.small)
 if show_signals and long_signal_d
-    label.new(bar_index, low, "D TP1:1:1(50%) | SL→TP1@1:2 | TP2:1:3(50%)",
+    label.new(bar_index, low, "D TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.teal,30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
 // Open-trade level lines
@@ -1321,7 +1319,7 @@ if show_info
     table.cell(info, 0, 13, "15M Retest",                      text_color=color.gray)
     table.cell(info, 1, 13, range_invalidated ? "--" : retr_state, text_color=range_invalidated ? color.gray : short_retracing ? color.red : long_retracing ? color.green : color.gray)
     table.cell(info, 0, 14, "TP Structure",                      text_color=color.gray)
-    table.cell(info, 1, 14, "TP1:1:1(50%) | SL→TP1@1:2 | TP2:1:3(50%) | Trail 0.5R", text_color=color.gray)
+    table.cell(info, 1, 14, "TP1:1:1(50%)+BE | TP2:1:3(50%) | Trail 0.5R", text_color=color.gray)
     table.cell(info, 0, 15, "BOS Level",                       text_color=color.gray)
     table.cell(info, 1, 15, range_invalidated ? "--" : bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
@@ -1353,11 +1351,11 @@ if show_info
     _trail_label  = _trail_active ? str.tostring(trail_sl, price_format) + " (peak " + str.tostring(trail_peak_rr, "#.##") + "R)" : "--"
     table.cell(info, 0, 24, "Trail SL",                       text_color=color.gray)
     table.cell(info, 1, 24, _trail_label, text_color=_trail_active ? color.orange : color.gray)
-    _d_bos_txt = mid_bear_bos ? "BEAR ACTIVE" : mid_bull_bos ? "BULL ACTIVE" : "--"
-    _d_bos_clr = mid_bear_bos ? color.orange  : mid_bull_bos ? color.blue    : color.gray
+    _d_bos_txt = _d_bos_short_active ? "BEAR @ " + str.tostring(_d_bos_short_level, price_format) : _d_bos_long_active ? "BULL @ " + str.tostring(_d_bos_long_level, price_format) : "--"
+    _d_bos_clr = _d_bos_short_active ? color.orange : _d_bos_long_active ? color.blue : color.gray
     _d_ret_txt = d_short_retest ? "SHORT RETEST" : d_long_retest ? "LONG RETEST" : "--"
     _d_ret_clr = d_short_retest ? color.red      : d_long_retest ? color.green   : color.gray
-    table.cell(info, 0, 25, "D — Mid BOS",                    text_color=color.gray)
+    table.cell(info, 0, 25, "D — 15M BOS",                    text_color=color.gray)
     table.cell(info, 1, 25, _d_bos_txt,                       text_color=_d_bos_clr)
-    table.cell(info, 0, 26, "D — Mid Retest",                 text_color=color.gray)
+    table.cell(info, 0, 26, "D — BOS Retest",                 text_color=color.gray)
     table.cell(info, 1, 26, _d_ret_txt,                       text_color=_d_ret_clr)
