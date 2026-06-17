@@ -71,7 +71,6 @@ max_break_pct   = input.float(30.0, "Invalidate range if price breaks by % of ra
 use_atr_filter   = input.bool(false, "ATR Volatility Filter (block when ATR < avg)", group="Filters")
 atr_avg_len      = input.int(50,    "ATR average length (above = entry allowed)",   group="Filters", minval=10, maxval=200)
 entry_a_enabled  = input.bool(false, "Enable Entry A (BOS+Boundary Reject)",        group="Filters")
-entry_d_session  = input.session("0700-2100:23456", "Entry D Session Window (UTC)", group="Filters")
 
 show_range      = input.bool(true,  "Show range levels",                           group="Display")
 show_bos        = input.bool(true,  "Show BOS level",                              group="Display")
@@ -573,8 +572,7 @@ d_short_lots     = _size(d_short_entry, d_short_sl)
 d_long_tp1_lots  = _tp1q(d_long_lots)
 d_short_tp1_lots = _tp1q(d_short_lots)
 
-_d_in_session  = not na(time(timeframe.period, entry_d_session, "UTC"))
-_entry_d_ok    = _d_in_session and not (is_xagusd or is_usoil or is_btcusd)
+_entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd)
 
 short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok
 long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok
@@ -1015,8 +1013,7 @@ if tp1_hit and be_triggered and strategy.position_size != 0 and not na(s_risk) a
     if _cur_rr > trail_peak_rr
         trail_peak_rr := _cur_rr
     if trail_peak_rr >= 1.5
-        _trail_offset  = trail_peak_rr >= 2.0 ? 0.75 : 0.5
-        _new_sl        = _is_short ? s_entry - (trail_peak_rr - _trail_offset) * s_risk : s_entry + (trail_peak_rr - _trail_offset) * s_risk
+        _new_sl        = _is_short ? s_entry - (trail_peak_rr - 0.5) * s_risk : s_entry + (trail_peak_rr - 0.5) * s_risk
         _tighten       = _is_short ? _new_sl < trail_sl : _new_sl > trail_sl
         if _tighten
             trail_sl := _new_sl
@@ -1329,7 +1326,7 @@ if show_info
     table.cell(info, 0, 13, "15M Retest",                      text_color=color.gray)
     table.cell(info, 1, 13, range_invalidated ? "--" : retr_state, text_color=range_invalidated ? color.gray : short_retracing ? color.red : long_retracing ? color.green : color.gray)
     table.cell(info, 0, 14, "TP Structure",                      text_color=color.gray)
-    table.cell(info, 1, 14, "TP1:1:1(50%)+BE | TP2:1:3(50%) | Trail 0.5R→0.75R@2R", text_color=color.gray)
+    table.cell(info, 1, 14, "TP1:1:1(50%)+BE | TP2:1:3(50%) | Trail 0.5R", text_color=color.gray)
     table.cell(info, 0, 15, "BOS Level",                       text_color=color.gray)
     table.cell(info, 1, 15, range_invalidated ? "--" : bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
@@ -1373,7 +1370,7 @@ if show_info
     _ea_clr = entry_a_enabled ? color.green : color.gray
     table.cell(info, 0, 27, "Entry A",                        text_color=color.gray)
     table.cell(info, 1, 27, _ea_txt,                          text_color=_ea_clr)
-    _ed_inst_txt = is_xagusd ? "BLOCKED (XAGUSD)" : is_usoil ? "BLOCKED (USOIL)" : is_btcusd ? "BLOCKED (BTCUSD)" : _d_in_session ? "SESSION OK" : "SESSION OUT"
-    _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd) ? color.red : _d_in_session ? color.green : color.orange
+    _ed_inst_txt = is_xagusd ? "BLOCKED (XAGUSD)" : is_usoil ? "BLOCKED (USOIL)" : is_btcusd ? "BLOCKED (BTCUSD)" : "OK"
+    _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd) ? color.red : color.green
     table.cell(info, 0, 28, "Entry D Filter",                 text_color=color.gray)
     table.cell(info, 1, 28, _ed_inst_txt,                     text_color=_ed_inst_clr)
