@@ -1014,7 +1014,7 @@ if tp1_hit and be_triggered and strategy.position_size != 0 and not na(s_risk) a
     if _cur_rr > trail_peak_rr
         trail_peak_rr := _cur_rr
     if trail_peak_rr >= 1.5
-        _trail_offset  = trail_peak_rr >= 2.0 ? 0.75 : 0.5
+        _trail_offset  = trail_peak_rr >= 2.0 ? 1.0 : 0.5
         _new_sl        = _is_short ? s_entry - (trail_peak_rr - _trail_offset) * s_risk : s_entry + (trail_peak_rr - _trail_offset) * s_risk
         _tighten       = _is_short ? _new_sl < trail_sl : _new_sl > trail_sl
         if _tighten
@@ -1328,7 +1328,7 @@ if show_info
     table.cell(info, 0, 13, "15M Retest",                      text_color=color.gray)
     table.cell(info, 1, 13, range_invalidated ? "--" : retr_state, text_color=range_invalidated ? color.gray : short_retracing ? color.red : long_retracing ? color.green : color.gray)
     table.cell(info, 0, 14, "TP Structure",                      text_color=color.gray)
-    table.cell(info, 1, 14, "TP1:1:1(50%)+BE | TP2:1:3(50%) | Trail 0.5R→0.75R@2R", text_color=color.gray)
+    table.cell(info, 1, 14, "TP1:1:1(50%)+BE | TP2:1:3(50%) | Trail 0.5R→1R@2R", text_color=color.gray)
     table.cell(info, 0, 15, "BOS Level",                       text_color=color.gray)
     table.cell(info, 1, 15, range_invalidated ? "--" : bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
