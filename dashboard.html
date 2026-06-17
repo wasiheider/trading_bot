@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Trading Bot — Paper Trading POC</title>
+<title>Trading Bot V5 — Paper Trading POC</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@600;700;800&display=swap');
 
@@ -178,7 +178,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     </div>
     <div class="tb-dot" id="conn-dot"></div>
     <div>
-      <div class="tb-name">TRADING BOT V5 <span class="tb-tag">4H PIVOT RANGE · 15M BOS · DEFERRED ENTRY</span></div>
+      <div class="tb-name">TRADING BOT V5 <span class="tb-tag">4H PIVOT RANGE · 15M BOS · 4 ENTRY MODELS</span></div>
       <div class="tb-clock" id="clock-line">Connecting...</div>
     </div>
   </div>
@@ -227,12 +227,13 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 
   <div class="card">
-    <div class="ct">Schedule</div>
-    <div class="sr2"><span class="sl3">&#8635; Daily Reset</span><div class="st">00:00<div class="sd">Daily CT</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; ATR Filter</span><div class="st">15M ATR<div class="sd">above 50-bar avg</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">30% of range<div class="sd">outside boundary = pause</div></div></div>
+    <div class="ct">Schedule &amp; Filters</div>
+    <div class="sr2"><span class="sl3">&#8635; Daily Reset</span><div class="st">00:00 CT<div class="sd">P&L + signal counters</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; ATR Filter</span><div class="st">15M ATR<div class="sd">&gt; 50-bar avg · min volatility</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; Range Armed</span><div class="st">Quality gate<div class="sd">touches ≥3 · mid-cross ≥3 · 1H swing</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">30% beyond<div class="sd">boundary breach = range reset</div></div></div>
+    <div class="sr2"><span class="sl3">&#9654; Max Positions</span><div class="st">5 open<div class="sd">one per instrument</div></div></div>
     <div class="sr2"><span class="sl3">&#9825; Heartbeat</span><div class="st">Hourly<div class="sd">Railway keepalive</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; POC Window</span><div class="st">Active<div class="sd">live signals</div></div></div>
   </div>
 
   <div class="card">
@@ -261,7 +262,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="exec-banner">
     <div>
       <div class="exec-mode">&#9654; Auto-Executing — OANDA Demo (Forex) · Log+Telegram (All Others)</div>
-      <div class="exec-sub">4H pivot-anchored range · 1H swing quality gate · 15M BOS / Deferred Spring-Upthrust entry · TP1@1:1(50%)+BE | TP2@1:3(50%) · Forex: EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD · Others: log+Telegram only</div>
+      <div class="exec-sub">4H pivot range · 1H swing gate · Entry A: BOS+Reject · B: Spring/Upthrust · C: BOS+RSI Div · D: Mid BOS+Retest · TP1@1:1(50%)+BE | TP2@1:3(50%) trail · Forex: EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD · Others: log+Telegram</div>
     </div>
     <span class="bd2 bg2">PAPER</span>
   </div>
@@ -366,18 +367,18 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 
   <div class="card">
-    <div class="ct">Next FOMC — Jun 16–17</div>
+    <div class="ct">Next FOMC — Sep 15–16</div>
     <div class="fcount">
       <div class="fc-lbl">Days Until Rate Decision</div>
       <div class="fc-val" id="fomc-days">--</div>
-      <div class="fc-sub">Jun 16–17, 2026 &nbsp;|&nbsp; Hold expected &nbsp;|&nbsp; Rate: 3.50–3.75%</div>
+      <div class="fc-sub">Sep 15–16, 2026 &nbsp;|&nbsp; Rate: 3.50–3.75%</div>
     </div>
     <div style="margin-top:8px">
       <div class="row"><span class="rl">Jan 27–28</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
       <div class="row"><span class="rl">Mar 17–18</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
       <div class="row"><span class="rl">Apr 28–29</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
-      <div class="row"><span class="rl" style="color:var(--a)">Jun 16–17</span><span class="bd2 ba2">NEXT</span></div>
-      <div class="row"><span class="rl">Sep 15–16 ✦</span><span class="rv" style="color:var(--t3)">—</span></div>
+      <div class="row"><span class="rl">Jun 16–17</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
+      <div class="row"><span class="rl" style="color:var(--a)">Sep 15–16 ✦</span><span class="bd2 ba2">NEXT</span></div>
       <div class="row"><span class="rl">Dec 8–9 ✦</span><span class="rv" style="color:var(--t3)">—</span></div>
     </div>
     <div style="font-size:7px;color:var(--t3);margin-top:5px">✦ includes dot plot &amp; projections</div>
@@ -466,15 +467,15 @@ updateClock();
 
 // ── FOMC countdown ─────────────────────────────────────────
 function updateFOMC() {
-  const days = Math.ceil((new Date('2026-06-16') - new Date()) / 86400000);
-  document.getElementById('fomc-days').textContent = days + ' days';
+  const days = Math.ceil((new Date('2026-09-15') - new Date()) / 86400000);
+  document.getElementById('fomc-days').textContent = days > 0 ? days + ' days' : 'TODAY';
 }
 updateFOMC();
 
 // ── NFP countdown ──────────────────────────────────────────
 function updateNFP() {
   const days = Math.ceil((new Date('2026-07-02') - new Date()) / 86400000);
-  document.getElementById('nfp-days').textContent = days + ' days';
+  document.getElementById('nfp-days').textContent = days > 0 ? days + ' days' : 'TODAY';
 }
 updateNFP();
 
