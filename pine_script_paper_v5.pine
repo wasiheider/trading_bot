@@ -60,6 +60,7 @@ zone_pct        = input.float(8.0, "Boundary Zone % of Range",                  
 bos_pivot_len   = input.int(5,     "15M BOS Pivot Length",                        group="Entry",   minval=2,   maxval=10)
 min_rr          = input.float(1.5, "Min R:R to TP1",                              group="Entry",   minval=1.0, step=0.1)
 atr_mult        = input.float(1.0, "ATR Buffer above/below swing SL (x ATR)",     group="Entry",   minval=0.1, step=0.1)
+min_sl_pips     = input.int(15,    "Min SL Distance from Entry (pips)",           group="Entry",   minval=5,   maxval=100)
 max_retrace_pct = input.float(60.0,"Max Retrace — invalidate BOS (%)",            group="Entry",   minval=10.0,maxval=90.0, step=5.0)
 
 min_boundary_touches = input.int(3, "Min boundary touches to arm (combined H+L)", group="Filters", minval=1, maxval=10)
@@ -99,6 +100,7 @@ is_gbpusd     = str.contains(raw_ticker, "GBPUSD") or syminfo.ticker == "GBPUSD"
 is_xagusd     = str.contains(raw_ticker, "XAG")
 is_btcusd     = str.contains(raw_ticker, "BTC")
 pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
+_min_sl_price = pip_size * min_sl_pips  // minimum SL distance in price units
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
 risk_dollars  = 500.0
 risk_dollars_eff = (is_gbpusd or is_xagusd) ? risk_dollars * 0.5 : risk_dollars
@@ -457,15 +459,17 @@ long_retracing  = bull_bos_active and not na(bull_bos_level) and
 _short_sl_base = not na(bear_sl_swing) ? bear_sl_swing : range_high
 _long_sl_base  = not na(bull_sl_swing) ? bull_sl_swing : range_low
 
-short_entry = close
-short_sl    = not na(_short_sl_base) ? _short_sl_base + atr_now * atr_mult : na
+short_entry    = close
+_short_sl_raw  = not na(_short_sl_base) ? _short_sl_base + atr_now * atr_mult : na
+short_sl       = not na(_short_sl_raw) ? math.max(_short_sl_raw, short_entry + _min_sl_price) : na
 short_risk  = not na(short_sl) ? short_sl - short_entry : na
 short_tp1   = not na(short_risk) ? short_entry - short_risk * 1.0 : na
 short_tp2   = not na(short_risk) ? short_entry - short_risk * 3.0 : na
 short_rr_ok = not na(short_risk) and short_risk > 0
 
-long_entry = close
-long_sl    = not na(_long_sl_base) ? _long_sl_base - atr_now * atr_mult : na
+long_entry    = close
+_long_sl_raw  = not na(_long_sl_base) ? _long_sl_base - atr_now * atr_mult : na
+long_sl       = not na(_long_sl_raw) ? math.min(_long_sl_raw, long_entry - _min_sl_price) : na
 long_risk  = not na(long_sl) ? long_entry - long_sl : na
 long_tp1   = not na(long_risk) ? long_entry + long_risk * 1.0 : na
 long_tp2   = not na(long_risk) ? long_entry + long_risk * 3.0 : na
@@ -555,14 +559,14 @@ d_short_retest = _d_bos_short_active and not na(_d_bos_short_level) and
 
 // SL anchored to BOS level ± ATR
 d_long_entry  = close
-d_long_sl     = _d_bos_long_level  - atr_now * atr_mult
+d_long_sl     = math.min(_d_bos_long_level  - atr_now * atr_mult, d_long_entry  - _min_sl_price)
 d_long_risk   = d_long_entry - d_long_sl
 d_long_tp1    = d_long_risk  > 0 ? d_long_entry + d_long_risk  * 1.0 : na
 d_long_tp2    = d_long_risk  > 0 ? d_long_entry + d_long_risk  * 3.0 : na
 d_long_rr_ok  = d_long_risk  > 0
 
 d_short_entry = close
-d_short_sl    = _d_bos_short_level + atr_now * atr_mult
+d_short_sl    = math.max(_d_bos_short_level + atr_now * atr_mult, d_short_entry + _min_sl_price)
 d_short_risk  = d_short_sl - d_short_entry
 d_short_tp1   = d_short_risk > 0 ? d_short_entry - d_short_risk * 1.0 : na
 d_short_tp2   = d_short_risk > 0 ? d_short_entry - d_short_risk * 3.0 : na
