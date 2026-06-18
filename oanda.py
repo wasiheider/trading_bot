@@ -46,7 +46,7 @@ def _request(method, path, body=None):
         raise RuntimeError(f"OANDA {method} {path} => HTTP {e.code}: {e.read().decode()}")
 
 
-def place_order(instrument: str, direction: str, lot_size: float) -> dict:
+def place_order(instrument: str, direction: str, lot_size: float, sl_price: float = None) -> dict:
     """Place a market order. Returns dict with trade_id, price, units."""
     oanda_instrument = INSTRUMENT_MAP.get(instrument.upper())
     if not oanda_instrument:
@@ -57,15 +57,20 @@ def place_order(instrument: str, direction: str, lot_size: float) -> dict:
     if direction.upper() == "SHORT":
         units = -units
 
-    resp = _request("POST", f"/v3/accounts/{OANDA_ACCOUNT_ID}/orders", {
-        "order": {
-            "type":         "MARKET",
-            "instrument":   oanda_instrument,
-            "units":        str(units),
-            "timeInForce":  "FOK",
-            "positionFill": "DEFAULT",
+    order: dict = {
+        "type":         "MARKET",
+        "instrument":   oanda_instrument,
+        "units":        str(units),
+        "timeInForce":  "FOK",
+        "positionFill": "DEFAULT",
+    }
+    if sl_price is not None:
+        order["stopLossOnFill"] = {
+            "price":       f"{float(sl_price):.5f}",
+            "timeInForce": "GTC",
         }
-    })
+
+    resp = _request("POST", f"/v3/accounts/{OANDA_ACCOUNT_ID}/orders", {"order": order})
 
     if "orderFillTransaction" in resp:
         fill = resp["orderFillTransaction"]

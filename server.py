@@ -187,7 +187,7 @@ def handle_paper_signal(data):
     oanda_supported  = instrument.upper() in oanda.INSTRUMENT_MAP
     if not limit_hit and oanda_supported:
         try:
-            fill = oanda.place_order(instrument, direction, risk["lot_size"])
+            fill = oanda.place_order(instrument, direction, risk["lot_size"], sl_price=sl)
             oanda_trade_id   = fill["trade_id"]
             oanda_fill_price = fill["price"]
         except Exception as e:
