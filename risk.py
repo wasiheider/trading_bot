@@ -107,14 +107,17 @@ PAPER_INSTRUMENT_CONFIG = {
     "CL":     {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
     "MCL":    {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
     # Forex — pip_value per UNIT per pip; output = UNITS (integer)
+    # min_sl_pips: minimum SL width used for sizing — prevents tiny SLs from
+    # creating enormous unit counts that blow through the $500 risk cap on slippage.
+    # OANDA stopLossOnFill is always set at the actual Pine Script SL price.
     # USD-quoted pairs: 1 pip = $0.0001 per unit (always fixed)
-    "EURUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "forex": True},
-    "GBPUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "forex": True},
-    "NZDUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "forex": True},
+    "EURUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
+    "GBPUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
+    "NZDUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
     # JPY-quoted: pip = 0.01; pip_value = 0.01 / USDJPY_rate  (~0.0000625 at 160 JPY)
-    "USDJPY": {"pip_value": 0.0000625, "pip_size": 0.01,   "default_sl_pips": 20, "forex": True},
+    "USDJPY": {"pip_value": 0.0000625, "pip_size": 0.01,   "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
     # Cross with NZD quote: pip_value = 0.0001 × NZDUSD  (~0.0000583 at NZDUSD 0.583)
-    "EURNZD": {"pip_value": 0.0000583, "pip_size": 0.0001, "default_sl_pips": 20, "forex": True},
+    "EURNZD": {"pip_value": 0.0000583, "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 20, "forex": True},
     # Crypto
     "BTCUSD": {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
 }
@@ -126,8 +129,11 @@ def check_paper_risk(instrument: str, sl_pips: int = None) -> dict:
         return {"allowed": False, "reason": f"Unknown instrument: {instrument}"}
 
     sl = sl_pips or cfg["default_sl_pips"]
+    # Enforce minimum SL for sizing — keeps position size small even when Pine
+    # Script sends a tight SL. OANDA stopLossOnFill still uses the actual SL price.
+    sl_for_sizing = max(sl, cfg.get("min_sl_pips", 0))
     risk_dollars = paper_state["account_balance"] * RISK_PER_TRADE
-    raw = risk_dollars / (sl * cfg["pip_value"])
+    raw = risk_dollars / (sl_for_sizing * cfg["pip_value"])
 
     if cfg.get("forex"):
         # Forex: output is integer units of base currency (e.g. 125000 for EURUSD)
