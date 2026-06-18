@@ -168,6 +168,12 @@ def handle_paper_signal(data):
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
+    # ── Duplicate position guard ───────────────────────────────
+    if _has_any_open_trade(instrument):
+        msg = f"{_MASCOT}\n🚫 *Paper Signal Blocked*\n`{instrument} {direction}`\nReason: position already open on {instrument}"
+        send_telegram(msg)
+        return jsonify({"status": "blocked", "reason": f"position already open: {instrument}"}), 200
+
     # ── Daily / weekly limit check (signal fires, OANDA skipped) ─
     daily_hit,  daily_reason  = is_daily_limit_hit()
     weekly_hit, weekly_reason = is_weekly_limit_hit()
@@ -344,6 +350,17 @@ def _has_local_open_trade(instrument: str, direction: str) -> bool:
         for t in reversed(_load_trades_log().get("paper", [])):
             if (t.get("instrument", "").upper() == instrument.upper() and
                     t.get("direction", "").upper() == direction.upper() and
+                    t.get("result") == "OPEN"):
+                return True
+    except Exception:
+        pass
+    return False
+
+def _has_any_open_trade(instrument: str) -> bool:
+    """Return True if trades.json has any OPEN entry for this instrument (any direction)."""
+    try:
+        for t in reversed(_load_trades_log().get("paper", [])):
+            if (t.get("instrument", "").upper() == instrument.upper() and
                     t.get("result") == "OPEN"):
                 return True
     except Exception:

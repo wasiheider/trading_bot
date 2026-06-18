@@ -69,11 +69,15 @@ def place_order(instrument: str, direction: str, lot_size: float) -> dict:
 
     if "orderFillTransaction" in resp:
         fill = resp["orderFillTransaction"]
-        return {
-            "trade_id": fill["tradeOpened"]["tradeID"],
-            "price":    fill["price"],
-            "units":    fill["units"],
-        }
+        if "tradeOpened" in fill:
+            return {
+                "trade_id": fill["tradeOpened"]["tradeID"],
+                "price":    fill["price"],
+                "units":    fill["units"],
+            }
+        # Order netted out an existing opposite position — no new trade opened
+        closed_ids = [c.get("tradeID") for c in fill.get("tradesClosed", [])]
+        raise RuntimeError(f"Order filled but no new trade opened — closed existing position(s): {closed_ids}")
 
     if "orderCancelTransaction" in resp:
         reason = resp["orderCancelTransaction"].get("reason", "unknown")
