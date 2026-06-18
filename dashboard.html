@@ -1149,14 +1149,6 @@ function renderCOT(items) {
       const col   = item.weeklyDelta > 0 ? 'var(--g)' : 'var(--r)';
       deltaHtml = `<span class="ctrend" style="color:${col}">${arrow}${sign}${dk}k</span>`;
     }
-    let levHtml = '';
-    if (item.lev === 'flipped') {
-      levHtml = `<div style="font-size:7px;color:var(--g);margin-top:3px;font-weight:700;letter-spacing:.5px">LEV ↑ FLIPPED — WATCH REVERSAL</div>`;
-    } else if (item.lev === 'covering') {
-      levHtml = `<div style="font-size:7px;color:var(--g);margin-top:3px;letter-spacing:.5px">Lev ↑ Covering above avg</div>`;
-    } else if (item.lev === 'pressing') {
-      levHtml = `<div style="font-size:7px;color:var(--r);margin-top:3px;letter-spacing:.5px">Lev ↓ Pressing below avg</div>`;
-    }
     let mmHtml = '';
     if (item.mm === 'closing') {
       mmHtml = `<div style="font-size:7px;color:var(--r);margin-top:2px;letter-spacing:.5px">MM ▼ Closing Longs</div>`;
