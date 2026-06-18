@@ -1028,6 +1028,38 @@ function _levSignal(deltas) {
   return null;
 }
 
+// Synthesises lev signal + delta + bias into a single near-term directional read.
+// Separate from the structural COT bias (index) which is a 2-4 week horizon.
+// 'flipped'  = direction change this week — strongest, overrides bias label.
+// 'covering' = delta significantly more positive than 4-week avg (buying/covering).
+// 'pressing' = delta significantly more negative than 4-week avg (selling/adding shorts).
+function _nearTermSignal(item) {
+  const { bias, weeklyDelta, lev } = item;
+  const dPos = weeklyDelta > 500;
+  const dNeg = weeklyDelta < -500;
+
+  if (lev === 'flipped') {
+    return (bias === 'Bearish' || bias === 'Neutral')
+      ? { arrow: '↑', label: 'Reversal — Shorts Covering', color: '#ff9800' }
+      : { arrow: '↓', label: 'Reversal — Longs Rolling',   color: '#ff9800' };
+  }
+  if (lev === 'covering') {
+    if (bias === 'Bearish') return { arrow: '↑', label: 'Shorts Fading',          color: '#ffd600' };
+    if (bias === 'Bullish') return { arrow: '↑', label: 'Bulls Adding',            color: '#26a69a' };
+    if (dPos)               return { arrow: '↑', label: 'Accumulation',            color: '#26a69a' };
+  }
+  if (lev === 'pressing') {
+    if (bias === 'Bearish') return { arrow: '↓', label: 'Bears Pressing',          color: '#ef5350' };
+    if (bias === 'Bullish') return { arrow: '↓', label: 'Longs Fading — Caution', color: '#ffd600' };
+    if (dNeg)               return { arrow: '↓', label: 'Distribution',            color: '#ef5350' };
+  }
+  if (dPos && bias === 'Bearish') return { arrow: '↑', label: 'Delta Improving vs Bias', color: '#ffd600' };
+  if (dNeg && bias === 'Bullish') return { arrow: '↓', label: 'Delta Weakening vs Bias', color: '#ffd600' };
+  if (dPos && bias === 'Bullish') return { arrow: '↑', label: 'Bias + Delta Aligned',    color: '#26a69a' };
+  if (dNeg && bias === 'Bearish') return { arrow: '↓', label: 'Bias + Delta Aligned',    color: '#ef5350' };
+  return null;
+}
+
 async function fetchCOT() {
   try {
     const tffCodes = Object.values(COT_TFF).map(c=>`'${c.replace(/\+/g,'%2B')}'`).join(',');
@@ -1131,6 +1163,10 @@ function renderCOT(items) {
     } else if (item.mm === 'adding') {
       mmHtml = `<div style="font-size:7px;color:var(--g);margin-top:2px;letter-spacing:.5px">MM ▲ Adding Longs</div>`;
     }
+    const nt     = _nearTermSignal(item);
+    const ntHtml = nt
+      ? `<div style="font-size:7px;color:${nt.color};margin-top:4px;font-weight:700;letter-spacing:.5px;border-left:2px solid ${nt.color};padding-left:4px">${nt.arrow} NEAR-TERM: ${nt.label.toUpperCase()}</div>`
+      : '';
     return `
       <div class="cc">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
@@ -1149,7 +1185,7 @@ function renderCOT(items) {
           <div class="cidx-marker" style="left:60%"></div>
           <div class="cidx-marker" style="left:40%"></div>
         </div>
-        ${levHtml}${mmHtml}
+        ${ntHtml}${mmHtml}
       </div>`;
   }).join('');
 }
