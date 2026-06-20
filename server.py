@@ -477,6 +477,82 @@ def dashboard():
     return Response("<h1>dashboard.html not found</h1>", mimetype="text/html"), 404
 
 
+# ── Daily Report / Monitor ────────────────────────────────
+
+@app.route("/report", methods=["GET"])
+def report():
+    """Generates a monitoring summary and sends it to Telegram. Called by scheduled cloud agent."""
+    try:
+        # Balance + live OANDA data
+        oanda_balance  = paper_state.get("account_balance", 100000)
+        unrealized_pnl = 0.0
+        open_details   = []
+        try:
+            acct = oanda.get_account_summary()
+            oanda_balance = acct["balance"]
+        except Exception:
+            pass
+        try:
+            for t in oanda.get_all_open_trades():
+                upnl      = float(t.get("unrealizedPL", 0) or 0)
+                units     = float(t.get("currentUnits", 0))
+                direction = "LONG" if units > 0 else "SHORT"
+                instr     = _OANDA_REVERSE_MAP.get(t.get("instrument", ""), t.get("instrument", ""))
+                unrealized_pnl += upnl
+                open_details.append(f"`{instr} {direction}` uPNL: `${upnl:+.2f}`")
+        except Exception:
+            pass
+
+        daily_pnl  = paper_state.get("daily_pnl",  0.0)
+        weekly_pnl = paper_state.get("weekly_pnl", 0.0)
+        total_wins   = paper_state.get("total_wins",   0)
+        total_losses = paper_state.get("total_losses", 0)
+        total_trades = total_wins + total_losses
+        total_wr     = round(total_wins / total_trades * 100) if total_trades else 0
+        open_count   = db.open_trade_count()
+
+        # Loss limit proximity flags
+        flags = []
+        daily_loss  = -daily_pnl
+        weekly_loss = -weekly_pnl
+        from config import MAX_DAILY_LOSS, MAX_WEEKLY_LOSS
+        daily_pct  = round(daily_loss  / MAX_DAILY_LOSS  * 100) if MAX_DAILY_LOSS  else 0
+        weekly_pct = round(weekly_loss / MAX_WEEKLY_LOSS * 100) if MAX_WEEKLY_LOSS else 0
+        if daily_pct >= 75:
+            flags.append(f"⚠️ Daily loss `${daily_loss:,.0f}` is {daily_pct}% of `${MAX_DAILY_LOSS:,.0f}` limit")
+        if weekly_pct >= 75:
+            flags.append(f"⚠️ Weekly loss `${weekly_loss:,.0f}` is {weekly_pct}% of `${MAX_WEEKLY_LOSS:,.0f}` limit")
+
+        open_section = "\n".join(open_details) if open_details else "_None_"
+        flag_section = "\n".join(flags) if flags else "✅ All limits clear"
+
+        daily_emoji  = "🟢" if daily_pnl  >= 0 else "🔴"
+        weekly_emoji = "🟢" if weekly_pnl >= 0 else "🔴"
+
+        msg = (
+            f"{_MASCOT}\n"
+            f"📊 *Daily Monitor — {ct_now().strftime('%b %d, %Y %H:%M CT')}*\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 Balance: `${oanda_balance:,.2f}`\n"
+            f"{daily_emoji} Daily PNL: `${daily_pnl:+,.2f}`\n"
+            f"{weekly_emoji} Weekly PNL: `${weekly_pnl:+,.2f}`\n"
+            f"📈 Unrealized: `${unrealized_pnl:+,.2f}`\n"
+            f"🔄 Open Trades: `{open_count}`\n"
+            f"🏆 All-Time: `{total_wins}W / {total_losses}L` ({total_wr}% WR)\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"*Open Positions:*\n{open_section}\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"*Risk Flags:*\n{flag_section}"
+        )
+        send_telegram(msg)
+        return jsonify({"status": "report_sent", "balance": oanda_balance, "daily_pnl": daily_pnl}), 200
+
+    except Exception as e:
+        error_msg = f"{_MASCOT}\n🔴 *Monitor Error*\nCould not generate report: `{e}`"
+        send_telegram(error_msg)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 # ── Admin Reset ────────────────────────────────────────────
 
 @app.route("/admin/reset", methods=["POST"])
