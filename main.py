@@ -1,3 +1,6 @@
+import db
+db.init_db()  # must run before risk import triggers module-level state load
+
 import time
 import schedule
 import threading
@@ -7,7 +10,6 @@ import pytz
 
 from risk import reset_paper_daily, reset_paper_weekly, paper_state
 from notifier import send_telegram
-from config import DATA_DIR
 
 CT = pytz.timezone("America/Chicago")
 
@@ -19,9 +21,10 @@ def log(msg):
 
 
 # ── Midnight Reset ─────────────────────────────────────────
+
 def midnight_reset():
     now = ct_now()
-    if now.weekday() == 0:  # Monday — reset weekly counters first
+    if now.weekday() == 0:
         reset_paper_weekly()
         log("Weekly reset — paper weekly counters cleared")
         send_telegram("🔄 *Weekly Reset*\nPaper trading weekly P&L and SL counters reset.")
@@ -31,18 +34,11 @@ def midnight_reset():
 
 
 # ── Weekly Summary (Friday 3:50 PM CT) ────────────────────
+
 def weekly_summary():
     if ct_now().weekday() != 4:
         return
-    import os as _os, json as _json
     log("Generating weekly summary...")
-
-    trades_path = _os.path.join(DATA_DIR, "trades.json")
-    try:
-        with open(trades_path, "r") as f:
-            all_trades = _json.load(f)
-    except Exception:
-        all_trades = {"paper": []}
 
     now = ct_now()
     days_since_monday = now.weekday()
@@ -55,20 +51,24 @@ def weekly_summary():
             return None
         try:
             from datetime import datetime as _dt
-            naive = _dt.strptime(date_str[:16], "%Y-%m-%d %H:%M")
+            naive = _dt.strptime(str(date_str)[:16], "%Y-%m-%d %H:%M")
             return CT.localize(naive)
         except Exception:
             return None
 
-    trades = all_trades.get("paper", [])
-    weekly = [t for t in trades if parse_dt(t) and parse_dt(t) >= week_start]
+    try:
+        all_trades = db.load_trades()
+    except Exception:
+        all_trades = []
+
+    weekly = [t for t in all_trades if parse_dt(t) and parse_dt(t) >= week_start]
     closed = [t for t in weekly if t.get("result") and t["result"] != "OPEN"]
     wins   = [t for t in closed if "TP" in (t.get("result") or "")]
     losses = [t for t in closed if "SL" in (t.get("result") or "")]
-    pnl    = sum(t.get("pnl", 0) for t in closed)
+    pnl    = sum(t.get("pnl") or 0 for t in closed)
     wr     = round(len(wins) / len(closed) * 100) if closed else 0
 
-    balance  = paper_state.get("account_balance", 10000)
+    balance  = paper_state.get("account_balance", 100000)
     week_str = f"{week_start.strftime('%b %d')} – {now.strftime('%b %d, %Y')}"
     pnl_emoji = "🟢" if pnl >= 0 else "🔴"
 
@@ -86,7 +86,8 @@ def weekly_summary():
     log("Weekly summary sent")
 
 
-# ── Heartbeat (keeps Railway alive) ───────────────────────
+# ── Heartbeat ──────────────────────────────────────────────
+
 def heartbeat():
     try:
         r = requests.get("https://tradingbot-production-1e5a.up.railway.app")
@@ -96,14 +97,10 @@ def heartbeat():
 
 
 # ── Scheduler ──────────────────────────────────────────────
+
 def run_scheduler():
-    # Midnight CT = 05:00 UTC
     schedule.every().day.at("05:00").do(midnight_reset)
-
-    # Weekly summary — Fri 15:50 CT = 20:50 UTC
     schedule.every().day.at("20:50").do(weekly_summary)
-
-    # Heartbeat — keep Railway dyno alive
     schedule.every().hour.do(heartbeat)
 
     log("Scheduler started — midnight reset 00:00 CT | weekly summary Fri 15:50 CT | heartbeat hourly")
@@ -114,6 +111,7 @@ def run_scheduler():
 
 
 # ── Entry point ────────────────────────────────────────────
+
 if __name__ == "__main__":
     log("main.py starting — paper trading mode")
     t = threading.Thread(target=run_scheduler, daemon=True)

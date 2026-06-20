@@ -87,12 +87,21 @@ CFDs, metals, and indices are not supported on this OANDA demo account type. Do 
 
 ## Data Storage
 
-### Active (survives Railway restarts)
-- `trades.json` — full trade ledger; key: `"paper": [...]`; lives at `DATA_DIR` = `/data` on Railway Volume
-- `state.json` — daily/weekly PNL, win/loss counts, balance; auto-resets daily/weekly at CT midnight
+All persistent data lives in **Railway PostgreSQL** (same project as the bot — `DATABASE_URL` auto-injected).
 
-### Inactive
-- `data/trades.db` — SQLite with schema defined in `logger.py`; path is relative to script dir (NOT on Railway Volume), so it does not survive restarts. Tables exist but `log_signal()` / `log_trade_event()` etc. are not called from `server.py` current flow.
+| Table | Contents |
+|-------|----------|
+| `trades` | Full trade ledger — every entry, exit, PNL, OANDA trade ID |
+| `bot_state` | Daily/weekly PNL, win/loss counts, account balance (single row, id=1) |
+| `signals` | Every incoming webhook signal — full pipeline trace |
+
+All DB operations go through **`db.py`** — the single source of truth. Never write directly to tables from other modules.
+
+**Startup sequence (critical):** `db.init_db()` must be called before `risk` is imported, because `risk.py` loads state from DB at module level. Both `main.py` and `server.py` call `db.init_db()` at the top before any other imports.
+
+**Migration:** On first deploy, `db.migrate_from_json(DATA_DIR)` imports existing `trades.json` into the `trades` table. Skips automatically if the table already has rows.
+
+`data/trades.db` (SQLite), `trades.json`, and `state.json` are legacy — no longer used.
 
 ---
 
