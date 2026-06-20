@@ -128,9 +128,14 @@ rows = [
 ]
 
 hdr = ["Sym","Bias","Index","Net Jun 9","Net Jun 2","Wkly Δ","Lev Signal","MM Signal","Key Driver"]
-cw  = [14,22,16,24,24,19,27,18,0]
+cw  = [9,14,13,19,19,15,25,15,0]
 cw[-1] = W - 28*mm - sum(x*mm for x in cw[:-1])
-tbl_data = [hdr] + [[r[0],r[1],r[2],r[3],r[4],r[5],r[6],r[7],r[8]] for r in rows]
+
+sKD = ParagraphStyle("kd", fontName="Helvetica", fontSize=6.5, textColor=WHITE, leading=9)
+tbl_data = [hdr] + [
+    [r[0],r[1],r[2],r[3],r[4],r[5],r[6],r[7], Paragraph(r[8], sKD)]
+    for r in rows
+]
 
 ts = tbl_base()
 for i, r in enumerate(rows, 1):
