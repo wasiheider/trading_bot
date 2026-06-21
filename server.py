@@ -531,24 +531,25 @@ def report():
 
         msg = (
             f"{_MASCOT}\n"
-            f"📊 *Daily Monitor — {ct_now().strftime('%b %d, %Y %H:%M CT')}*\n"
+            f"📊 <b>Daily Monitor — {ct_now().strftime('%b %d, %Y %H:%M CT')}</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 Balance: `${oanda_balance:,.2f}`\n"
-            f"{daily_emoji} Daily PNL: `${daily_pnl:+,.2f}`\n"
-            f"{weekly_emoji} Weekly PNL: `${weekly_pnl:+,.2f}`\n"
-            f"📈 Unrealized: `${unrealized_pnl:+,.2f}`\n"
-            f"🔄 Open Trades: `{open_count}`\n"
-            f"🏆 All-Time: `{total_wins}W / {total_losses}L` ({total_wr}% WR)\n"
+            f"💰 Balance: <code>${oanda_balance:,.2f}</code>\n"
+            f"{daily_emoji} Daily PNL: <code>${daily_pnl:+,.2f}</code>\n"
+            f"{weekly_emoji} Weekly PNL: <code>${weekly_pnl:+,.2f}</code>\n"
+            f"📈 Unrealized: <code>${unrealized_pnl:+,.2f}</code>\n"
+            f"🔄 Open Trades: <code>{open_count}</code>\n"
+            f"🏆 All-Time: <code>{total_wins}W / {total_losses}L</code> ({total_wr}% WR)\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"*Open Positions:*\n{open_section}\n"
+            f"<b>Open Positions:</b>\n{open_section}\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"*Risk Flags:*\n{flag_section}"
+            f"<b>Risk Flags:</b>\n{flag_section}"
         )
-        send_telegram(msg)
-        return jsonify({"status": "report_sent", "balance": oanda_balance, "daily_pnl": daily_pnl}), 200
+        ok = send_telegram(msg)
+        status = "report_sent" if ok else "telegram_failed"
+        return jsonify({"status": status, "balance": oanda_balance, "daily_pnl": daily_pnl}), 200
 
     except Exception as e:
-        error_msg = f"{_MASCOT}\n🔴 *Monitor Error*\nCould not generate report: `{e}`"
+        error_msg = f"{_MASCOT}\n🔴 <b>Monitor Error</b>\nCould not generate report: <code>{e}</code>"
         send_telegram(error_msg)
         return jsonify({"status": "error", "error": str(e)}), 500
 
