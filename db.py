@@ -227,6 +227,29 @@ def open_trade_count() -> int:
     return count
 
 
+def close_stale_non_forex_opens(forex_instruments: set):
+    """
+    Mark any OPEN trade that has no oanda_trade_id AND is not a forex instrument as UNKNOWN.
+    These are log-only trades (US100, XAUUSD, etc.) whose lifecycle events were never received.
+    Safe to call on every startup — only touches rows that are genuinely unresolvable.
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE trades SET result = 'UNKNOWN', pnl = 0
+        WHERE result = 'OPEN'
+          AND (oanda_trade_id IS NULL OR oanda_trade_id = '')
+          AND UPPER(instrument) != ALL(%s)
+    """, (list(forex_instruments),))
+    affected = cur.rowcount
+    conn.commit()
+    cur.close()
+    conn.close()
+    if affected:
+        print(f"[db] Closed {affected} stale non-forex OPEN trade(s) → UNKNOWN", flush=True)
+    return affected
+
+
 def clear_trades():
     conn = get_conn()
     cur = conn.cursor()

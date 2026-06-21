@@ -89,6 +89,10 @@ def _sync_oanda_on_startup():
     # Migrate existing trades.json into DB on first deploy
     db.migrate_from_json(DATA_DIR)
 
+    # Close stale OPEN records for log-only instruments (no OANDA trade ID, unresolvable)
+    forex_instruments = set(oanda.INSTRUMENT_MAP.keys())
+    db.close_stale_non_forex_opens(forex_instruments)
+
 
 app = Flask(__name__)
 CT = pytz.timezone("America/Chicago")
