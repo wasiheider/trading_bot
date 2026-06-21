@@ -20,7 +20,6 @@ from typing import Optional
 import pytz
 
 import config
-from logger import log_alert
 
 log = logging.getLogger(__name__)
 
@@ -52,19 +51,15 @@ def send_telegram(message: str, account: str = "SYSTEM", alert_type: str = "GENE
         response = requests.post(url, json=payload, timeout=5)
         if response.status_code == 200:
             log.info("[TELEGRAM] Alert sent successfully")
-            log_alert(account, alert_type, True, message[:200])
             return True
         else:
             log.warning(f"[TELEGRAM] Send failed — HTTP {response.status_code}: {response.text}")
-            log_alert(account, alert_type, False, f"HTTP {response.status_code}")
             return False
     except requests.exceptions.Timeout:
         log.warning("[TELEGRAM] Alert timed out — Telegram may be slow")
-        log_alert(account, alert_type, False, "Timeout")
         return False
     except Exception as e:
         log.warning(f"[TELEGRAM] Alert failed — {e}")
-        log_alert(account, alert_type, False, str(e))
         return False
 
 

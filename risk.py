@@ -97,7 +97,7 @@ PAPER_INSTRUMENT_CONFIG = {
     "MCL":    {"pip_value": 1.00,  "pip_size": 0.01,   "default_sl_pips": 20},
     # Forex — pip_value per UNIT per pip; output = UNITS (integer)
     # min_sl_pips: minimum SL width used for sizing — prevents tiny SLs from
-    # creating enormous unit counts that blow through the $250 risk cap on slippage.
+    # creating enormous unit counts that blow through the $500 risk cap on slippage.
     # OANDA stopLossOnFill is always set at the actual Pine Script SL price.
     "EURUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
     "GBPUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
