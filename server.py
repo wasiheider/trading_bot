@@ -7,7 +7,7 @@ import os
 import json
 import pytz
 
-from config import PAPER_WEBHOOK_TOKEN, DATA_DIR
+from config import PAPER_WEBHOOK_TOKEN
 from risk import (
     check_paper_risk,
     paper_state,
@@ -85,9 +85,6 @@ def _sync_oanda_on_startup():
             print(f"[startup] Synced OANDA trade {trade_id} ({bot_instrument} {direction}) → DB", flush=True)
     except Exception as e:
         print(f"[startup] OANDA sync failed: {e}", flush=True)
-
-    # Migrate existing trades.json into DB on first deploy
-    db.migrate_from_json(DATA_DIR)
 
     # Close stale OPEN records for log-only instruments (no OANDA trade ID, unresolvable)
     forex_instruments = set(oanda.INSTRUMENT_MAP.keys())

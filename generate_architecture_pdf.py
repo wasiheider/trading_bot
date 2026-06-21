@@ -263,7 +263,7 @@ def build():
     rail_data = [
         header_row(["Service", "Status", "Volume", "Key Detail"]),
         [cell("trading_bot", bold=True), cell("🟢 Online", color=C_GREEN),
-         cell("trading_bot-volume → /data"),
+         cell("—"),
          cell("Flask app · paper-trading branch · US West")],
         [cell("Postgres", bold=True),    cell("🟢 Online", color=C_GREEN),
          cell("postgres-volume"),
@@ -418,7 +418,7 @@ def build():
         [cell("TELEGRAM_CHAT_ID"),      cell("Telegram chat ID for notifications")],
         [cell("PAPER_WEBHOOK_TOKEN"),   cell("Shared secret — must match Pine Script token input")],
         [cell("PAPER_ACCOUNT_SIZE"),    cell("100000 (starting demo balance)")],
-        [cell("DATA_DIR"),              cell("/data — Railway Volume mount path (legacy JSON fallback)")],
+
         [cell("ANTHROPIC_API_KEY"),     cell("Reserved for future Claude integration")],
     ]
     cw9 = [1.8*inch, 4.75*inch]

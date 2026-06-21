@@ -62,7 +62,6 @@ Local edit  →  git push  →  GitHub (paper-trading branch)  →  Railway auto
 ┌──────────────────────┐     ┌──────────────────────┐
 │  trading_bot         │◄───►│  Postgres            │
 │  Flask app · Online  │     │  PostgreSQL · Online  │
-│  trading_bot-volume  │     │  postgres-volume      │
 └──────────────────────┘     └──────────────────────┘
 DATABASE_URL auto-injected from Postgres into trading_bot
 ```
@@ -195,7 +194,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | `TELEGRAM_CHAT_ID` | Telegram chat ID |
 | `PAPER_WEBHOOK_TOKEN` | Shared secret — must match Pine Script token input |
 | `PAPER_ACCOUNT_SIZE` | `100000` |
-| `DATA_DIR` | `/data` — Railway Volume mount (legacy fallback) |
+
 | `ANTHROPIC_API_KEY` | Reserved for future Claude integration |
 
 ---

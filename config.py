@@ -20,9 +20,6 @@ OANDA_API_TOKEN  = os.getenv("OANDA_API_TOKEN")
 OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID")
 OANDA_BASE_URL   = os.getenv("OANDA_BASE_URL", "https://api-fxpractice.oanda.com")
 
-# ── Data persistence — set DATA_DIR=/data in Railway after mounting a Volume ──
-DATA_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
-
 # ── Risk ──────────────────────────────────────────────────
 RISK_PER_TRADE = 0.005   # 0.5% per trade ($500 on $100k)
 
