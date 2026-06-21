@@ -71,13 +71,8 @@ use_rotation    = input.bool(false, "Boundary Rotation Gate",                   
 max_break_pct   = input.float(30.0, "Invalidate range if price breaks by % of range size", group="Filters", minval=5.0, step=5.0)
 use_atr_filter   = input.bool(false, "ATR Volatility Filter (block when ATR < avg)", group="Filters")
 atr_avg_len      = input.int(50,    "ATR average length (above = entry allowed)",   group="Filters", minval=10, maxval=200)
-entry_a_enabled  = input.bool(true,  "Enable Entry A (BOS+Boundary Reject)",        group="Filters")
-entry_b_enabled  = input.bool(true,  "Enable Entry B (Spring/Upthrust)",             group="Filters")
-
-rsi_period    = input.int(14,      "RSI Period",                                   group="Entry C", minval=2, maxval=50)
-div_pivot_len = input.int(5,       "Divergence Pivot Length",                      group="Entry C", minval=2, maxval=10)
-rsi_c_lower   = input.float(30.0,  "RSI Lower Bound at Retest",                   group="Entry C", minval=1,  maxval=49, step=1)
-rsi_c_upper   = input.float(70.0,  "RSI Upper Bound at Retest",                   group="Entry C", minval=51, maxval=99, step=1)
+entry_a_enabled  = input.bool(false, "Enable Entry A (BOS+Boundary Reject)",        group="Filters")
+entry_b_enabled  = input.bool(false, "Enable Entry B (Spring/Upthrust)",             group="Filters")
 
 show_range      = input.bool(true,  "Show range levels",                           group="Display")
 show_bos        = input.bool(true,  "Show BOS level",                              group="Display")
@@ -85,6 +80,10 @@ show_signals    = input.bool(true,  "Show entry signals",                       
 show_trade_lvls = input.bool(true,  "Show SL/TP on trade",                        group="Display")
 show_info       = input.bool(true,  "Show info table",                             group="Display")
 
+rsi_period    = input.int(14,      "RSI Period",                                   group="Entry C", minval=2, maxval=50)
+div_pivot_len = input.int(5,       "Divergence Pivot Length",                      group="Entry C", minval=2, maxval=10)
+rsi_c_lower   = input.float(30.0,  "RSI Lower Bound at Retest",                   group="Entry C", minval=1,  maxval=49, step=1)
+rsi_c_upper   = input.float(70.0,  "RSI Upper Bound at Retest",                   group="Entry C", minval=51, maxval=99, step=1)
 
 // =============================================================================
 // INSTRUMENT CONFIG
@@ -114,7 +113,6 @@ _quote_to_usd = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "N
 atr_now = ta.atr(14)
 atr_avg = ta.sma(atr_now, atr_avg_len)
 atr_ok  = not use_atr_filter or atr_now > atr_avg
-
 
 // =============================================================================
 // RSI + DIVERGENCE (Entry C)
@@ -454,8 +452,8 @@ long_retracing  = bull_bos_active and not na(bull_bos_level) and
 
 // =============================================================================
 // SL / TP — R:R BASED
-//   TP1 = 0.75:1 (50% close)
-//   At 0.75:1 → SL moves to entry (breakeven) for remaining position
+//   TP1 = 1:1 (50% close)
+//   At 1:2 → SL moves to TP1 level (locks 1R profit on remaining position)
 //   TP2 = 1:3 (remaining 50%, full close) — trail SL continues after 1:2 lock
 // =============================================================================
 _short_sl_base = not na(bear_sl_swing) ? bear_sl_swing : range_high
@@ -465,7 +463,7 @@ short_entry    = close
 _short_sl_raw  = not na(_short_sl_base) ? _short_sl_base + atr_now * atr_mult : na
 short_sl       = not na(_short_sl_raw) ? math.max(_short_sl_raw, short_entry + _min_sl_price) : na
 short_risk  = not na(short_sl) ? short_sl - short_entry : na
-short_tp1   = not na(short_risk) ? short_entry - short_risk * 0.75 : na
+short_tp1   = not na(short_risk) ? short_entry - short_risk * 1.0 : na
 short_tp2   = not na(short_risk) ? short_entry - short_risk * 3.0 : na
 short_rr_ok = not na(short_risk) and short_risk > 0
 
@@ -473,7 +471,7 @@ long_entry    = close
 _long_sl_raw  = not na(_long_sl_base) ? _long_sl_base - atr_now * atr_mult : na
 long_sl       = not na(_long_sl_raw) ? math.min(_long_sl_raw, long_entry - _min_sl_price) : na
 long_risk  = not na(long_sl) ? long_entry - long_sl : na
-long_tp1   = not na(long_risk) ? long_entry + long_risk * 0.75 : na
+long_tp1   = not na(long_risk) ? long_entry + long_risk * 1.0 : na
 long_tp2   = not na(long_risk) ? long_entry + long_risk * 3.0 : na
 long_rr_ok = not na(long_risk) and long_risk > 0
 
@@ -498,8 +496,8 @@ no_position  = strategy.opentrades == 0
 _bos_short_base = short_retracing and short_rr_ok and not na(short_sl) and bear_entry_bar < bear_bos_bar and no_position and not range_broken and atr_ok
 _bos_long_base  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken and atr_ok
 
-short_signal_c = _bos_short_base and bear_div and rsi_c_ok
-long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok
+short_signal_c = _bos_short_base and bear_div and rsi_c_ok and not (is_usoil or is_xagusd)
+long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and not (is_usoil or is_xagusd)
 short_signal   = _bos_short_base and not short_signal_c and entry_a_enabled
 long_signal    = _bos_long_base  and not long_signal_c  and entry_a_enabled
 
@@ -563,14 +561,14 @@ d_short_retest = _d_bos_short_active and not na(_d_bos_short_level) and
 d_long_entry  = close
 d_long_sl     = math.min(_d_bos_long_level  - atr_now * atr_mult, d_long_entry  - _min_sl_price)
 d_long_risk   = d_long_entry - d_long_sl
-d_long_tp1    = d_long_risk  > 0 ? d_long_entry + d_long_risk  * 0.75 : na
+d_long_tp1    = d_long_risk  > 0 ? d_long_entry + d_long_risk  * 1.0 : na
 d_long_tp2    = d_long_risk  > 0 ? d_long_entry + d_long_risk  * 3.0 : na
 d_long_rr_ok  = d_long_risk  > 0
 
 d_short_entry = close
 d_short_sl    = math.max(_d_bos_short_level + atr_now * atr_mult, d_short_entry + _min_sl_price)
 d_short_risk  = d_short_sl - d_short_entry
-d_short_tp1   = d_short_risk > 0 ? d_short_entry - d_short_risk * 0.75 : na
+d_short_tp1   = d_short_risk > 0 ? d_short_entry - d_short_risk * 1.0 : na
 d_short_tp2   = d_short_risk > 0 ? d_short_entry - d_short_risk * 3.0 : na
 d_short_rr_ok = d_short_risk > 0
 
@@ -579,8 +577,10 @@ d_short_lots     = _size(d_short_entry, d_short_sl)
 d_long_tp1_lots  = _tp1q(d_long_lots)
 d_short_tp1_lots = _tp1q(d_short_lots)
 
-short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken
-long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken
+_entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd or is_gbpusd)
+
+short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok
+long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok
 
 // =============================================================================
 // SPRING / UPTHRUST — PENDING ENTRY LOGIC
@@ -691,13 +691,13 @@ var float  s_risk         = na     // original risk unit R (SL distance from ent
 var float  trail_sl       = na     // current trailing SL (moves every 0.5R after 1.5R reached)
 var float  trail_peak_rr  = 0.0   // highest favorable RR seen since TP1 hit
 var bool   tp1_hit        = false
-var bool   be_triggered   = false  // true once price reaches 0.75:1 RR and SL moves to breakeven
+var bool   be_triggered   = false  // true once price reaches 1:1 RR and SL moves to breakeven
 
 if short_signal
     strategy.entry("SHORT", strategy.short, qty=short_lots,
          comment="SHORT " + str.tostring(short_lots) + "L")
     strategy.exit("SHORT_TP1", from_entry="SHORT", qty=short_tp1_lots,
-         limit=short_tp1, stop=short_sl, comment="TP1 0.75:1")
+         limit=short_tp1, stop=short_sl, comment="TP1 1:1")
     strategy.exit("SHORT_TP2", from_entry="SHORT",
          limit=short_tp2, stop=short_sl, comment="TP2 1:3")
     s_entry       := short_entry
@@ -732,7 +732,7 @@ if long_signal
     strategy.entry("LONG", strategy.long, qty=long_lots,
          comment="LONG " + str.tostring(long_lots) + "L")
     strategy.exit("LONG_TP1", from_entry="LONG", qty=long_tp1_lots,
-         limit=long_tp1, stop=long_sl, comment="TP1 0.75:1")
+         limit=long_tp1, stop=long_sl, comment="TP1 1:1")
     strategy.exit("LONG_TP2", from_entry="LONG",
          limit=long_tp2, stop=long_sl, comment="TP2 1:3")
     s_entry       := long_entry
@@ -767,7 +767,7 @@ if short_signal_c
     strategy.entry("SHORT_C", strategy.short, qty=short_lots,
          comment="SHORT_C " + str.tostring(short_lots) + "L")
     strategy.exit("SHORT_C_TP1", from_entry="SHORT_C", qty=short_tp1_lots,
-         limit=short_tp1, stop=short_sl, comment="TP1 0.75:1")
+         limit=short_tp1, stop=short_sl, comment="TP1 1:1")
     strategy.exit("SHORT_C_TP2", from_entry="SHORT_C",
          limit=short_tp2, stop=short_sl, comment="TP2 1:3")
     s_entry       := short_entry
@@ -803,7 +803,7 @@ if long_signal_c
     strategy.entry("LONG_C", strategy.long, qty=long_lots,
          comment="LONG_C " + str.tostring(long_lots) + "L")
     strategy.exit("LONG_C_TP1", from_entry="LONG_C", qty=long_tp1_lots,
-         limit=long_tp1, stop=long_sl, comment="TP1 0.75:1")
+         limit=long_tp1, stop=long_sl, comment="TP1 1:1")
     strategy.exit("LONG_C_TP2", from_entry="LONG_C",
          limit=long_tp2, stop=long_sl, comment="TP2 1:3")
     s_entry       := long_entry
@@ -838,14 +838,14 @@ if long_signal_c
 if spring_signal
     _sp_ent  = close
     _sp_rsk  = _sp_ent - spring_sl_stored
-    _sp_tp1  = _sp_ent + _sp_rsk * 0.75
+    _sp_tp1  = _sp_ent + _sp_rsk * 1.0
     _sp_tp2  = _sp_ent + _sp_rsk * 3.0
     _sp_lots = _size(_sp_ent, spring_sl_stored)
     _sp_tp1l = _tp1q(_sp_lots)
     strategy.entry("SPRING", strategy.long, qty=_sp_lots,
          comment="SPRING " + str.tostring(_sp_lots) + "L")
     strategy.exit("SPRING_TP1", from_entry="SPRING", qty=_sp_tp1l,
-         limit=_sp_tp1, stop=spring_sl_stored, comment="TP1 0.75:1")
+         limit=_sp_tp1, stop=spring_sl_stored, comment="TP1 1:1")
     strategy.exit("SPRING_TP2", from_entry="SPRING",
          limit=_sp_tp2, stop=spring_sl_stored, comment="TP2 1:3")
     s_entry       := _sp_ent
@@ -878,14 +878,14 @@ if spring_signal
 if upthrust_signal
     _ut_ent  = close
     _ut_rsk  = upthrust_sl_stored - _ut_ent
-    _ut_tp1  = _ut_ent - _ut_rsk * 0.75
+    _ut_tp1  = _ut_ent - _ut_rsk * 1.0
     _ut_tp2  = _ut_ent - _ut_rsk * 3.0
     _ut_lots = _size(_ut_ent, upthrust_sl_stored)
     _ut_tp1l = _tp1q(_ut_lots)
     strategy.entry("UPTHRUST", strategy.short, qty=_ut_lots,
          comment="UPTHRUST " + str.tostring(_ut_lots) + "L")
     strategy.exit("UPTHRUST_TP1", from_entry="UPTHRUST", qty=_ut_tp1l,
-         limit=_ut_tp1, stop=upthrust_sl_stored, comment="TP1 0.75:1")
+         limit=_ut_tp1, stop=upthrust_sl_stored, comment="TP1 1:1")
     strategy.exit("UPTHRUST_TP2", from_entry="UPTHRUST",
          limit=_ut_tp2, stop=upthrust_sl_stored, comment="TP2 1:3")
     s_entry       := _ut_ent
@@ -919,7 +919,7 @@ if short_signal_d
     strategy.entry("SHORT_D", strategy.short, qty=d_short_lots,
          comment="SHORT_D " + str.tostring(d_short_lots) + "L")
     strategy.exit("SHORT_D_TP1", from_entry="SHORT_D", qty=d_short_tp1_lots,
-         limit=d_short_tp1, stop=d_short_sl, comment="TP1 0.75:1")
+         limit=d_short_tp1, stop=d_short_sl, comment="TP1 1:1")
     strategy.exit("SHORT_D_TP2", from_entry="SHORT_D",
          limit=d_short_tp2, stop=d_short_sl, comment="TP2 1:3")
     s_entry       := d_short_entry
@@ -950,7 +950,7 @@ if long_signal_d
     strategy.entry("LONG_D", strategy.long, qty=d_long_lots,
          comment="LONG_D " + str.tostring(d_long_lots) + "L")
     strategy.exit("LONG_D_TP1", from_entry="LONG_D", qty=d_long_tp1_lots,
-         limit=d_long_tp1, stop=d_long_sl, comment="TP1 0.75:1")
+         limit=d_long_tp1, stop=d_long_sl, comment="TP1 1:1")
     strategy.exit("LONG_D_TP2", from_entry="LONG_D",
          limit=d_long_tp2, stop=d_long_sl, comment="TP2 1:3")
     s_entry       := d_long_entry
@@ -979,7 +979,7 @@ if long_signal_d
 
 // =============================================================================
 // TP CASCADE — PROGRESSIVE SL MANAGEMENT
-//   TP1 hit (0.75:1, 50%) → SL moves to entry (breakeven) for remaining position
+//   TP1 hit (1:1, 50%) → SL moves to entry (breakeven) for remaining position
 //   TP2     (1:3)      → full close of remaining 50%
 //   Trail SL takes over from breakeven once tp1_hit and be_triggered are both set.
 // All entry types are fired; only the active one has open position to act on.
@@ -1029,8 +1029,8 @@ if tp1_hit and be_triggered and strategy.position_size != 0 and not na(s_risk) a
             strategy.exit("LONG_TP2",     from_entry="LONG",     limit=s_tp2, stop=trail_sl, comment="TP2 trail")
             strategy.exit("LONG_C_TP2",   from_entry="LONG_C",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
             strategy.exit("SPRING_TP2",   from_entry="SPRING",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
-            strategy.exit("SHORT_D_TP2",  from_entry="SHORT_D",  limit=s_tp2, stop=trail_sl, comment="TP2 trail")
-            strategy.exit("LONG_D_TP2",   from_entry="LONG_D",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
+            strategy.exit("SHORT_D_TP2", from_entry="SHORT_D",  limit=s_tp2, stop=trail_sl, comment="TP2 trail")
+            strategy.exit("LONG_D_TP2",  from_entry="LONG_D",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
 
 // =============================================================================
 // LIFECYCLE ALERTS
@@ -1114,17 +1114,15 @@ plotshape(show_signals and short_signal_c,  "SHORT_C",  shape.triangledown, loca
 plotshape(show_signals and long_signal_c,   "LONG_C",   shape.triangleup,   location.belowbar, color.yellow, size=size.normal)
 plotshape(show_signals and spring_signal,   "SPRING",   shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
 plotshape(show_signals and upthrust_signal, "UPTHRUST", shape.triangledown, location.abovebar, color.purple, size=size.normal)
-plotshape(show_signals and short_signal_d,  "SHORT_D",  shape.triangledown, location.abovebar, color.teal,   size=size.normal)
-plotshape(show_signals and long_signal_d,   "LONG_D",   shape.triangleup,   location.belowbar, color.teal,   size=size.normal)
 
 bgcolor(in_spring_zone   and not range_invalidated ? color.new(color.aqua,   88) : na, title="Spring zone")
 bgcolor(in_upthrust_zone and not range_invalidated ? color.new(color.purple,  88) : na, title="Upthrust zone")
 
 if show_signals and spring_signal
-    label.new(bar_index, low, "SPRING TP1:0.75:1(50%)+BE | TP2:1:3(50%)",
+    label.new(bar_index, low, "SPRING TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.aqua,40), textcolor=color.white, style=label.style_label_up, size=size.small)
 if show_signals and upthrust_signal
-    label.new(bar_index, high, "UPTHRUST TP1:0.75:1(50%)+BE | TP2:1:3(50%)",
+    label.new(bar_index, high, "UPTHRUST TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.purple,40), textcolor=color.white, style=label.style_label_down, size=size.small)
 
 if show_signals and short_retracing and not short_signal and not short_signal_c
@@ -1137,10 +1135,10 @@ if show_signals and long_retracing and not long_signal and not long_signal_c
          textcolor=color.white, style=label.style_label_up, size=size.tiny)
 
 if show_signals and short_signal_c
-    label.new(bar_index, high, "C RSI:" + str.tostring(rsi_val,"#.#") + " TP1:0.75:1(50%)+BE | TP2:1:3(50%)",
+    label.new(bar_index, high, "C RSI:" + str.tostring(rsi_val,"#.#") + " TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.yellow,30), textcolor=color.black, style=label.style_label_down, size=size.small)
 if show_signals and long_signal_c
-    label.new(bar_index, low, "C RSI:" + str.tostring(rsi_val,"#.#") + " TP1:0.75:1(50%)+BE | TP2:1:3(50%)",
+    label.new(bar_index, low, "C RSI:" + str.tostring(rsi_val,"#.#") + " TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.yellow,30), textcolor=color.black, style=label.style_label_up, size=size.small)
 
 // Entry D — 15M BOS markers and signals
@@ -1160,11 +1158,14 @@ if show_signals and d_long_retest and not long_signal_d
          color=d_long_rr_ok ? color.new(color.teal,55) : color.new(color.gray,70),
          textcolor=color.white, style=label.style_label_up, size=size.tiny)
 
+plotshape(show_signals and short_signal_d, "SHORT_D", shape.triangledown, location.abovebar, color.teal, size=size.normal)
+plotshape(show_signals and long_signal_d,  "LONG_D",  shape.triangleup,   location.belowbar, color.teal, size=size.normal)
+
 if show_signals and short_signal_d
-    label.new(bar_index, high, "D TP1:0.75:1(50%)+BE | TP2:1:3(50%)",
+    label.new(bar_index, high, "D TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.teal,30), textcolor=color.white, style=label.style_label_down, size=size.small)
 if show_signals and long_signal_d
-    label.new(bar_index, low, "D TP1:0.75:1(50%)+BE | TP2:1:3(50%)",
+    label.new(bar_index, low, "D TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.teal,30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
 // Open-trade level lines
@@ -1331,7 +1332,7 @@ if show_info
     table.cell(info, 0, 13, "15M Retest",                      text_color=color.gray)
     table.cell(info, 1, 13, range_invalidated ? "--" : retr_state, text_color=range_invalidated ? color.gray : short_retracing ? color.red : long_retracing ? color.green : color.gray)
     table.cell(info, 0, 14, "TP Structure",                      text_color=color.gray)
-    table.cell(info, 1, 14, "TP1:0.75:1(50%)+BE | TP2:1:3(50%) | Trail 0.5R@1.5R→1R@2R", text_color=color.gray)
+    table.cell(info, 1, 14, "TP1:1:1(50%)+BE | TP2:1:3(50%) | Trail 0.5R→1R@2R", text_color=color.gray)
     table.cell(info, 0, 15, "BOS Level",                       text_color=color.gray)
     table.cell(info, 1, 15, range_invalidated ? "--" : bear_bos_active and not na(bear_bos_level) ? str.tostring(bear_bos_level, price_format) :
          bull_bos_active and not na(bull_bos_level) ? str.tostring(bull_bos_level, price_format) : "--",
@@ -1357,7 +1358,6 @@ if show_info
     table.cell(info, 1, 21, bear_div ? "YES" : "NO",           text_color=bear_div ? color.orange : color.gray)
     table.cell(info, 0, 22, "Bull Divergence",                 text_color=color.gray)
     table.cell(info, 1, 22, bull_div ? "YES" : "NO",           text_color=bull_div ? color.blue : color.gray)
-
     table.cell(info, 0, 23, "Pivot Length (4H)",               text_color=color.gray)
     table.cell(info, 1, 23, str.tostring(pivot_len) + " bars each side", text_color=color.gray)
     _trail_active = tp1_hit and strategy.position_size != 0 and not na(trail_sl)
@@ -1378,5 +1378,7 @@ if show_info
     _eb_clr = entry_b_enabled ? color.green : color.gray
     table.cell(info, 0, 27, "Entry A / B",                    text_color=color.gray)
     table.cell(info, 1, 27, "A:" + _ea_txt + "  B:" + _eb_txt, text_color=entry_a_enabled or entry_b_enabled ? color.green : color.gray)
-    table.cell(info, 0, 28, "Entry C / D",                    text_color=color.gray)
-    table.cell(info, 1, 28, "C: ALL INSTRUMENTS  D: ALL INSTRUMENTS", text_color=color.green)
+    _ed_inst_txt = is_xagusd ? "BLOCKED (XAGUSD)" : is_usoil ? "BLOCKED (USOIL)" : is_btcusd ? "BLOCKED (BTCUSD)" : is_gbpusd ? "BLOCKED (GBPUSD)" : "OK"
+    _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd or is_gbpusd) ? color.red : color.green
+    table.cell(info, 0, 28, "Entry D Filter",                 text_color=color.gray)
+    table.cell(info, 1, 28, _ed_inst_txt,                     text_color=_ed_inst_clr)
