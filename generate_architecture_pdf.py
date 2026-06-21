@@ -235,9 +235,6 @@ def build():
         [cell("TradingView Alerts"),     cell("TradingView Cloud", bold=True, color=C_TV),
          cell("12 × 15M charts, paper-trading alerts"),
          cell("✅ 24/7", center=True, color=C_GREEN), cell("❌ No", center=True)],
-        [cell("TV Charts Open 24/7"),    cell("Vultr VPS", bold=True),
-         cell("207.148.7.167 · Dallas · $5/mo"),
-         cell("✅ 24/7", center=True, color=C_GREEN), cell("❌ No", center=True)],
         [cell("Order Execution"),        cell("OANDA Demo API", bold=True, color=C_OANDA),
          cell("api-fxpractice.oanda.com · Acct 101-001-39435783-001"),
          cell("✅ 24/7", center=True, color=C_GREEN), cell("❌ No", center=True)],
@@ -464,7 +461,7 @@ def build():
     ))
 
     doc.build(story)
-    print(f"✅  PDF generated: {OUTPUT}")
+    print(f"PDF generated: {OUTPUT}")
 
 
 if __name__ == "__main__":
