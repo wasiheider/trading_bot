@@ -71,8 +71,13 @@ use_rotation    = input.bool(false, "Boundary Rotation Gate",                   
 max_break_pct   = input.float(30.0, "Invalidate range if price breaks by % of range size", group="Filters", minval=5.0, step=5.0)
 use_atr_filter   = input.bool(false, "ATR Volatility Filter (block when ATR < avg)", group="Filters")
 atr_avg_len      = input.int(50,    "ATR average length (above = entry allowed)",   group="Filters", minval=10, maxval=200)
-entry_a_enabled  = input.bool(false, "Enable Entry A (BOS+Boundary Reject)",        group="Filters")
-entry_b_enabled  = input.bool(false, "Enable Entry B (Spring/Upthrust)",             group="Filters")
+entry_a_enabled  = input.bool(true,  "Enable Entry A (BOS+Boundary Reject)",        group="Filters")
+entry_b_enabled  = input.bool(true,  "Enable Entry B (Spring/Upthrust)",             group="Filters")
+
+rsi_period    = input.int(14,      "RSI Period",                                   group="Entry C", minval=2, maxval=50)
+div_pivot_len = input.int(5,       "Divergence Pivot Length",                      group="Entry C", minval=2, maxval=10)
+rsi_c_lower   = input.float(30.0,  "RSI Lower Bound at Retest",                   group="Entry C", minval=1,  maxval=49, step=1)
+rsi_c_upper   = input.float(70.0,  "RSI Upper Bound at Retest",                   group="Entry C", minval=51, maxval=99, step=1)
 
 show_range      = input.bool(true,  "Show range levels",                           group="Display")
 show_bos        = input.bool(true,  "Show BOS level",                              group="Display")
@@ -80,10 +85,6 @@ show_signals    = input.bool(true,  "Show entry signals",                       
 show_trade_lvls = input.bool(true,  "Show SL/TP on trade",                        group="Display")
 show_info       = input.bool(true,  "Show info table",                             group="Display")
 
-rsi_period    = input.int(14,      "RSI Period",                                   group="Entry C", minval=2, maxval=50)
-div_pivot_len = input.int(5,       "Divergence Pivot Length",                      group="Entry C", minval=2, maxval=10)
-rsi_c_lower   = input.float(30.0,  "RSI Lower Bound at Retest",                   group="Entry C", minval=1,  maxval=49, step=1)
-rsi_c_upper   = input.float(70.0,  "RSI Upper Bound at Retest",                   group="Entry C", minval=51, maxval=99, step=1)
 
 // =============================================================================
 // INSTRUMENT CONFIG
@@ -113,6 +114,7 @@ _quote_to_usd = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "N
 atr_now = ta.atr(14)
 atr_avg = ta.sma(atr_now, atr_avg_len)
 atr_ok  = not use_atr_filter or atr_now > atr_avg
+
 
 // =============================================================================
 // RSI + DIVERGENCE (Entry C)
@@ -496,8 +498,8 @@ no_position  = strategy.opentrades == 0
 _bos_short_base = short_retracing and short_rr_ok and not na(short_sl) and bear_entry_bar < bear_bos_bar and no_position and not range_broken and atr_ok
 _bos_long_base  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken and atr_ok
 
-short_signal_c = _bos_short_base and bear_div and rsi_c_ok and not (is_usoil or is_xagusd)
-long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and not (is_usoil or is_xagusd)
+short_signal_c = _bos_short_base and bear_div and rsi_c_ok
+long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok
 short_signal   = _bos_short_base and not short_signal_c and entry_a_enabled
 long_signal    = _bos_long_base  and not long_signal_c  and entry_a_enabled
 
@@ -577,10 +579,8 @@ d_short_lots     = _size(d_short_entry, d_short_sl)
 d_long_tp1_lots  = _tp1q(d_long_lots)
 d_short_tp1_lots = _tp1q(d_short_lots)
 
-_entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd or is_gbpusd)
-
-short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok
-long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok
+short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken
+long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken
 
 // =============================================================================
 // SPRING / UPTHRUST — PENDING ENTRY LOGIC
@@ -1029,8 +1029,8 @@ if tp1_hit and be_triggered and strategy.position_size != 0 and not na(s_risk) a
             strategy.exit("LONG_TP2",     from_entry="LONG",     limit=s_tp2, stop=trail_sl, comment="TP2 trail")
             strategy.exit("LONG_C_TP2",   from_entry="LONG_C",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
             strategy.exit("SPRING_TP2",   from_entry="SPRING",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
-            strategy.exit("SHORT_D_TP2", from_entry="SHORT_D",  limit=s_tp2, stop=trail_sl, comment="TP2 trail")
-            strategy.exit("LONG_D_TP2",  from_entry="LONG_D",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
+            strategy.exit("SHORT_D_TP2",  from_entry="SHORT_D",  limit=s_tp2, stop=trail_sl, comment="TP2 trail")
+            strategy.exit("LONG_D_TP2",   from_entry="LONG_D",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
 
 // =============================================================================
 // LIFECYCLE ALERTS
@@ -1114,6 +1114,8 @@ plotshape(show_signals and short_signal_c,  "SHORT_C",  shape.triangledown, loca
 plotshape(show_signals and long_signal_c,   "LONG_C",   shape.triangleup,   location.belowbar, color.yellow, size=size.normal)
 plotshape(show_signals and spring_signal,   "SPRING",   shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
 plotshape(show_signals and upthrust_signal, "UPTHRUST", shape.triangledown, location.abovebar, color.purple, size=size.normal)
+plotshape(show_signals and short_signal_d,  "SHORT_D",  shape.triangledown, location.abovebar, color.teal,   size=size.normal)
+plotshape(show_signals and long_signal_d,   "LONG_D",   shape.triangleup,   location.belowbar, color.teal,   size=size.normal)
 
 bgcolor(in_spring_zone   and not range_invalidated ? color.new(color.aqua,   88) : na, title="Spring zone")
 bgcolor(in_upthrust_zone and not range_invalidated ? color.new(color.purple,  88) : na, title="Upthrust zone")
@@ -1157,9 +1159,6 @@ if show_signals and d_long_retest and not long_signal_d
     label.new(bar_index, low, "D retest" + (d_long_rr_ok ? "" : " [no SL]"),
          color=d_long_rr_ok ? color.new(color.teal,55) : color.new(color.gray,70),
          textcolor=color.white, style=label.style_label_up, size=size.tiny)
-
-plotshape(show_signals and short_signal_d, "SHORT_D", shape.triangledown, location.abovebar, color.teal, size=size.normal)
-plotshape(show_signals and long_signal_d,  "LONG_D",  shape.triangleup,   location.belowbar, color.teal, size=size.normal)
 
 if show_signals and short_signal_d
     label.new(bar_index, high, "D TP1:1:1(50%)+BE | TP2:1:3(50%)",
@@ -1358,6 +1357,7 @@ if show_info
     table.cell(info, 1, 21, bear_div ? "YES" : "NO",           text_color=bear_div ? color.orange : color.gray)
     table.cell(info, 0, 22, "Bull Divergence",                 text_color=color.gray)
     table.cell(info, 1, 22, bull_div ? "YES" : "NO",           text_color=bull_div ? color.blue : color.gray)
+
     table.cell(info, 0, 23, "Pivot Length (4H)",               text_color=color.gray)
     table.cell(info, 1, 23, str.tostring(pivot_len) + " bars each side", text_color=color.gray)
     _trail_active = tp1_hit and strategy.position_size != 0 and not na(trail_sl)
@@ -1378,7 +1378,5 @@ if show_info
     _eb_clr = entry_b_enabled ? color.green : color.gray
     table.cell(info, 0, 27, "Entry A / B",                    text_color=color.gray)
     table.cell(info, 1, 27, "A:" + _ea_txt + "  B:" + _eb_txt, text_color=entry_a_enabled or entry_b_enabled ? color.green : color.gray)
-    _ed_inst_txt = is_xagusd ? "BLOCKED (XAGUSD)" : is_usoil ? "BLOCKED (USOIL)" : is_btcusd ? "BLOCKED (BTCUSD)" : is_gbpusd ? "BLOCKED (GBPUSD)" : "OK"
-    _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd or is_gbpusd) ? color.red : color.green
-    table.cell(info, 0, 28, "Entry D Filter",                 text_color=color.gray)
-    table.cell(info, 1, 28, _ed_inst_txt,                     text_color=_ed_inst_clr)
+    table.cell(info, 0, 28, "Entry C / D",                    text_color=color.gray)
+    table.cell(info, 1, 28, "C: ALL INSTRUMENTS  D: ALL INSTRUMENTS", text_color=color.green)
