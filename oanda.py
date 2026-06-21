@@ -61,7 +61,7 @@ def place_order(instrument: str, direction: str, lot_size: float, sl_price: floa
         "type":         "MARKET",
         "instrument":   oanda_instrument,
         "units":        str(units),
-        "timeInForce":  "FOK",
+        "timeInForce":  "GFD",
         "positionFill": "DEFAULT",
     }
     if sl_price is not None:

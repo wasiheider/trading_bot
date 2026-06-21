@@ -27,10 +27,10 @@ def midnight_reset():
     if now.weekday() == 0:
         reset_paper_weekly()
         log("Weekly reset — paper weekly counters cleared")
-        send_telegram("🔄 *Weekly Reset*\nPaper trading weekly P&L and SL counters reset.")
+        send_telegram("🔄 <b>Weekly Reset</b>\nPaper trading weekly P&L and SL counters reset.")
     reset_paper_daily()
     log("Midnight reset — paper daily counters cleared")
-    send_telegram("🔄 *Midnight Reset*\nPaper trading daily P&L and counters reset.")
+    send_telegram("🔄 <b>Midnight Reset</b>\nPaper trading daily P&L and counters reset.")
 
 
 # ── Weekly Summary (Friday 3:50 PM CT) ────────────────────
@@ -73,14 +73,14 @@ def weekly_summary():
     pnl_emoji = "🟢" if pnl >= 0 else "🔴"
 
     msg = (
-        f"📊 *Weekly Summary — {week_str}*\n"
+        f"📊 <b>Weekly Summary — {week_str}</b>\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"*Paper Trading (POC)*\n"
-        f"Trades: `{len(closed)}` ({len(wins)}W / {len(losses)}L)\n"
-        f"Win Rate: `{wr}%`\n"
-        f"Week P&L: {pnl_emoji} `${pnl:+,.2f}`\n"
-        f"Balance: `${balance:,.2f}`\n"
-        f"\n_POC validation — 2-week window_ 🤖"
+        f"<b>Paper Trading (POC)</b>\n"
+        f"Trades: <code>{len(closed)}</code> ({len(wins)}W / {len(losses)}L)\n"
+        f"Win Rate: <code>{wr}%</code>\n"
+        f"Week P&L: {pnl_emoji} <code>${pnl:+,.2f}</code>\n"
+        f"Balance: <code>${balance:,.2f}</code>\n"
+        f"\n<i>POC validation — 2-week window</i> 🤖"
     )
     send_telegram(msg)
     log("Weekly summary sent")

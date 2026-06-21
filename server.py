@@ -144,12 +144,12 @@ def handle_paper_signal(data):
 
     risk = check_paper_risk(instrument, sl_pips)
     if not risk["allowed"]:
-        msg = f"{_MASCOT}\n🚫 *Paper Signal Blocked*\n`{instrument} {direction}`\nReason: {risk['reason']}"
+        msg = f"{_MASCOT}\n🚫 <b>Paper Signal Blocked</b>\n<code>{instrument} {direction}</code>\nReason: {risk['reason']}"
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": risk["reason"]}), 200
 
     if db.has_open_trade(instrument):
-        msg = f"{_MASCOT}\n🚫 *Paper Signal Blocked*\n`{instrument} {direction}`\nReason: position already open on {instrument}"
+        msg = f"{_MASCOT}\n🚫 <b>Paper Signal Blocked</b>\n<code>{instrument} {direction}</code>\nReason: position already open on {instrument}"
         send_telegram(msg)
         return jsonify({"status": "blocked", "reason": f"position already open: {instrument}"}), 200
 
@@ -170,32 +170,32 @@ def handle_paper_signal(data):
         except Exception as e:
             oanda_error = str(e)
             print(f"[oanda] ERROR placing order: {e}", flush=True)
-            send_telegram(f"{_MASCOT}\n🔴 *OANDA ORDER FAILED*\n`{instrument} {direction}`\nError: `{oanda_error}`")
+            send_telegram(f"{_MASCOT}\n🔴 <b>OANDA ORDER FAILED</b>\n<code>{instrument} {direction}</code>\nError: <code>{oanda_error}</code>")
 
     emoji    = "🟢" if direction == "LONG" else "🔴"
-    rr_line  = f"\nR:R: `{rr}`" if rr else ""
-    bos_line = f"\nBOS: `{bos_level}`" if bos_level else ""
+    rr_line  = f"\nR:R: <code>{rr}</code>" if rr else ""
+    bos_line = f"\nBOS: <code>{bos_level}</code>" if bos_level else ""
     tf_label = f"15M" if str(timeframe) == "15" else f"{timeframe}M"
-    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV"}.get(setup, "")
+    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS"}.get(setup, "")
 
     if limit_hit:
-        exec_line = f"\n⚠️ *NOT EXECUTED — {limit_reason}*"
+        exec_line = f"\n⚠️ <b>NOT EXECUTED — {limit_reason}</b>"
     elif not oanda_supported:
         exec_line = "\n📋 Log + Telegram only (not a forex pair)"
     elif oanda_trade_id:
-        exec_line = f"\nOANDA ID: `{oanda_trade_id}` @ `{oanda_fill_price}`"
+        exec_line = f"\nOANDA ID: <code>{oanda_trade_id}</code> @ <code>{oanda_fill_price}</code>"
     else:
         exec_line = f"\nOANDA: FAILED ({oanda_error})"
 
     msg = (
         f"{_MASCOT}\n"
-        f"{emoji} *Paper — {instrument} {direction}* [{tf_label}{setup_label}]\n"
-        f"Entry: `{price}`\n"
-        f"SL: `{sl}`\n"
-        f"TP1: `{tp1}`\n"
-        f"TP2: `{tp2}`\n"
-        f"Units: `{risk['lot_size']}`\n"
-        f"Risk: `${risk['risk_dollars']}`"
+        f"{emoji} <b>Paper — {instrument} {direction}</b> [{tf_label}{setup_label}]\n"
+        f"Entry: <code>{price}</code>\n"
+        f"SL: <code>{sl}</code>\n"
+        f"TP1: <code>{tp1}</code>\n"
+        f"TP2: <code>{tp2}</code>\n"
+        f"Units: <code>{risk['lot_size']}</code>\n"
+        f"Risk: <code>${risk['risk_dollars']}</code>"
         f"{rr_line}"
         f"{bos_line}"
         f"{exec_line}"
@@ -273,13 +273,13 @@ def handle_paper_lifecycle(data, event):
     emoji_map = {"tp1_hit": "✅", "tp2_hit": "🏆", "sl_hit": "❌"}
     label_map = {"tp1_hit": "TP1 Hit", "tp2_hit": "TP2 Hit", "sl_hit": "Stop Loss Hit"}
     dir_emoji = "🟢" if direction == "LONG" else "🔴"
-    pnl_line  = f"\nP&L: `${final_pnl:+.2f}`" if final_pnl is not None else ""
+    pnl_line  = f"\nP&L: <code>${final_pnl:+.2f}</code>" if final_pnl is not None else ""
 
     msg = (
         f"{_MASCOT}\n"
-        f"{emoji_map.get(event, '📊')} *Paper {label_map.get(event, event.upper())}*\n"
-        f"{dir_emoji} `{instrument} {direction}`\n"
-        f"Price: `{price}`{pnl_line}"
+        f"{emoji_map.get(event, '📊')} <b>Paper {label_map.get(event, event.upper())}</b>\n"
+        f"{dir_emoji} <code>{instrument} {direction}</code>\n"
+        f"Price: <code>{price}</code>{pnl_line}"
     )
     send_telegram(msg)
     return jsonify({"status": "logged", "event": event, "symbol": instrument}), 200
