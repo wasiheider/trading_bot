@@ -6,3 +6,40 @@ __pycache__/
 TradeBotProgress.txt
 TRADING_BOT_SESSION_SUMMARY*.txt
 TV MF2A Backup Codes.txt
+
+# Retired Pine Scripts — only pine_script_paper_v5.pine is active
+pine_script_ftmo*.pine
+pine_script_tpt*.pine
+pine_script_paper_v3.pine
+pine_script_paper_v4.pine
+
+# Local utility / analysis scripts — not needed on Railway
+capture_cot.py
+check_cot.py
+generate_cot_pdf.py
+generate_cot_docx.py
+generate_architecture_pdf.py
+snap_analytics.py
+snap_cot.py
+snap_railway_cot.py
+verify_cot.py
+validator.py
+
+# Legacy flat-file persistence — superseded by Railway PostgreSQL
+trades.json
+state.json
+cot_data.json
+cot_verify_snap.json
+
+# Local output files / docs
+Trading_Bot_Architecture.pdf
+strategy_workflow.html
+trading_bot_plan.html
+project_progress_summary.html
+security_hardening_PDD.html
+btc_cycle_plan.html
+Levels.txt
+*.docx
+*.xlsx
+*.png
+TRADING*.txt
