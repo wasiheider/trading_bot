@@ -129,7 +129,7 @@ Push to `paper-trading` → Railway auto-deploys.
 - **Trailing SL** after TP1: at 1.5R → move to 1R, then trail 0.5R behind peak
 
 ### Risk
-- `$250` per trade (`RISK_PER_TRADE = 0.0025`)
+- `$500` per trade (`RISK_PER_TRADE = 0.005`)
 - Daily loss limit: `$4,000` | Weekly loss limit: `$10,000`
 - One open position per instrument at a time
 
@@ -263,4 +263,3 @@ All Telegram messages are prefixed with `🩷👑🤖👑🩷` — intentional (
 
 - **Entry D in `model_stats`** — `/state` maps `"mid_bos"` → model D now, but dashboard HTML analytics `setupToModel` may still need updating
 - **`logger.py`** — legacy SQLite file, not wired in; candidate for removal or full PostgreSQL migration
-- **`config.py` comment** — `RISK_PER_TRADE` comment says 0.5%/$500 but value is 0.0025 ($250); update comment only

@@ -54,7 +54,7 @@ All three required:
 - **Trailing SL** kicks in after TP1: at 1.5R peak SL moves to 1R, then trails 0.5R behind peak
 
 ### Risk
-- $250 per trade (0.25% of $100k demo account)
+- $500 per trade (0.5% of $100k demo account)
 - Daily loss limit: $4,000 (4%)
 - Weekly loss limit: $10,000 (10%)
 - One open position per instrument at a time
