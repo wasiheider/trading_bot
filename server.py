@@ -340,7 +340,7 @@ def state():
     try:
         for t in db.load_trades():
             res = t.get("result", "OPEN")
-            if res == "OPEN":
+            if res in ("OPEN", "UNKNOWN"):
                 continue
             m = _setup_to_model(t.get("setup", ""))
             model_stats[m]["trades"] += 1

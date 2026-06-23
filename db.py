@@ -11,7 +11,7 @@ import os
 import json
 import psycopg2
 import psycopg2.extras
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import pytz
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -227,20 +227,21 @@ def open_trade_count() -> int:
     return count
 
 
-def close_stale_non_forex_opens(forex_instruments: set):
+def close_stale_non_forex_opens(forex_instruments: set, min_age_hours: int = 4):
     """
-    Mark any OPEN trade that has no oanda_trade_id AND is not a forex instrument as UNKNOWN.
-    These are log-only trades (US100, XAUUSD, etc.) whose lifecycle events were never received.
-    Safe to call on every startup — only touches rows that are genuinely unresolvable.
+    Mark non-forex OPEN trades as UNKNOWN only if they are older than min_age_hours.
+    Fresh trades (entered recently) are left OPEN so lifecycle webhooks can still resolve them.
     """
     conn = get_conn()
     cur = conn.cursor()
+    threshold = datetime.now(timezone.utc) - timedelta(hours=min_age_hours)
     cur.execute("""
         UPDATE trades SET result = 'UNKNOWN', pnl = 0
         WHERE result = 'OPEN'
           AND (oanda_trade_id IS NULL OR oanda_trade_id = '')
           AND UPPER(instrument) != ALL(%s)
-    """, (list(forex_instruments),))
+          AND created_at < %s
+    """, (list(forex_instruments), threshold))
     affected = cur.rowcount
     conn.commit()
     cur.close()
