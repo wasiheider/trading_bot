@@ -25,7 +25,7 @@ A TradingView-to-OANDA **paper trading bot** validating a Wyckoff range strategy
 | TradingView alerts | TradingView cloud | ✅ 24/7 | ❌ No |
 | Order execution | OANDA Demo API | ✅ 24/7 | ❌ No |
 | Notifications | Telegram | ✅ | ❌ No |
-| Daily monitor agent | Anthropic cloud (`claude.ai/code/routines`) | ✅ 7am CT | ❌ No |
+| Daily monitor agent | GitHub Actions cron (`.github/workflows/daily-report.yml`) | ✅ 7am CT | ❌ No |
 | CLAUDE.md / README | GitHub (repo root) | ✅ | ❌ No |
 
 ### Signal Flow
@@ -44,7 +44,7 @@ Railway Flask Bot  ────────────────────�
 ### Daily Monitoring Flow
 
 ```
-Anthropic Cloud Agent (7am CT daily)
+GitHub Actions cron (7am CT daily — .github/workflows/daily-report.yml)
         │  GET /report
         ▼
 Railway Flask Bot  →  Telegram (balance, PNL, W/L, risk flags)
@@ -174,7 +174,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | `/dashboard` | GET | Serves `dashboard.html` |
 | `/state` | GET | Balance, PNL, open trades, per-model stats (A/B/C/D) |
 | `/trades` | GET | Full trade ledger from PostgreSQL |
-| `/report` | GET | Daily monitor — sends Telegram summary; called by cloud agent at 7am CT |
+| `/report` | GET | Daily monitor — sends Telegram summary; called by GitHub Actions cron at 7am CT |
 | `/news` | GET | Yahoo Finance RSS (15-min cache) |
 | `/calendar` | GET | ForexFactory calendar (1-hour cache) |
 | `/webhook/paper` | POST | TradingView signal receiver — entries + lifecycle events |
@@ -212,7 +212,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | Daily PNL reset | Midnight CT (scheduler) | ✅ Fully automated |
 | Weekly PNL reset | Monday midnight CT | ✅ Fully automated |
 | Weekly summary | Friday 3:50pm CT (scheduler) | ✅ Fully automated |
-| Daily monitor report | 7am CT (Anthropic cloud agent) | ✅ Fully automated |
+| Daily monitor report | 7am CT (GitHub Actions cron) | ✅ Fully automated |
 | Database persistence | Every trade / state change | ✅ Fully automated |
 | Code deployment | git push to paper-trading | ✅ Fully automated |
 | Prop firm trade entry | FTMO/Apex have no API | ⚠️ Manual — always |
