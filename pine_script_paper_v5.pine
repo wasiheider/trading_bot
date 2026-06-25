@@ -106,7 +106,7 @@ pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mi
 _min_sl_price = pip_size * min_sl_pips  // minimum SL distance in price units
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
 risk_dollars  = 500.0
-risk_dollars_eff = (is_gbpusd or is_xagusd) ? risk_dollars * 0.5 : risk_dollars
+risk_dollars_eff = risk_dollars
 _nzdusd_rate  = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off)
 _quote_to_usd = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "NZD" ? _nzdusd_rate : 1.0
 
