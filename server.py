@@ -173,7 +173,7 @@ def handle_paper_signal(data):
     rr_line  = f"\nR:R: <code>{rr}</code>" if rr else ""
     bos_line = f"\nBOS: <code>{bos_level}</code>" if bos_level else ""
     tf_label = f"15M" if str(timeframe) == "15" else f"{timeframe}M"
-    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS", "box_fade": " · BOX FADE"}.get(setup, "")
+    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS", "box_break": " · BOX BREAK"}.get(setup, "")
 
     if limit_hit:
         exec_line = f"\n⚠️ <b>NOT EXECUTED — {limit_reason}</b>"
@@ -329,7 +329,7 @@ def state():
         if s in ("spring", "upthrust"): return "B"
         if s == "bos_div":              return "C"
         if s == "mid_bos":              return "D"
-        if s == "box_fade":             return "E"
+        if s == "box_break":            return "E"
         return "A"
 
     model_stats = {

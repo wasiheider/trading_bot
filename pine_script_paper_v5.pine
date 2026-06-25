@@ -85,7 +85,7 @@ div_pivot_len = input.int(5,       "Divergence Pivot Length",                   
 rsi_c_lower   = input.float(30.0,  "RSI Lower Bound at Retest",                   group="Entry C", minval=1,  maxval=49, step=1)
 rsi_c_upper   = input.float(70.0,  "RSI Upper Bound at Retest",                   group="Entry C", minval=51, maxval=99, step=1)
 
-entry_e_enabled = input.bool(true,  "Enable Entry E (Box Fade — NY Kill Zone)",   group="Entry E")
+entry_e_enabled = input.bool(true,  "Enable Entry E (Box Break — NY Kill Zone)",  group="Entry E")
 e_touch_pct_in  = input.float(0.10, "Touch proximity % of box boundary",          group="Entry E", minval=0.01, maxval=1.0, step=0.01)
 
 // =============================================================================
@@ -745,23 +745,21 @@ e_box_mid        = not na(e_box_high) and not na(e_box_low) ? (e_box_high + e_bo
 _e_instrument_ok = is_xauusd or is_us100
 _e_box_ready     = entry_e_enabled and _e_instrument_ok and not na(e_box_high) and not na(e_box_low) and e_box_valid and not e_box_busted
 
-// NY 7–9am: wick beyond box boundary + close back inside = sweep fade
-_e_short_cond = _e_in_ny_window and _e_box_ready and high > e_box_high and close < e_box_high and not e_short_done and no_position
-_e_long_cond  = _e_in_ny_window and _e_box_ready and low  < e_box_low  and close > e_box_low  and not e_long_done  and no_position
+// NY 7–9am: close beyond box boundary = breakout/breakdown
+_e_short_cond = _e_in_ny_window and _e_box_ready and close < e_box_low  and not e_short_done and no_position
+_e_long_cond  = _e_in_ny_window and _e_box_ready and close > e_box_high and not e_long_done  and no_position
 
 _ee_s_entry = close
-_ee_s_sl    = math.max(high + atr_now * atr_mult, _ee_s_entry + _min_sl_price)
+_ee_s_sl    = e_box_high
 _ee_s_risk  = _ee_s_sl - _ee_s_entry
-_ee_s_tp1   = not na(e_box_mid) and _ee_s_risk > 0 ? e_box_mid : na
-_ee_s_tp2   = _ee_s_risk > 0 ? e_box_low : na
-_ee_s_rr_ok = not na(_ee_s_tp1) and _ee_s_risk > 0 and (_ee_s_entry - _ee_s_tp1) / _ee_s_risk >= 1.0
+_ee_s_tp1   = _ee_s_risk > 0 ? _ee_s_entry - _ee_s_risk : na
+_ee_s_rr_ok = _ee_s_risk > 0
 
 _ee_l_entry = close
-_ee_l_sl    = math.min(low - atr_now * atr_mult, _ee_l_entry - _min_sl_price)
+_ee_l_sl    = e_box_low
 _ee_l_risk  = _ee_l_entry - _ee_l_sl
-_ee_l_tp1   = not na(e_box_mid) and _ee_l_risk > 0 ? e_box_mid : na
-_ee_l_tp2   = _ee_l_risk > 0 ? e_box_high : na
-_ee_l_rr_ok = not na(_ee_l_tp1) and _ee_l_risk > 0 and (_ee_l_tp1 - _ee_l_entry) / _ee_l_risk >= 1.0
+_ee_l_tp1   = _ee_l_risk > 0 ? _ee_l_entry + _ee_l_risk : na
+_ee_l_rr_ok = _ee_l_risk > 0
 
 short_signal_e = _e_short_cond and _ee_s_rr_ok
 long_signal_e  = _e_long_cond  and _ee_l_rr_ok
@@ -1071,14 +1069,12 @@ if long_signal_d
 
 if short_signal_e
     _ee_lots = _size(_ee_s_entry, _ee_s_sl)
-    _ee_tp1l = _tp1q(_ee_lots)
     strategy.entry("SHORT_E", strategy.short, qty=_ee_lots, comment="SHORT_E " + str.tostring(_ee_lots) + "L")
-    strategy.exit("SHORT_E_TP1", from_entry="SHORT_E", qty=_ee_tp1l, limit=_ee_s_tp1, stop=_ee_s_sl, comment="TP1 1:1")
-    strategy.exit("SHORT_E_TP2", from_entry="SHORT_E", limit=_ee_s_tp2, stop=_ee_s_sl, comment="TP2 1:3")
+    strategy.exit("SHORT_E_TP1", from_entry="SHORT_E", limit=_ee_s_tp1, stop=_ee_s_sl, comment="TP1 1:1")
     s_entry       := _ee_s_entry
-    s_tp2         := _ee_s_tp2
+    s_tp2         := na
     s_tp1         := _ee_s_tp1
-    s_tp1_lots    := _ee_tp1l
+    s_tp1_lots    := _ee_lots
     s_entry_bar   := bar_index
     s_risk        := _ee_s_risk
     trail_sl      := na
@@ -1087,12 +1083,11 @@ if short_signal_e
     be_triggered  := false
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-             '","direction":"SHORT","setup":"box_fade","timeframe":"15"' +
+             '","direction":"SHORT","setup":"box_break","timeframe":"15"' +
              ',"lot_size":'    + str.tostring(_ee_lots) +
              ',"entry_price":' + str.tostring(_ee_s_entry, price_format) +
              ',"stop_loss":'   + str.tostring(_ee_s_sl,    price_format) +
              ',"tp1":'         + str.tostring(_ee_s_tp1,   price_format) +
-             ',"tp2":'         + str.tostring(_ee_s_tp2,   price_format) +
              ',"box_high":'    + str.tostring(e_box_high,  price_format) +
              ',"box_low":'     + str.tostring(e_box_low,   price_format) +
              ',"token":"paper_wasirizvi_wyckoffstrategy"}'
@@ -1100,14 +1095,12 @@ if short_signal_e
 
 if long_signal_e
     _ee_lots = _size(_ee_l_entry, _ee_l_sl)
-    _ee_tp1l = _tp1q(_ee_lots)
     strategy.entry("LONG_E", strategy.long, qty=_ee_lots, comment="LONG_E " + str.tostring(_ee_lots) + "L")
-    strategy.exit("LONG_E_TP1", from_entry="LONG_E", qty=_ee_tp1l, limit=_ee_l_tp1, stop=_ee_l_sl, comment="TP1 1:1")
-    strategy.exit("LONG_E_TP2", from_entry="LONG_E", limit=_ee_l_tp2, stop=_ee_l_sl, comment="TP2 1:3")
+    strategy.exit("LONG_E_TP1", from_entry="LONG_E", limit=_ee_l_tp1, stop=_ee_l_sl, comment="TP1 1:1")
     s_entry       := _ee_l_entry
-    s_tp2         := _ee_l_tp2
+    s_tp2         := na
     s_tp1         := _ee_l_tp1
-    s_tp1_lots    := _ee_tp1l
+    s_tp1_lots    := _ee_lots
     s_entry_bar   := bar_index
     s_risk        := _ee_l_risk
     trail_sl      := na
@@ -1116,12 +1109,11 @@ if long_signal_e
     be_triggered  := false
     _entry_alert_pending := true
     _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-             '","direction":"LONG","setup":"box_fade","timeframe":"15"' +
+             '","direction":"LONG","setup":"box_break","timeframe":"15"' +
              ',"lot_size":'    + str.tostring(_ee_lots) +
              ',"entry_price":' + str.tostring(_ee_l_entry, price_format) +
              ',"stop_loss":'   + str.tostring(_ee_l_sl,    price_format) +
              ',"tp1":'         + str.tostring(_ee_l_tp1,   price_format) +
-             ',"tp2":'         + str.tostring(_ee_l_tp2,   price_format) +
              ',"box_high":'    + str.tostring(e_box_high,  price_format) +
              ',"box_low":'     + str.tostring(e_box_low,   price_format) +
              ',"token":"paper_wasirizvi_wyckoffstrategy"}'
@@ -1154,8 +1146,6 @@ if tp1_short_hit or tp1_long_hit
     strategy.exit("SPRING_TP2",   from_entry="SPRING",   limit=s_tp2, stop=s_entry, comment="TP2 BE")
     strategy.exit("SHORT_D_TP2",  from_entry="SHORT_D",  limit=s_tp2, stop=s_entry, comment="TP2 BE")
     strategy.exit("LONG_D_TP2",   from_entry="LONG_D",   limit=s_tp2, stop=s_entry, comment="TP2 BE")
-    strategy.exit("SHORT_E_TP2",  from_entry="SHORT_E",  limit=s_tp2, stop=s_entry, comment="TP2 BE")
-    strategy.exit("LONG_E_TP2",   from_entry="LONG_E",   limit=s_tp2, stop=s_entry, comment="TP2 BE")
 
 // =============================================================================
 // TRAILING SL — active after TP1 hit (SL already at breakeven)
@@ -1183,8 +1173,6 @@ if tp1_hit and be_triggered and strategy.position_size != 0 and not na(s_risk) a
             strategy.exit("SPRING_TP2",   from_entry="SPRING",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
             strategy.exit("SHORT_D_TP2", from_entry="SHORT_D",  limit=s_tp2, stop=trail_sl, comment="TP2 trail")
             strategy.exit("LONG_D_TP2",  from_entry="LONG_D",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
-            strategy.exit("SHORT_E_TP2", from_entry="SHORT_E",  limit=s_tp2, stop=trail_sl, comment="TP2 trail")
-            strategy.exit("LONG_E_TP2",  from_entry="LONG_E",   limit=s_tp2, stop=trail_sl, comment="TP2 trail")
 
 // =============================================================================
 // LIFECYCLE ALERTS
@@ -1322,7 +1310,7 @@ if show_signals and long_signal_d
     label.new(bar_index, low, "D TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.teal,30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
-// Entry E — Box Fade visuals
+// Entry E — Box Break visuals
 plot(_e_instrument_ok and not na(e_box_high) ? e_box_high : na, "E Box High", color=color.new(color.orange, 0),  linewidth=1, style=plot.style_linebr)
 plot(_e_instrument_ok and not na(e_box_low)  ? e_box_low  : na, "E Box Low",  color=color.new(color.orange, 0),  linewidth=1, style=plot.style_linebr)
 plot(_e_instrument_ok and not na(e_box_mid)  ? e_box_mid  : na, "E Box Mid",  color=color.new(color.orange, 60), linewidth=1, style=plot.style_linebr)
