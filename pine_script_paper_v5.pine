@@ -690,7 +690,7 @@ spring_signal = _sp_bos_event and not range_invalidated and no_position and atr_
 // Instruments: XAUUSD + US100/NQ only (Telegram signal — no OANDA execution).
 // =============================================================================
 _e_in_session    = not na(time(timeframe.period, "1800-0700", "America/New_York"))
-_e_in_ny_window  = not na(time(timeframe.period, "0700-0900", "America/New_York"))
+_e_in_ny_window  = not na(time(timeframe.period, "0700-1000", "America/New_York"))
 _e_session_start = _e_in_session and not _e_in_session[1]
 _e_session_end   = not _e_in_session and _e_in_session[1]
 _e_touch_pct     = e_touch_pct_in / 100.0
@@ -1552,7 +1552,7 @@ if show_info
     _e_status_clr = not _e_instrument_ok or not entry_e_enabled ? color.gray : _e_in_ny_window and _e_box_ready ? color.green : e_box_busted ? color.red : _e_in_session ? color.orange : e_box_valid ? color.blue : color.gray
     table.cell(info, 0, 31, "E Status",                       text_color=color.gray)
     table.cell(info, 1, 31, _e_status_txt,                    text_color=_e_status_clr)
-    _e_ny_txt = _e_in_ny_window ? "ACTIVE (7–9am ET)" : "--"
+    _e_ny_txt = _e_in_ny_window ? "ACTIVE (7–10am ET)" : "--"
     _e_ny_clr = _e_in_ny_window ? color.green : color.gray
     table.cell(info, 0, 32, "E NY Window",                    text_color=color.gray)
     table.cell(info, 1, 32, _e_ny_txt,                        text_color=_e_ny_clr)
