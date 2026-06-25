@@ -337,6 +337,7 @@ def state():
         "B": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
         "C": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
         "D": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
+        "E": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
     }
     try:
         for t in db.load_trades():

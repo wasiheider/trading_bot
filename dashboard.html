@@ -816,7 +816,7 @@ function renderSessionBreakdown(trades) {
     if (s === 'spring' || s === 'upthrust') return 'B — Wyckoff';
     if (s === 'bos_div') return 'C — BOS+Div';
     if (s === 'mid_bos') return 'D — Mid Retest';
-    if (s === 'box_break') return 'E — Box Break';
+    if (s === 'box_fade' || s === 'box_break') return 'E — Box Break';
     return 'A — BOS';
   }
   const mBuckets = bucket(closed, t => setupToModel(t.setup));
@@ -862,11 +862,12 @@ function renderSessionBreakdown(trades) {
     <td style="text-align:right;font-weight:800;color:${tpnlColor}">${fmt$(totalPnl)}</td>
   </tr></tfoot>`;
 
-  const mKeys = [...MODEL_ORDER.filter(m => mBuckets[m]), ...Object.keys(mBuckets).filter(m => !MODEL_ORDER.includes(m))];
+  const _emptyBucket = {wins:0, losses:0, pnl:0};
+  const mKeys = [...MODEL_ORDER, ...Object.keys(mBuckets).filter(m => !MODEL_ORDER.includes(m))];
 
   el.innerHTML = `<div style="margin-bottom:16px">
     <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Entry Model</div>
-    <table class="tbl">${thead}<tbody>${mKeys.map(m => mkRow(m, mBuckets[m])).join('')}</tbody>${tfoot}</table>
+    <table class="tbl">${thead}<tbody>${mKeys.map(m => mkRow(m, mBuckets[m] || _emptyBucket)).join('')}</tbody>${tfoot}</table>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
     <div>
