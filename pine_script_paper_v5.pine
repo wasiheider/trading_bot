@@ -102,6 +102,8 @@ is_us500      = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "S
 is_gbpusd     = str.contains(raw_ticker, "GBPUSD") or syminfo.ticker == "GBPUSD"
 is_xagusd     = str.contains(raw_ticker, "XAG")
 is_btcusd     = str.contains(raw_ticker, "BTC")
+is_eurnzd     = str.contains(raw_ticker, "EURNZD") or syminfo.ticker == "EURNZD"
+is_nzdusd     = str.contains(raw_ticker, "NZDUSD") or syminfo.ticker == "NZDUSD"
 pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
 _min_sl_price = pip_size * min_sl_pips  // minimum SL distance in price units
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
@@ -742,7 +744,7 @@ if _e_session_end
     e_box_busted := e_top_touches >= 3 and e_bot_touches >= 3
 
 e_box_mid        = not na(e_box_high) and not na(e_box_low) ? (e_box_high + e_box_low) / 2.0 : na
-_e_instrument_ok = is_xauusd or is_us100
+_e_instrument_ok = is_xauusd or is_xagusd or is_us500 or is_eurnzd or is_nzdusd or is_usoil
 _e_box_ready     = entry_e_enabled and _e_instrument_ok and not na(e_box_high) and not na(e_box_low) and e_box_valid and not e_box_busted
 
 // NY 7–9am: close beyond box boundary = breakout/breakdown
@@ -1539,7 +1541,7 @@ if show_info
     _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd or is_gbpusd) ? color.red : color.green
     table.cell(info, 0, 28, "Entry D Filter",                 text_color=color.gray)
     table.cell(info, 1, 28, _ed_inst_txt,                     text_color=_ed_inst_clr)
-    _e_box_str   = not _e_instrument_ok ? "N/A (non-Gold/NQ)" : not na(e_box_high) ? str.tostring(e_box_high, price_format) + " / " + str.tostring(e_box_low, price_format) : _e_in_session ? "BUILDING" : "--"
+    _e_box_str   = not _e_instrument_ok ? "N/A" : not na(e_box_high) ? str.tostring(e_box_high, price_format) + " / " + str.tostring(e_box_low, price_format) : _e_in_session ? "BUILDING" : "--"
     _e_box_clr   = not _e_instrument_ok ? color.gray : not na(e_box_high) ? (e_box_valid and not e_box_busted ? color.green : e_box_busted ? color.red : color.orange) : color.orange
     table.cell(info, 0, 29, "E Box H / L",                   text_color=color.gray)
     table.cell(info, 1, 29, _e_box_str,                       text_color=_e_box_clr)
