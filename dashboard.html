@@ -816,10 +816,11 @@ function renderSessionBreakdown(trades) {
     if (s === 'spring' || s === 'upthrust') return 'B — Wyckoff';
     if (s === 'bos_div') return 'C — BOS+Div';
     if (s === 'mid_bos') return 'D — Mid Retest';
+    if (s === 'box_fade') return 'E — Box Fade';
     return 'A — BOS';
   }
   const mBuckets = bucket(closed, t => setupToModel(t.setup));
-  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div', 'D — Mid Retest'];
+  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div', 'D — Mid Retest', 'E — Box Fade'];
 
   const totalTrades = closed.length;
   const totalWins   = closed.filter(t => (t.result||'').includes('TP')).length;
