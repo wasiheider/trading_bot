@@ -233,6 +233,19 @@ When updating Pine Script: reload on all 12 charts and recreate alerts.
 
 ---
 
+## Deploy Timing Warning
+
+Every push to `paper-trading` triggers a Railway redeploy (~2 min downtime). TradingView does **not** retry missed webhooks. Any TP1/TP2/SL lifecycle webhook for a non-forex trade (US100, US500, US30, USOIL, XAUUSD, XAGUSD, BTCUSD) that fires during the restart window is permanently lost — the trade will eventually be marked UNKNOWN.
+
+**Avoid pushing to `paper-trading` during active trading hours when non-forex positions may be open:**
+- US indices (US100, US500, US30): 9:30am–4:00pm CT
+- Gold/Silver/Oil: nearly 24/7 — push during low-volatility hours (e.g. 5–6pm CT)
+- Bitcoin: 24/7 — push during overnight CT hours if possible
+
+Forex trades are unaffected (OANDA manages their TP/SL independently of webhooks).
+
+---
+
 ## Critical Constraints — Do Not Violate
 
 1. **Never reset `mid_crosses` in expansion or `range_broken` blocks.** Causes perpetual 0 on volatile instruments. Counter only resets on chart load. (Lesson: v4 Jun 9 2026 — three debugging iterations.)
