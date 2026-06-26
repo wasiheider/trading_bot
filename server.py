@@ -849,23 +849,6 @@ def admin_reset():
     return jsonify({"status": "reset", "balance": paper_state["account_balance"]}), 200
 
 
-# ── Admin: clear UNKNOWN trades ────────────────────────────
-
-@app.route("/admin/clear-unknowns", methods=["POST"])
-def admin_clear_unknowns():
-    token = request.json.get("token") if request.is_json else None
-    if token != PAPER_WEBHOOK_TOKEN:
-        return jsonify({"error": "unauthorized"}), 401
-    conn = db.get_conn()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM trades WHERE result = 'UNKNOWN'")
-    deleted = cur.rowcount
-    conn.commit()
-    cur.close()
-    conn.close()
-    return jsonify({"status": "ok", "deleted": deleted}), 200
-
-
 # ── Health ─────────────────────────────────────────────────
 
 @app.route("/", methods=["GET"])
