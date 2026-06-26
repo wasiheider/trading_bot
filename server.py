@@ -254,7 +254,7 @@ def handle_paper_lifecycle(data, event):
 
     final_pnl = oanda_pnl if oanda_pnl is not None else pine_pnl
 
-    locally_tracked = bool(oanda_trade_id) or db.has_open_trade(instrument, direction)
+    locally_tracked = bool(oanda_trade_id) or db.has_open_trade(instrument, direction, include_unknown=True)
     if locally_tracked:
         won = event in ("tp1_hit", "tp2_hit")
         update_paper_outcome(won=won, pnl=final_pnl)

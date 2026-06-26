@@ -144,7 +144,7 @@ def update_trade(instrument: str, direction: str, result: str, pnl: float):
             SELECT id FROM trades
             WHERE UPPER(instrument) = UPPER(%s)
               AND UPPER(direction)  = UPPER(%s)
-              AND result = 'OPEN'
+              AND result IN ('OPEN', 'UNKNOWN')
             ORDER BY id DESC LIMIT 1
         )
     """, (result, pnl or 0, instrument, direction))
@@ -169,7 +169,8 @@ def get_oanda_trade_id(instrument: str, direction: str):
     return row[0] if row else None
 
 
-def has_open_trade(instrument: str, direction: str = None) -> bool:
+def has_open_trade(instrument: str, direction: str = None, include_unknown: bool = False) -> bool:
+    states = ('OPEN', 'UNKNOWN') if include_unknown else ('OPEN',)
     conn = get_conn()
     cur = conn.cursor()
     if direction:
@@ -177,16 +178,16 @@ def has_open_trade(instrument: str, direction: str = None) -> bool:
             SELECT 1 FROM trades
             WHERE UPPER(instrument) = UPPER(%s)
               AND UPPER(direction)  = UPPER(%s)
-              AND result = 'OPEN'
+              AND result = ANY(%s)
             LIMIT 1
-        """, (instrument, direction))
+        """, (instrument, direction, list(states)))
     else:
         cur.execute("""
             SELECT 1 FROM trades
             WHERE UPPER(instrument) = UPPER(%s)
-              AND result = 'OPEN'
+              AND result = ANY(%s)
             LIMIT 1
-        """, (instrument,))
+        """, (instrument, list(states)))
     row = cur.fetchone()
     cur.close()
     conn.close()
