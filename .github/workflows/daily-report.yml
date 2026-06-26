@@ -1,0 +1,23 @@
+﻿name: Daily Health Report
+
+on:
+  schedule:
+    # 7am CT = 12:00 UTC (CDT/summer) — GitHub Actions uses UTC
+    # Switches to 13:00 UTC in winter (CST). Adjust the second entry seasonally.
+    - cron: '0 12 * * *'
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /report endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://tradingbot-production-1e5a.up.railway.app/report")
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: /report returned $STATUS"
+            exit 1
+          fi
+          echo "Report sent successfully"
