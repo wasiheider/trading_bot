@@ -838,23 +838,6 @@ def report():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
-# ── Admin: Delete stale XAGUSD open ───────────────────────
-
-@app.route("/admin/delete-xagusd-open", methods=["POST"])
-def admin_delete_xagusd_open():
-    token = (request.get_json(force=True, silent=True) or {}).get("token")
-    if token != PAPER_WEBHOOK_TOKEN:
-        return jsonify({"error": "unauthorized"}), 401
-    conn = db.get_conn()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM trades WHERE UPPER(instrument) = 'XAGUSD' AND result IN ('OPEN', 'UNKNOWN')")
-    deleted = cur.rowcount
-    conn.commit()
-    cur.close()
-    conn.close()
-    return jsonify({"deleted": deleted}), 200
-
-
 # ── Admin Reset ────────────────────────────────────────────
 
 @app.route("/admin/reset", methods=["POST"])
