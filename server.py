@@ -847,7 +847,7 @@ def admin_delete_xagusd_open():
         return jsonify({"error": "unauthorized"}), 401
     conn = db.get_conn()
     cur = conn.cursor()
-    cur.execute("DELETE FROM trades WHERE UPPER(instrument) = 'XAGUSD' AND result = 'OPEN'")
+    cur.execute("DELETE FROM trades WHERE UPPER(instrument) = 'XAGUSD' AND result IN ('OPEN', 'UNKNOWN')")
     deleted = cur.rowcount
     conn.commit()
     cur.close()
