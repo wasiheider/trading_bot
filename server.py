@@ -838,29 +838,6 @@ def report():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
-# ── Admin: Clear stale non-forex opens (temp) ──────────────
-
-@app.route("/admin/clear-stale-opens", methods=["POST"])
-def admin_clear_stale_opens():
-    token = (request.get_json(force=True, silent=True) or {}).get("token")
-    if token != PAPER_WEBHOOK_TOKEN:
-        return jsonify({"error": "unauthorized"}), 401
-    forex_instruments = set(oanda.INSTRUMENT_MAP.keys())
-    conn = db.get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        DELETE FROM trades
-        WHERE result IN ('OPEN', 'UNKNOWN')
-          AND (oanda_trade_id IS NULL OR oanda_trade_id = '')
-          AND UPPER(instrument) != ALL(%s)
-    """, (list(forex_instruments),))
-    deleted = cur.rowcount
-    conn.commit()
-    cur.close()
-    conn.close()
-    return jsonify({"deleted": deleted}), 200
-
-
 # ── Admin Reset ────────────────────────────────────────────
 
 @app.route("/admin/reset", methods=["POST"])
