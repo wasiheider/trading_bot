@@ -158,12 +158,17 @@ def handle_paper_signal(data):
     oanda_trade_id   = None
     oanda_fill_price = price
     oanda_error      = None
+    oanda_pending    = False
     oanda_supported  = instrument.upper() in oanda.INSTRUMENT_MAP
     if not limit_hit and oanda_supported:
         try:
-            fill = oanda.place_order(instrument, direction, risk["lot_size"], sl_price=sl)
-            oanda_trade_id   = fill["trade_id"]
-            oanda_fill_price = fill["price"]
+            if setup == "box_break":
+                fill = oanda.place_stop_order(instrument, direction, risk["lot_size"], price=price, sl_price=sl)
+            else:
+                fill = oanda.place_order(instrument, direction, risk["lot_size"], sl_price=sl)
+            oanda_trade_id   = fill.get("trade_id")
+            oanda_fill_price = fill.get("price", price)
+            oanda_pending    = fill.get("pending", False)
         except Exception as e:
             oanda_error = str(e)
             print(f"[oanda] ERROR placing order: {e}", flush=True)
@@ -179,6 +184,8 @@ def handle_paper_signal(data):
         exec_line = f"\n⚠️ <b>NOT EXECUTED — {limit_reason}</b>"
     elif not oanda_supported:
         exec_line = "\n📋 Log + Telegram only (not a forex pair)"
+    elif oanda_pending:
+        exec_line = f"\nOANDA: ⏳ STOP ORDER PENDING @ <code>{oanda_fill_price}</code>"
     elif oanda_trade_id:
         exec_line = f"\nOANDA ID: <code>{oanda_trade_id}</code> @ <code>{oanda_fill_price}</code>"
     else:
