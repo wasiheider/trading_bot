@@ -122,6 +122,21 @@ Push to `paper-trading` → Railway auto-deploys.
 | B — Spring / Upthrust | `"spring"` / `"upthrust"` | Wick beyond boundary closes back inside; deferred entry |
 | C — BOS + RSI Divergence | `"bos_div"` | Same as A + RSI divergence at retest (30–70); priority over A |
 | D — Mid BOS + Retest | `"mid_bos"` | 15M structural BOS within ±35% of range mid → retest |
+| E — Box Break | `"box_break"` | NY session close beyond pre-session box boundary |
+
+### OANDA Order Types (forex entries only)
+
+All entry prices are `close` of the 15M signal bar. By the time the webhook arrives, a new bar has opened. Order types are chosen to avoid chasing and improve fill quality:
+
+| Setup | OANDA Order Type | Time In Force | Rationale |
+|-------|-----------------|---------------|-----------|
+| `bos`, `bos_div`, `spring`, `upthrust`, `mid_bos` | **LIMIT** at `entry_price` | GFD | Enter at the confirmation close or better; if price runs without retesting, order expires |
+| `box_break` | **STOP** at `entry_price` | GFD | Enter only if price confirms at or above the breakout close; protects against false breaks |
+| Limit rejected (price already past level) | **MARKET** fallback | — | Logged in Railway console; fills at current market |
+
+Pending orders (not yet filled at signal time) show as "⏳ LIMIT ORDER PENDING" or "⏳ STOP ORDER PENDING" in Telegram.
+
+**`GFD` is valid for LIMIT and STOP orders only — never use it with MARKET orders** (OANDA returns HTTP 400 `TIME_IN_FORCE_INVALID`).
 
 ### TP / SL
 - **TP1** @ 1:1 RR → close 50% + SL moves to breakeven
