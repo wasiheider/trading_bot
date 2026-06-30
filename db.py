@@ -252,6 +252,30 @@ def close_stale_non_forex_opens(forex_instruments: set, min_age_hours: int = 4):
     return affected
 
 
+def delete_stale_non_forex_opens(forex_instruments: set, min_age_hours: int = 6) -> int:
+    """
+    Delete non-forex OPEN or UNKNOWN trades older than min_age_hours.
+    Runs on a schedule so stale log-only positions don't linger on the dashboard.
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    threshold = datetime.now(timezone.utc) - timedelta(hours=min_age_hours)
+    cur.execute("""
+        DELETE FROM trades
+        WHERE result IN ('OPEN', 'UNKNOWN')
+          AND (oanda_trade_id IS NULL OR oanda_trade_id = '')
+          AND UPPER(instrument) != ALL(%s)
+          AND created_at < %s
+    """, (list(forex_instruments), threshold))
+    deleted = cur.rowcount
+    conn.commit()
+    cur.close()
+    conn.close()
+    if deleted:
+        print(f"[db] Deleted {deleted} stale non-forex OPEN/UNKNOWN trade(s)", flush=True)
+    return deleted
+
+
 def clear_trades():
     conn = get_conn()
     cur = conn.cursor()
