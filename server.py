@@ -165,7 +165,12 @@ def handle_paper_signal(data):
             if setup == "box_break":
                 fill = oanda.place_stop_order(instrument, direction, risk["lot_size"], price=price, sl_price=sl)
             else:
-                fill = oanda.place_order(instrument, direction, risk["lot_size"], sl_price=sl)
+                try:
+                    fill = oanda.place_limit_order(instrument, direction, risk["lot_size"], price=price, sl_price=sl)
+                except RuntimeError as limit_err:
+                    # Limit rejected (price already past entry level) — fall back to market
+                    print(f"[oanda] Limit order rejected, falling back to market: {limit_err}", flush=True)
+                    fill = oanda.place_order(instrument, direction, risk["lot_size"], sl_price=sl)
             oanda_trade_id   = fill.get("trade_id")
             oanda_fill_price = fill.get("price", price)
             oanda_pending    = fill.get("pending", False)
@@ -185,7 +190,8 @@ def handle_paper_signal(data):
     elif not oanda_supported:
         exec_line = "\n📋 Log + Telegram only (not a forex pair)"
     elif oanda_pending:
-        exec_line = f"\nOANDA: ⏳ STOP ORDER PENDING @ <code>{oanda_fill_price}</code>"
+        order_type = "STOP" if setup == "box_break" else "LIMIT"
+        exec_line = f"\nOANDA: ⏳ {order_type} ORDER PENDING @ <code>{oanda_fill_price}</code>"
     elif oanda_trade_id:
         exec_line = f"\nOANDA ID: <code>{oanda_trade_id}</code> @ <code>{oanda_fill_price}</code>"
     else:
