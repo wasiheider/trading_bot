@@ -16,12 +16,13 @@
 //| SETUP REQUIRED before running:                                    |
 //|   1. Tools > Options > Expert Advisors > "Allow WebRequest for    |
 //|      listed URL" -> add the Railway URL (see InpServerURL).       |
-//|   2. Edit the InpSymbolMap_* inputs below to match your broker's  |
-//|      actual symbol names in Market Watch (e.g. some brokers use   |
-//|      "US100.cash" or "XAUUSD.a" instead of "US100"/"XAUUSD").     |
-//|   3. This assumes a HEDGING account (each filled order creates a  |
-//|      new, independently-tracked position) -- confirm your FTMO    |
-//|      account is in Hedge mode, not Netting, before running live.  |
+//|   2. InpSymbolMap_* inputs default to the ".sim" suffix used on   |
+//|      the FTMO eval account (confirmed 2026-07-04). Re-check these |
+//|      if running on a different account/broker where names differ.|
+//|   3. Confirmed on a HEDGING account (each filled order creates a  |
+//|      new, independently-tracked position) -- FTMO account 600063135|
+//|      verified in Hedge mode 2026-07-04. Re-verify if switching     |
+//|      accounts.                                                     |
 //+------------------------------------------------------------------+
 #include <Trade\Trade.mqh>
 
@@ -31,19 +32,21 @@ input double InpRiskPercent    = 0.5;       // % of account balance risked per t
 input int    InpMagicNumber    = 20260704;
 input int    InpMaxSlippagePts = 20;
 
-// Broker symbol name overrides -- EDIT to match your MT5 Market Watch names
-input string InpSymbolMap_EURUSD = "EURUSD";
-input string InpSymbolMap_GBPUSD = "GBPUSD";
-input string InpSymbolMap_USDJPY = "USDJPY";
-input string InpSymbolMap_EURNZD = "EURNZD";
-input string InpSymbolMap_NZDUSD = "NZDUSD";
-input string InpSymbolMap_XAUUSD = "XAUUSD";
-input string InpSymbolMap_XAGUSD = "XAGUSD";
-input string InpSymbolMap_US100  = "US100";
-input string InpSymbolMap_US30   = "US30";
-input string InpSymbolMap_US500  = "US500";
-input string InpSymbolMap_USOIL  = "USOIL";
-input string InpSymbolMap_BTCUSD = "BTCUSD";
+// Broker symbol name overrides -- FTMO eval account uses a ".sim" suffix on
+// every symbol (confirmed 2026-07-04). If this changes on a funded/live
+// account, edit these back to match Market Watch.
+input string InpSymbolMap_EURUSD = "EURUSD.sim";
+input string InpSymbolMap_GBPUSD = "GBPUSD.sim";
+input string InpSymbolMap_USDJPY = "USDJPY.sim";
+input string InpSymbolMap_EURNZD = "EURNZD.sim";
+input string InpSymbolMap_NZDUSD = "NZDUSD.sim";
+input string InpSymbolMap_XAUUSD = "XAUUSD.sim";
+input string InpSymbolMap_XAGUSD = "XAGUSD.sim";
+input string InpSymbolMap_US100  = "US100.sim";
+input string InpSymbolMap_US30   = "US30.sim";
+input string InpSymbolMap_US500  = "US500.sim";
+input string InpSymbolMap_USOIL  = "USOIL.sim";
+input string InpSymbolMap_BTCUSD = "BTCUSD.sim";
 
 // Trailing rule, matches the paper strategy: 1.5R -> lock 1R, then trail 0.5R behind peak
 input double InpTrailArmR   = 1.5;
