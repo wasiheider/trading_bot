@@ -7,7 +7,7 @@ import os
 import json
 import pytz
 
-from config import PAPER_WEBHOOK_TOKEN
+from config import PAPER_WEBHOOK_TOKEN, PAPER_ACCOUNT_SIZE
 from risk import (
     check_paper_risk,
     paper_state,
@@ -345,13 +345,20 @@ def state():
     total_trades = total_wins + total_losses
     total_wr     = round((total_wins / total_trades) * 100) if total_trades > 0 else 0
 
-    oanda_balance      = paper_state.get("account_balance", 100000)
-    unrealized_pnl     = 0.0
-    open_trade_details = []
+    # paper_account_balance is the all-instrument simulated balance (every
+    # instrument's realized PNL, log-only ones included) — this is what the
+    # dashboard's Balance/all-time PNL/equity curve are anchored to.
+    # oanda_demo_balance is the real OANDA demo account balance, which only
+    # ever reflects the 5 forex pairs actually executed there — kept
+    # separately for verification, never used as the headline number.
+    paper_balance       = paper_state.get("account_balance", 100000)
+    oanda_demo_balance  = None
+    unrealized_pnl      = 0.0
+    open_trade_details  = []
 
     try:
-        acct_summary  = oanda.get_account_summary()
-        oanda_balance = acct_summary["balance"]
+        acct_summary       = oanda.get_account_summary()
+        oanda_demo_balance = acct_summary["balance"]
     except Exception as e:
         print(f"[state] OANDA account summary failed: {e}", flush=True)
 
@@ -409,7 +416,9 @@ def state():
 
     return jsonify({
         "time_ct":                now.strftime("%Y-%m-%d %H:%M:%S"),
-        "paper_account_balance":  round(oanda_balance, 2),
+        "paper_account_balance":  round(paper_balance, 2),
+        "oanda_demo_balance":     round(oanda_demo_balance, 2) if oanda_demo_balance is not None else None,
+        "paper_total_pnl":        round(paper_balance - PAPER_ACCOUNT_SIZE, 2),
         "paper_daily_pnl":        round(paper_state.get("daily_pnl",    0.0), 2),
         "paper_weekly_pnl":       round(paper_state.get("weekly_pnl",   0.0), 2),
         "paper_unrealized_pnl":   round(unrealized_pnl, 2),
