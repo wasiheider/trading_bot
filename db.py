@@ -376,3 +376,40 @@ def log_signal(data: dict):
         conn.close()
     except Exception as e:
         print(f"[db] log_signal failed: {e}", flush=True)
+
+
+def get_latest_signals(instruments: list, max_age_hours: int = 6) -> dict:
+    """
+    Latest signal per instrument, for the MT5 EA to poll. Signals older than
+    max_age_hours are excluded — a setup that's gone stale (EA was offline,
+    price has moved on) should never be blindly executed on a live account.
+    """
+    result = {i.upper(): None for i in instruments}
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    threshold = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    cur.execute("""
+        SELECT DISTINCT ON (UPPER(symbol)) id, ts, symbol, direction, setup, timeframe,
+               entry_price, stop_loss, tp1, tp2, rr_to_tp1, bos_level
+        FROM signals
+        WHERE UPPER(symbol) = ANY(%s) AND created_at >= %s
+        ORDER BY UPPER(symbol), id DESC
+    """, (list(instruments), threshold))
+    for row in cur.fetchall():
+        result[row["symbol"].upper()] = {
+            "signal_id":   row["id"],
+            "symbol":      row["symbol"].upper(),
+            "direction":   row["direction"],
+            "setup":       row["setup"],
+            "timeframe":   row["timeframe"],
+            "entry_price": row["entry_price"],
+            "stop_loss":   row["stop_loss"],
+            "tp1":         row["tp1"],
+            "tp2":         row["tp2"],
+            "rr_to_tp1":   row["rr_to_tp1"],
+            "bos_level":   row["bos_level"],
+            "timestamp":   row["ts"],
+        }
+    cur.close()
+    conn.close()
+    return result

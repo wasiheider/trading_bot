@@ -230,7 +230,7 @@ def handle_paper_signal(data):
         f"{exec_line}"
     )
 
-    db.log_signal(data)
+    db.log_signal({**data, "symbol": instrument})
     record_paper_signal(data)
 
     if not limit_hit:
@@ -442,6 +442,26 @@ def state():
 @app.route("/trades", methods=["GET"])
 def trades():
     return jsonify({"paper": db.load_trades()}), 200
+
+
+# ── Latest Signal Endpoint (MT5 EA polling) ─────────────────
+# Polled by the FTMO MT5 EA — entry signals only. Exit management (TP1/TP2/
+# trailing) is handled by the EA itself watching live price, not by polling
+# this endpoint, so no lifecycle events are exposed here. Micro futures are
+# intentionally excluded — they're just server-side mirrors of these same 12.
+EA_INSTRUMENTS = [
+    "EURUSD", "GBPUSD", "USDJPY", "EURNZD", "NZDUSD",
+    "XAUUSD", "XAGUSD", "US100", "US30", "US500", "USOIL", "BTCUSD",
+]
+SIGNAL_MAX_AGE_HOURS = 6
+
+@app.route("/latest-signal", methods=["GET"])
+def latest_signal():
+    signals = db.get_latest_signals(EA_INSTRUMENTS, max_age_hours=SIGNAL_MAX_AGE_HOURS)
+    return jsonify({
+        "time_ct": ct_now().strftime("%Y-%m-%d %H:%M:%S"),
+        "signals": signals,
+    }), 200
 
 
 # ── News Endpoint ──────────────────────────────────────────
