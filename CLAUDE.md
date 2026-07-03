@@ -213,6 +213,22 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | `/calendar` | GET | ForexFactory calendar (1-hour cache) |
 | `/webhook/paper` | POST | TradingView signal receiver — entries + lifecycle events |
 | `/admin/reset` | POST | Full state reset — requires `PAPER_WEBHOOK_TOKEN` |
+| `/latest-signal` | GET | Latest entry signal per instrument (12 non-micro instruments), polled by the FTMO MT5 EA — see below |
+
+---
+
+## MT5 EA (FTMO account, added 2026-07-04)
+
+`mt5_ea/FTMO_Signal_EA.mq5` polls `GET /latest-signal` and trades the same 12 instruments on the FTMO MT5 account (separate from the OANDA-demo paper account above — no shared state, no shared risk limits). Full spec/history in `MT5_EA_handoff.md` at repo root.
+
+- **Entry-only polling.** The EA never polls for TP1/TP2/SL lifecycle events — exit management is 100% local, driven by the EA watching live broker price. This was a deliberate choice: Pine Script's lifecycle webhooks lag real price by up to 15 min (bar-close driven) and could be missed entirely if a poll cycle or the server has any hiccup, which is an acceptable risk for the paper account's PNL tracking but not for a real funded eval account.
+- **Broker-side safety net:** every order sets SL = signal's `stop_loss` and TP = signal's `tp2` at placement time. Even if the EA process crashes, the position still has a hard floor and ceiling enforced by the broker.
+- **While running**, the EA improves on that: closes 50% at TP1 + moves SL to breakeven, then trails (1.5R → lock 1R, then 0.5R behind peak) — matching the v5 strategy's documented TP/SL behavior, computed locally from live price, not from a server poll.
+- **Position sizing** is broker-generic (uses `SYMBOL_TRADE_TICK_VALUE`/`SYMBOL_TRADE_TICK_SIZE`, not hardcoded pip values like `risk.py`) — works uniformly across forex/indices/metals/oil/crypto and scales to whatever the live FTMO account balance actually is. `InpRiskPercent` input, default 0.5% (matches the paper bot's $500/$100K convention).
+- **Signal tracking is local-only** (MT5 `GlobalVariable`, last-seen `signal_id` per instrument) — server stays stateless, no "consumed" endpoint.
+- **Assumes a Hedging account** (not Netting) — the code relies on the filled order's ticket carrying through to the resulting position for per-ticket state (TP1 price, phase, trailing peak, stored as `GlobalVariable`s keyed by ticket). Confirm FTMO account `600063135` is in Hedge mode before running live (still an open item — see Known Gaps).
+- **Setup required before running:** whitelist the Railway URL under Tools > Options > Expert Advisors > Allow WebRequest; edit the `InpSymbolMap_*` inputs to match this specific broker's actual Market Watch symbol names (may differ from the bot's names, e.g. `US100` vs `US100.cash`).
+- Micro futures (MNQ/MES/MYM/MGC/MCL) are intentionally excluded — same reasoning as the paper bot's mirroring, no point double-trading the same underlying signal.
 
 ---
 
