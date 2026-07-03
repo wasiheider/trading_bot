@@ -252,7 +252,7 @@ def close_stale_non_forex_opens(forex_instruments: set, min_age_hours: int = 4):
     return affected
 
 
-def delete_stale_non_forex_opens(forex_instruments: set, min_age_hours: int = 72) -> int:
+def delete_stale_non_forex_opens(forex_instruments: set, min_age_hours: int = 120) -> int:
     """
     Delete non-forex OPEN or UNKNOWN trades older than min_age_hours.
     Runs on a schedule so stale log-only positions don't linger on the dashboard.

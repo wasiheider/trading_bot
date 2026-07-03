@@ -101,7 +101,7 @@ def heartbeat():
 def purge_stale_non_forex_opens():
     import oanda
     forex_instruments = set(oanda.INSTRUMENT_MAP.keys())
-    deleted = db.delete_stale_non_forex_opens(forex_instruments, min_age_hours=72)
+    deleted = db.delete_stale_non_forex_opens(forex_instruments, min_age_hours=120)
     if deleted:
         log(f"[scheduler] Purged {deleted} stale non-forex OPEN/UNKNOWN trade(s)")
 
