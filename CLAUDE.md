@@ -159,6 +159,25 @@ Pending orders (not yet filled at signal time) show as "⏳ LIMIT ORDER PENDING"
 
 CFDs, metals, and indices are not on this OANDA demo account type. Do not add to `INSTRUMENT_MAP`.
 
+### Micro Futures Mirroring
+
+Micro futures (MNQ, MES, MYM, MGC, MCL) do not have their own signal generation. They previously ran a separate, less mature TradingView chart/script (the TopstepX/futures track) that frequently disagreed in direction with the proven v5 script — e.g. MNQ went long into a falling market that US100's script correctly read as short, 3 straight SL losses (found 2026-07-03).
+
+As of `MICRO_MIRROR_MAP` in `server.py`, each micro instrument mirrors its parent CFD instrument's signal instead:
+
+| Parent (signal source) | Micro (mirrored) |
+|---|---|
+| US100 | MNQ |
+| US500 | MES |
+| US30  | MYM |
+| XAUUSD | MGC |
+| USOIL | MCL |
+
+- `webhook_paper()` **ignores** any webhook arriving directly for a micro symbol (`MICRO_MIRROR_TARGETS`) — those charts' alerts should be turned off in TradingView, but are ignored server-side as a backstop either way.
+- When the parent's entry signal or lifecycle event (`tp1_hit`/`tp2_hit`/`sl_hit`) is processed, `handle_paper_signal`/`handle_paper_lifecycle` recurse once with a copy of the payload with `symbol`/`instrument` swapped to the micro symbol — same direction/entry/SL/TP/setup, independently sized via the micro's own `PAPER_INSTRUMENT_CONFIG` entry in `risk.py`, independently blocked by `db.has_open_trade()` per instrument.
+- Mirrored trades' PNL reuses the parent's realized PNL dollar figure directly (both are risk-normalized to the same `$` target via `RISK_PER_TRADE`, so this is a good approximation, not an exact re-derivation from tick data).
+- Mirrored trades post to the **same shared** `paper_state` account balance/daily/weekly PNL as every other instrument — this was a deliberate choice, not an oversight.
+
 ---
 
 ## Data Storage — Railway PostgreSQL

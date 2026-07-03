@@ -34,6 +34,20 @@ _OANDA_MAP = {
     "XAUUSD":    "XAUUSD",
 }
 
+# Micro futures don't get their own signal generation — they mirror the
+# already-proven v5 BOS/mid_bos detection running on the parent CFD instrument's
+# TradingView chart. A webhook arriving directly for a micro symbol (from its
+# own, separately-alerting chart) is ignored; mirrored trades are derived
+# server-side from the parent's own signal/lifecycle events instead.
+MICRO_MIRROR_MAP = {
+    "US100":  "MNQ",
+    "US500":  "MES",
+    "US30":   "MYM",
+    "XAUUSD": "MGC",
+    "USOIL":  "MCL",
+}
+MICRO_MIRROR_TARGETS = set(MICRO_MIRROR_MAP.values())
+
 
 def _normalize_instrument(raw: str) -> str:
     s = raw.upper().replace("1!", "").replace("!", "")
@@ -116,6 +130,11 @@ def webhook_paper():
 
     if data.get("token") != PAPER_WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
+
+    instrument = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
+    if instrument in MICRO_MIRROR_TARGETS:
+        print(f"[mirror] Ignoring direct webhook for {instrument} — mirrored from its parent instrument", flush=True)
+        return jsonify({"status": "ignored", "reason": f"{instrument} is mirrored from its parent instrument"}), 200
 
     event = data.get("event", "").lower()
     if event in ("tp1_hit", "tp2_hit", "sl_hit"):
@@ -236,6 +255,14 @@ def handle_paper_signal(data):
         })
 
     send_telegram(msg)
+
+    mirror_symbol = MICRO_MIRROR_MAP.get(instrument)
+    if mirror_symbol:
+        mirror_data = dict(data)
+        mirror_data["symbol"] = mirror_symbol
+        mirror_data["instrument"] = mirror_symbol
+        handle_paper_signal(mirror_data)
+
     return jsonify({"status": "approved", "lot_size": risk["lot_size"], "oanda_trade_id": oanda_trade_id, "limit_hit": limit_hit}), 200
 
 
@@ -292,6 +319,14 @@ def handle_paper_lifecycle(data, event):
         f"Price: <code>{price}</code>{pnl_line}"
     )
     send_telegram(msg)
+
+    mirror_symbol = MICRO_MIRROR_MAP.get(instrument)
+    if mirror_symbol:
+        mirror_data = dict(data)
+        mirror_data["symbol"] = mirror_symbol
+        mirror_data["instrument"] = mirror_symbol
+        handle_paper_lifecycle(mirror_data, event)
+
     return jsonify({"status": "logged", "event": event, "symbol": instrument}), 200
 
 
