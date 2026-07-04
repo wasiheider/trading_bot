@@ -13,6 +13,12 @@
 //|     trail (1.5R -> lock 1R, then trail 0.5R behind peak).         |
 //|   - No dependency on the server after the entry signal arrives.   |
 //|                                                                    |
+//| Drawdown guardrail (independent of and tighter than FTMO's real   |
+//| $500 daily / $1,000 overall limits on this $10K eval account, for |
+//| this first live run): blocks new entries and force-closes every   |
+//| EA position/order the moment daily loss hits $250 or overall loss |
+//| hits $500, then halts permanently until manually restarted.       |
+//|                                                                    |
 //| SETUP REQUIRED before running:                                    |
 //|   1. Tools > Options > Expert Advisors > "Allow WebRequest for    |
 //|      listed URL" -> add the Railway URL (see InpServerURL).       |
@@ -28,9 +34,17 @@
 
 input string InpServerURL      = "https://tradingbot-production-1e5a.up.railway.app/latest-signal";
 input int    InpPollSeconds    = 30;
-input double InpRiskPercent    = 0.5;       // % of account balance risked per trade
+input double InpRiskPercent    = 0.25;      // % of account balance risked per trade ($25 on a $10K account)
 input int    InpMagicNumber    = 20260704;
 input int    InpMaxSlippagePts = 20;
+
+// FTMO $10K eval account drawdown guardrail -- deliberately tighter than the
+// account's real limits ($500 daily / $1,000 overall) for this first live
+// run. On breach: all EA positions/pending orders are force-closed and the
+// EA halts permanently (requires manual restart to resume).
+input double InpDailyLossLimit   = 250;   // USD, resets each trading day
+input double InpOverallLossLimit = 500;   // USD, from account inception balance
+input int    InpDailyResetHourServer = 22; // server-time hour for 6pm ET/5pm CT daily reset (server clock confirmed ~= UTC 2026-07-04; this is 22 during US daylight time, shifts to 23 if the broker server doesn't observe US DST when it ends)
 
 // Broker symbol name overrides -- FTMO eval account uses a ".sim" suffix on
 // every symbol (confirmed 2026-07-04). If this changes on a funded/live
@@ -154,11 +168,84 @@ void SetLastSeenId(string botSymbol, long id)
   }
 
 //+------------------------------------------------------------------+
+//| Drawdown guardrail -- daily and overall loss limits, independent   |
+//| of and tighter than FTMO's actual account rules for this first    |
+//| live run. Equity-based (includes floating PNL), checked every     |
+//| timer tick, before anything else runs.                             |
+//+------------------------------------------------------------------+
+bool IsHalted()
+  {
+   return GlobalVariableCheck("ftmo_ea_halted") && GlobalVariableGet("ftmo_ea_halted") == 1;
+  }
+
+void CheckDailyReset()
+  {
+   MqlDateTime t;
+   TimeToStruct(TimeCurrent(), t);
+   int todayMarker = t.year * 1000 + t.day_of_year;
+   int tradingDayMarker = (t.hour < InpDailyResetHourServer) ? todayMarker - 1 : todayMarker;
+
+   int lastMarker = GlobalVariableCheck("ftmo_ea_trading_day") ? (int)GlobalVariableGet("ftmo_ea_trading_day") : -1;
+   if(tradingDayMarker != lastMarker)
+     {
+      GlobalVariableSet("ftmo_ea_trading_day", tradingDayMarker);
+      GlobalVariableSet("ftmo_ea_daily_start_equity", AccountInfoDouble(ACCOUNT_EQUITY));
+      Print("New trading day (marker=", tradingDayMarker, "), daily start equity=", AccountInfoDouble(ACCOUNT_EQUITY));
+     }
+  }
+
+bool DrawdownBreached()
+  {
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+
+   double dailyStart = GlobalVariableCheck("ftmo_ea_daily_start_equity")
+                        ? GlobalVariableGet("ftmo_ea_daily_start_equity") : equity;
+   double dailyLoss = dailyStart - equity;
+   if(dailyLoss >= InpDailyLossLimit)
+     {
+      Print("*** DAILY LOSS LIMIT BREACHED: $", dailyLoss, " >= $", InpDailyLossLimit, " ***");
+      return true;
+     }
+
+   if(!GlobalVariableCheck("ftmo_ea_start_balance"))
+      GlobalVariableSet("ftmo_ea_start_balance", AccountInfoDouble(ACCOUNT_BALANCE));
+   double overallStart = GlobalVariableGet("ftmo_ea_start_balance");
+   double overallLoss = overallStart - equity;
+   if(overallLoss >= InpOverallLossLimit)
+     {
+      Print("*** OVERALL LOSS LIMIT BREACHED: $", overallLoss, " >= $", InpOverallLossLimit, " ***");
+      return true;
+     }
+
+   return false;
+  }
+
+void CloseAllAndHalt()
+  {
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(PositionSelectByTicket(ticket) && PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+         trade.PositionClose(ticket);
+     }
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = OrderGetTicket(i);
+      if(OrderSelect(ticket) && OrderGetInteger(ORDER_MAGIC) == InpMagicNumber)
+         trade.OrderDelete(ticket);
+     }
+   GlobalVariableSet("ftmo_ea_halted", 1);
+   Print("=== DRAWDOWN LIMIT BREACHED: ALL POSITIONS/ORDERS CLOSED, EA HALTED. Manual restart required. ===");
+  }
+
+//+------------------------------------------------------------------+
 int OnInit()
   {
    EventSetTimer(InpPollSeconds);
    Print("FTMO_Signal_EA initialized. Polling ", InpServerURL, " every ", InpPollSeconds, "s.");
    Print("Reminder: URL must be whitelisted under Tools > Options > Expert Advisors > Allow WebRequest.");
+   if(IsHalted())
+      Print("*** EA IS HALTED from a prior drawdown breach. Remove and re-add the EA (or reset ftmo_ea_halted global variable) to resume. ***");
    return(INIT_SUCCEEDED);
   }
 
@@ -166,6 +253,15 @@ void OnDeinit(const int reason) { EventKillTimer(); }
 
 void OnTimer()
   {
+   if(IsHalted()) return; // permanently stopped after a breach -- requires manual intervention
+
+   CheckDailyReset();
+   if(DrawdownBreached())
+     {
+      CloseAllAndHalt();
+      return;
+     }
+
    PollSignals();
    ManageOpenPositions();
   }
