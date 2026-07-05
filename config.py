@@ -20,6 +20,11 @@ OANDA_API_TOKEN  = os.getenv("OANDA_API_TOKEN")
 OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID")
 OANDA_BASE_URL   = os.getenv("OANDA_BASE_URL", "https://api-fxpractice.oanda.com")
 
+# ── PickMyTrade (Apex Trader Funding via Tradovate) ────────
+# Separate real-money account -- no shared state with risk.py/paper_state.
+PICKMYTRADE_TOKEN      = os.getenv("PICKMYTRADE_TOKEN", "")
+PICKMYTRADE_ACCOUNT_ID = os.getenv("PICKMYTRADE_ACCOUNT_ID", "")
+
 # ── Risk ──────────────────────────────────────────────────
 RISK_PER_TRADE = 0.005   # 0.5% per trade ($500 on $100k)
 
