@@ -21,23 +21,18 @@ for the full reasoning on why aggressive-but-guardrailed was chosen for this
 account specifically (different risk profile than FTMO -- multiple cheap
 Apex accounts run in parallel rather than one nursed conservatively).
 
-NOT YET WIRED into the live signal path (server.py) as of 2026-07-05. Two
-things remain to verify empirically with a real (deliberately unfillable)
-test order before trusting this with live signals:
-  1. Whether `tp`/`sl` are read as absolute price (this module's assumption,
-     supported by PickMyTrade's own documented example showing tp populated
-     with a literal price value) or something else -- the Generate Alert
-     wizard's UI-level "mode" selector appears to be a wizard-only construct
-     for TradingView-triggered alerts specifically, not a constraint on raw
-     API calls, per PickMyTrade's own docs -- but not yet empirically proven
-     against this specific account/token.
-  2. Whether `breakeven_offset` should be 0 (move SL to exactly entry) or
-     mirror `breakeven` (the wizard populated both fields identically from a
-     single UI input, so it's unclear if they're independently meaningful).
-     Currently set to 0 here.
-Test send_entry() manually, confirm the resulting order's price/SL/TP/
-breakeven/trailing behavior in Tradovate matches expectations, THEN wire it
-into server.py's signal handling.
+CONFIRMED live 2026-07-05 (market open, real Apex account, deliberately
+unfillable test order at MNQ 27000/SL 26900/TP 27300): `tp`/`sl` are read as
+absolute price values, exactly as sent -- Tradovate showed the bracket's SL
+and TP legs at exactly 26900 and 27300. Test order was cancelled after
+confirming. `breakeven_offset` remains an unverified guess (set to 0 --
+move SL to exactly entry, not entry+something) since the breakeven/trailing
+legs don't show as separately-priced pending orders the way SL/TP did --
+that'll only be observable once a real position is actually open.
+
+NOT YET WIRED into the live signal path (server.py) as of 2026-07-05 --
+still needs to be called from server.py's signal handling and given error
+handling/Telegram notification on failure before going live for real.
 """
 import json
 import urllib.request
