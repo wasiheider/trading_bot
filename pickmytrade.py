@@ -4,27 +4,40 @@ Apex Trader Funding evaluation account (via Tradovate). Completely separate
 real-money account from OANDA/FTMO -- no shared state with risk.py/paper_state,
 no daily/weekly limit coupling.
 
-Broker-managed exit only: single TP1 target + SL set at order placement time.
-No partial-close/breakeven/trailing here, unlike the FTMO MQL5 EA -- PickMyTrade's
-dashboard doesn't expose that granularity (one TP field, not a TP1+TP2 split).
-TP1 was chosen deliberately over TP2 for this account: closer target, less
-floating exposure time, safer given Apex's Intraday trailing drawdown (which
-trails the highest equity ever reached, including floating gains, and never
-resets).
+Exit management (revised 2026-07-05): single TP target set at the strategy's
+1:3 RR level (tp2, not the closer tp1) -- PickMyTrade only supports one TP
+field, not the paper bot's TP1(50% close)+TP2(remainder) split. Using the
+farther TP2 target is deliberately compensated for with an early breakeven
+(0.5R) and continuous trailing every 0.5R afterward, rather than waiting
+for a full 1R like the FTMO EA does -- this manages floating exposure along
+the way to the farther target, which matters given Apex's Intraday trailing
+drawdown (trails the highest equity ever reached, including floating gains,
+and never resets -- punishes floating exposure time hardest of anything in
+this project).
+
+Risk: 0.25% per trade ($625 on the $250K account) -- reduced from an initial
+0.5%/$1,250 plan once the daily-loss guardrail was added; see project memory
+for the full reasoning on why aggressive-but-guardrailed was chosen for this
+account specifically (different risk profile than FTMO -- multiple cheap
+Apex accounts run in parallel rather than one nursed conservatively).
 
 NOT YET WIRED into the live signal path (server.py) as of 2026-07-05. Two
-assumptions are unverified against the real API:
-  1. Whether `tp`/`sl` are interpreted as absolute price or point-distance --
-     the Generate Alert wizard's "mode" selector didn't appear as an explicit
-     field in the generated JSON, so it may be stored server-side against the
-     token rather than passed per-request. MUST verify with a real placed
-     order before trusting this with live signals.
-  2. The exact `date` field format expected outside of TradingView's own
-     "{{timenow}}" placeholder substitution -- sending ISO 8601 UTC as a
-     reasonable default, unverified.
-Test manually once the Apex account activates, confirm the resulting order's
-price/SL/TP in Tradovate matches expectations, THEN wire send_entry() into
-server.py's signal handling.
+things remain to verify empirically with a real (deliberately unfillable)
+test order before trusting this with live signals:
+  1. Whether `tp`/`sl` are read as absolute price (this module's assumption,
+     supported by PickMyTrade's own documented example showing tp populated
+     with a literal price value) or something else -- the Generate Alert
+     wizard's UI-level "mode" selector appears to be a wizard-only construct
+     for TradingView-triggered alerts specifically, not a constraint on raw
+     API calls, per PickMyTrade's own docs -- but not yet empirically proven
+     against this specific account/token.
+  2. Whether `breakeven_offset` should be 0 (move SL to exactly entry) or
+     mirror `breakeven` (the wizard populated both fields identically from a
+     single UI input, so it's unclear if they're independently meaningful).
+     Currently set to 0 here.
+Test send_entry() manually, confirm the resulting order's price/SL/TP/
+breakeven/trailing behavior in Tradovate matches expectations, THEN wire it
+into server.py's signal handling.
 """
 import json
 import urllib.request
@@ -44,7 +57,8 @@ PICKMYTRADE_SYMBOL_MAP = {
     "MCL": "MCL1!",
 }
 
-RISK_PERCENTAGE = 0.5  # 0.5% of account balance per trade, matches the paper bot's convention
+RISK_PERCENTAGE = 0.25  # 0.25% of account balance per trade ($625 on $250K)
+TRAIL_STEP_R = 0.5      # breakeven trigger + trailing distance/trigger/frequency, all in units of R
 
 
 def _request(body: dict) -> dict:
@@ -62,10 +76,11 @@ def _request(body: dict) -> dict:
         raise RuntimeError(f"PickMyTrade POST failed => HTTP {e.code}: {e.read().decode()}")
 
 
-def send_entry(instrument: str, direction: str, setup: str, price: float, sl: float, tp1: float) -> dict:
+def send_entry(instrument: str, direction: str, setup: str, price: float, sl: float, tp2: float) -> dict:
     """
-    Relay an entry signal to PickMyTrade/Apex. Uses TP1 as the single take-profit
-    target (see module docstring for why). Raises RuntimeError/ValueError on
+    Relay an entry signal to PickMyTrade/Apex. `tp2` should be the strategy's
+    1:3 RR take-profit level -- this is the single TP target sent (see module
+    docstring for why TP2 rather than TP1). Raises RuntimeError/ValueError on
     failure -- caller decides how to handle/log/notify.
     """
     symbol = PICKMYTRADE_SYMBOL_MAP.get(instrument.upper())
@@ -73,6 +88,9 @@ def send_entry(instrument: str, direction: str, setup: str, price: float, sl: fl
         raise ValueError(f"No PickMyTrade symbol mapping for: {instrument}")
 
     order_type = "STP" if setup == "box_break" else "LMT"
+
+    r_distance = abs(price - sl)
+    trail_step = r_distance * TRAIL_STEP_R
 
     body = {
         "strategy_name": "",
@@ -83,19 +101,19 @@ def send_entry(instrument: str, direction: str, setup: str, price: float, sl: fl
         "risk_percentage": RISK_PERCENTAGE,
         "price": price,
         "stp_limit_stp_price": 0,
-        "tp": tp1,
+        "tp": tp2,
         "percentage_tp": 0,
         "dollar_tp": 0,
         "sl": sl,
         "percentage_sl": 0,
         "dollar_sl": 0,
-        "trail": 0,
-        "trail_stop": 0,
-        "trail_trigger": 0,
-        "trail_freq": 0,
+        "trail": 1,
+        "trail_stop": trail_step,
+        "trail_trigger": trail_step,
+        "trail_freq": trail_step,
         "update_tp": False,
         "update_sl": False,
-        "breakeven": 0,
+        "breakeven": trail_step,
         "breakeven_offset": 0,
         "token": PICKMYTRADE_TOKEN,
         "pyramid": False,
