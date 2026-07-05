@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 
 from config import PICKMYTRADE_TOKEN, PICKMYTRADE_ACCOUNT_ID
 
-PICKMYTRADE_URL = "https://api.pickmytrade.trade/v2/add-trade-data"
+PICKMYTRADE_URL = "https://api.pickmytrade.trade/v2/add-trade-data-latest?t=20255"
 
 # Bot instrument -> TradingView continuous-contract symbol (confirmed format: MNQ1!)
 PICKMYTRADE_SYMBOL_MAP = {
