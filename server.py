@@ -264,20 +264,24 @@ def handle_paper_signal(data):
         mirror_data["instrument"] = mirror_symbol
         handle_paper_signal(mirror_data)
 
-        # Apex Trader Funding (via PickMyTrade/Tradovate) -- fully separate
-        # real-money account, not gated by this account's own risk/limit state.
-        try:
-            pickmytrade.send_entry(
-                instrument=mirror_symbol,
-                direction=direction,
-                setup=setup,
-                price=price,
-                sl=sl,
-                tp2=tp2,
-            )
-        except Exception as e:
-            print(f"[pickmytrade] ERROR relaying to Apex: {e}", flush=True)
-            send_telegram(f"{_MASCOT}\n🔴 <b>APEX/PICKMYTRADE RELAY FAILED</b>\n<code>{mirror_symbol} {direction}</code>\nError: <code>{e}</code>")
+        # DISABLED 2026-07-06: Apex support (ticket #1628893) confirmed fully
+        # automated order entry/modification is a strict user-agreement
+        # violation, grounds for account closure -- "semi-automated" tools
+        # need written approval first, which this pipeline does not have.
+        # Do not re-enable without that written approval from Apex.
+        #
+        # try:
+        #     pickmytrade.send_entry(
+        #         instrument=mirror_symbol,
+        #         direction=direction,
+        #         setup=setup,
+        #         price=price,
+        #         sl=sl,
+        #         tp2=tp2,
+        #     )
+        # except Exception as e:
+        #     print(f"[pickmytrade] ERROR relaying to Apex: {e}", flush=True)
+        #     send_telegram(f"{_MASCOT}\n🔴 <b>APEX/PICKMYTRADE RELAY FAILED</b>\n<code>{mirror_symbol} {direction}</code>\nError: <code>{e}</code>")
 
     return jsonify({"status": "approved", "lot_size": risk["lot_size"], "oanda_trade_id": oanda_trade_id, "limit_hit": limit_hit}), 200
 
