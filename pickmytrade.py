@@ -30,9 +30,13 @@ move SL to exactly entry, not entry+something) since the breakeven/trailing
 legs don't show as separately-priced pending orders the way SL/TP did --
 that'll only be observable once a real position is actually open.
 
-NOT YET WIRED into the live signal path (server.py) as of 2026-07-05 --
-still needs to be called from server.py's signal handling and given error
-handling/Telegram notification on failure before going live for real.
+WIRED into the live signal path (server.py) as of 2026-07-05 -- fires
+alongside the MICRO_MIRROR_MAP dispatch, wrapped in try/except with a
+Telegram alert on failure. First real signal (US500/MES, 2026-07-06 02:15
+UTC) left no trace either way -- no exception, but also no confirmed order
+in PickMyTrade's Alerts Log for MES specifically. Added an explicit
+success log line below so a clean send and "never ran" aren't
+indistinguishable in Railway's logs next time.
 """
 import json
 import urllib.request
@@ -129,4 +133,7 @@ def send_entry(instrument: str, direction: str, setup: str, price: float, sl: fl
         ],
     }
 
-    return _request(body)
+    response = _request(body)
+    print(f"[pickmytrade] sent {body['data']} {symbol} @ {price} sl={sl} tp={tp2} "
+          f"order_type={order_type} -- response: {response}", flush=True)
+    return response
