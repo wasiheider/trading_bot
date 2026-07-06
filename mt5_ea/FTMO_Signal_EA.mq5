@@ -13,6 +13,14 @@
 //|     trail (1.5R -> lock 1R, then trail 0.5R behind peak).         |
 //|   - No dependency on the server after the entry signal arrives.   |
 //|                                                                    |
+//| If the pending (limit/stop) entry order is rejected -- typically  |
+//| because price already ran past the level between signal detection |
+//| and order placement (poll delay + request round-trip) -- falls    |
+//| back to an immediate market order with the same SL/TP, matching   |
+//| oanda.py's existing fallback for the paper bot. Confirmed live     |
+//| 2026-07-05: a SellLimit on US500.sim was rejected [invalid price]  |
+//| with no fallback before this fix was added.                       |
+//|                                                                    |
 //| Drawdown guardrail (independent of and tighter than FTMO's real   |
 //| $500 daily / $1,000 overall limits on this $10K eval account, for |
 //| this first live run): blocks new entries and force-closes every   |
@@ -356,8 +364,20 @@ void TryEnter(string botSymbol, string block)
 
    if(!ok)
      {
-      Print("Order failed for ", botSymbol, ": ", trade.ResultRetcodeDescription());
-      return;
+      // Pending order rejected -- most likely price already ran past the level
+      // by the time this executed (signal detected -> poll delay -> request
+      // round-trip). Same fallback oanda.py already uses for the paper bot:
+      // retry immediately as a market order with the same SL/TP.
+      Print("Pending order failed for ", botSymbol, ": ", trade.ResultRetcodeDescription(),
+            " -- falling back to market order.");
+      ok = isLong
+         ? trade.Buy(lots, brokerSymbol, 0, stopLoss, tp2, comment)
+         : trade.Sell(lots, brokerSymbol, 0, stopLoss, tp2, comment);
+      if(!ok)
+        {
+         Print("Market order fallback also failed for ", botSymbol, ": ", trade.ResultRetcodeDescription());
+         return;
+        }
      }
 
    ulong orderTicket = trade.ResultOrder();
