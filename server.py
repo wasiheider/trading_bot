@@ -586,7 +586,11 @@ _COT_INVERT = {"VIX"}
 
 
 def _cot_get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+    })
     with urllib.request.urlopen(req, timeout=15) as r:
         return json.loads(r.read())
 
