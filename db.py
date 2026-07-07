@@ -87,9 +87,16 @@ def init_db():
             bos_level   REAL,
             created_at  TIMESTAMP DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS cot_cache (
+            id          INTEGER PRIMARY KEY DEFAULT 1,
+            payload     TEXT NOT NULL DEFAULT '{"updated": "", "instruments": []}',
+            updated_at  TIMESTAMP DEFAULT NOW()
+        );
     """)
     # Ensure bot_state always has exactly one row
     cur.execute("INSERT INTO bot_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+    cur.execute("INSERT INTO cot_cache (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
     conn.commit()
     cur.close()
     conn.close()
@@ -413,3 +420,31 @@ def get_latest_signals(instruments: list, max_age_hours: int = 6) -> dict:
     cur.close()
     conn.close()
     return result
+
+
+# ── COT cache ──────────────────────────────────────────────
+# Single-row cache of the /cot dashboard payload. Written by cot_fetch.py
+# (run externally, weekly) via POST /admin/cot-update -- Railway's own
+# outbound IP is blocked by CFTC's API, so the server never fetches this
+# itself. See cot_fetch.py's docstring for the full story.
+
+def get_cot_cache() -> dict:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT payload FROM cot_cache WHERE id = 1")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return json.loads(row[0]) if row else {"updated": "", "instruments": []}
+
+
+def save_cot_cache(payload: dict):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE cot_cache SET payload = %s, updated_at = NOW() WHERE id = 1",
+        (json.dumps(payload),),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
