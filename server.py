@@ -208,7 +208,7 @@ def handle_paper_signal(data):
     if limit_hit:
         exec_line = f"\n⚠️ <b>NOT EXECUTED — {limit_reason}</b>"
     elif not oanda_supported:
-        exec_line = "\n🏦 FTMO/Apex Eval Trade"
+        exec_line = "\n🏦 FTMO Tradingview Eval Trade"
     elif oanda_pending:
         order_type = "STOP" if setup == "box_break" else "LIMIT"
         exec_line = f"\nOANDA: ⏳ {order_type} ORDER PENDING @ <code>{oanda_fill_price}</code>"
@@ -604,7 +604,6 @@ def fomc():
             "next":       is_next,
         })
     return jsonify({"meetings": meetings, "rate": _FOMC_RATE}), 200
-
 
 
 # ── COT Endpoint ───────────────────────────────────────────
