@@ -211,11 +211,11 @@ def handle_paper_signal(data):
         exec_line = "\n🏦 FTMO Tradingview Eval Trade"
     elif oanda_pending:
         order_type = "STOP" if setup == "box_break" else "LIMIT"
-        exec_line = f"\nOANDA: ⏳ {order_type} ORDER PENDING @ <code>{oanda_fill_price}</code>"
+        exec_line = f"\nOANDA: ⏳ {order_type} ORDER PENDING @ <code>{oanda_fill_price}</code>\n🏦 Paper/FTMO MT5 Trade"
     elif oanda_trade_id:
-        exec_line = f"\nOANDA ID: <code>{oanda_trade_id}</code> @ <code>{oanda_fill_price}</code>"
+        exec_line = f"\nOANDA ID: <code>{oanda_trade_id}</code> @ <code>{oanda_fill_price}</code>\n🏦 Paper/FTMO MT5 Trade"
     else:
-        exec_line = f"\nOANDA: FAILED ({oanda_error})"
+        exec_line = f"\nOANDA: FAILED ({oanda_error})\n🏦 Paper/FTMO MT5 Trade"
 
     msg = (
         f"{_MASCOT}\n"
