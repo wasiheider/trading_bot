@@ -331,12 +331,13 @@ def handle_paper_lifecycle(data, event):
     label_map = {"tp1_hit": "TP1 Hit", "tp2_hit": "TP2 Hit", "sl_hit": "Stop Loss Hit"}
     dir_emoji = "🟢" if direction == "LONG" else "🔴"
     pnl_line  = f"\nP&L: <code>${final_pnl:+.2f}</code>" if final_pnl is not None else ""
+    trade_label = "\n🏦 Paper/FTMO MT5 Trade" if instrument.upper() in oanda.INSTRUMENT_MAP else "\n🏦 FTMO Tradingview Eval Trade"
 
     msg = (
         f"{_MASCOT}\n"
         f"{emoji_map.get(event, '📊')} <b>Paper {label_map.get(event, event.upper())}</b>\n"
         f"{dir_emoji} <code>{instrument} {direction}</code>\n"
-        f"Price: <code>{price}</code>{pnl_line}"
+        f"Price: <code>{price}</code>{pnl_line}{trade_label}"
     )
     send_telegram(msg)
 
