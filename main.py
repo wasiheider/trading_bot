@@ -98,12 +98,21 @@ def heartbeat():
 
 # ── Scheduler ──────────────────────────────────────────────
 
+def purge_stale_non_forex_opens():
+    import oanda
+    forex_instruments = set(oanda.INSTRUMENT_MAP.keys())
+    deleted = db.delete_stale_non_forex_opens(forex_instruments, min_age_hours=120)
+    if deleted:
+        log(f"[scheduler] Purged {deleted} stale non-forex OPEN/UNKNOWN trade(s)")
+
+
 def run_scheduler():
     schedule.every().day.at("05:00").do(midnight_reset)
     schedule.every().day.at("20:50").do(weekly_summary)
     schedule.every().hour.do(heartbeat)
+    schedule.every(6).hours.do(purge_stale_non_forex_opens)
 
-    log("Scheduler started — midnight reset 00:00 CT | weekly summary Fri 15:50 CT | heartbeat hourly")
+    log("Scheduler started — midnight reset 00:00 CT | weekly summary Fri 15:50 CT | heartbeat hourly | stale-open purge every 6h")
 
     while True:
         schedule.run_pending()

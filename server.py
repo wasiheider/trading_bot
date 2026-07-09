@@ -606,6 +606,7 @@ def fomc():
     return jsonify({"meetings": meetings, "rate": _FOMC_RATE}), 200
 
 
+
 # ── COT Endpoint ───────────────────────────────────────────
 # Served from Postgres (cot_cache table), not fetched live -- Railway's
 # outbound IP is blocked (HTTP 403) by CFTC's Socrata-hosted API, confirmed

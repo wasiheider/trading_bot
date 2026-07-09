@@ -25,7 +25,7 @@ A TradingView-to-OANDA **paper trading bot** validating a Wyckoff range strategy
 | TradingView alerts | TradingView cloud | ✅ 24/7 | ❌ No |
 | Order execution | OANDA Demo API | ✅ 24/7 | ❌ No |
 | Notifications | Telegram | ✅ | ❌ No |
-| Daily monitor agent | Anthropic cloud (`claude.ai/code/routines`) | ✅ 7am CT | ❌ No |
+| Daily monitor agent | GitHub Actions cron (`.github/workflows/daily-report.yml`) | ✅ 7am CT | ❌ No |
 | CLAUDE.md / README | GitHub (repo root) | ✅ | ❌ No |
 
 ### Signal Flow
@@ -44,7 +44,7 @@ Railway Flask Bot  ────────────────────�
 ### Daily Monitoring Flow
 
 ```
-Anthropic Cloud Agent (7am CT daily)
+GitHub Actions cron (7am CT daily — .github/workflows/daily-report.yml)
         │  GET /report
         ▼
 Railway Flask Bot  →  Telegram (balance, PNL, W/L, risk flags)
@@ -122,6 +122,21 @@ Push to `paper-trading` → Railway auto-deploys.
 | B — Spring / Upthrust | `"spring"` / `"upthrust"` | Wick beyond boundary closes back inside; deferred entry |
 | C — BOS + RSI Divergence | `"bos_div"` | Same as A + RSI divergence at retest (30–70); priority over A |
 | D — Mid BOS + Retest | `"mid_bos"` | 15M structural BOS within ±35% of range mid → retest |
+| E — Box Break | `"box_break"` | NY session close beyond pre-session box boundary |
+
+### OANDA Order Types (forex entries only)
+
+All entry prices are `close` of the 15M signal bar. By the time the webhook arrives, a new bar has opened. Order types are chosen to avoid chasing and improve fill quality:
+
+| Setup | OANDA Order Type | Time In Force | Rationale |
+|-------|-----------------|---------------|-----------|
+| `bos`, `bos_div`, `spring`, `upthrust`, `mid_bos` | **LIMIT** at `entry_price` | GFD | Enter at the confirmation close or better; if price runs without retesting, order expires |
+| `box_break` | **STOP** at `entry_price` | GFD | Enter only if price confirms at or above the breakout close; protects against false breaks |
+| Limit rejected (price already past level) | **MARKET** fallback | — | Logged in Railway console; fills at current market |
+
+Pending orders (not yet filled at signal time) show as "⏳ LIMIT ORDER PENDING" or "⏳ STOP ORDER PENDING" in Telegram.
+
+**`GFD` is valid for LIMIT and STOP orders only — never use it with MARKET orders** (OANDA returns HTTP 400 `TIME_IN_FORCE_INVALID`).
 
 ### TP / SL
 - **TP1** @ 1:1 RR → close 50% + SL moves to breakeven
@@ -143,6 +158,25 @@ Push to `paper-trading` → Railway auto-deploys.
 | XAUUSD, XAGUSD, US100, US30, US500, USOIL, BTCUSD | — | ✅ |
 
 CFDs, metals, and indices are not on this OANDA demo account type. Do not add to `INSTRUMENT_MAP`.
+
+### Micro Futures Mirroring
+
+Micro futures (MNQ, MES, MYM, MGC, MCL) do not have their own signal generation. They previously ran a separate, less mature TradingView chart/script (the TopstepX/futures track) that frequently disagreed in direction with the proven v5 script — e.g. MNQ went long into a falling market that US100's script correctly read as short, 3 straight SL losses (found 2026-07-03).
+
+As of `MICRO_MIRROR_MAP` in `server.py`, each micro instrument mirrors its parent CFD instrument's signal instead:
+
+| Parent (signal source) | Micro (mirrored) |
+|---|---|
+| US100 | MNQ |
+| US500 | MES |
+| US30  | MYM |
+| XAUUSD | MGC |
+| USOIL | MCL |
+
+- `webhook_paper()` **ignores** any webhook arriving directly for a micro symbol (`MICRO_MIRROR_TARGETS`) — those charts' alerts should be turned off in TradingView, but are ignored server-side as a backstop either way.
+- When the parent's entry signal or lifecycle event (`tp1_hit`/`tp2_hit`/`sl_hit`) is processed, `handle_paper_signal`/`handle_paper_lifecycle` recurse once with a copy of the payload with `symbol`/`instrument` swapped to the micro symbol — same direction/entry/SL/TP/setup, independently sized via the micro's own `PAPER_INSTRUMENT_CONFIG` entry in `risk.py`, independently blocked by `db.has_open_trade()` per instrument.
+- Mirrored trades' PNL reuses the parent's realized PNL dollar figure directly (both are risk-normalized to the same `$` target via `RISK_PER_TRADE`, so this is a good approximation, not an exact re-derivation from tick data).
+- Mirrored trades post to the **same shared** `paper_state` account balance/daily/weekly PNL as every other instrument — this was a deliberate choice, not an oversight.
 
 ---
 
@@ -174,11 +208,27 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | `/dashboard` | GET | Serves `dashboard.html` |
 | `/state` | GET | Balance, PNL, open trades, per-model stats (A/B/C/D) |
 | `/trades` | GET | Full trade ledger from PostgreSQL |
-| `/report` | GET | Daily monitor — sends Telegram summary; called by cloud agent at 7am CT |
+| `/report` | GET | Daily monitor — sends Telegram summary; called by GitHub Actions cron at 7am CT |
 | `/news` | GET | Yahoo Finance RSS (15-min cache) |
 | `/calendar` | GET | ForexFactory calendar (1-hour cache) |
 | `/webhook/paper` | POST | TradingView signal receiver — entries + lifecycle events |
 | `/admin/reset` | POST | Full state reset — requires `PAPER_WEBHOOK_TOKEN` |
+| `/latest-signal` | GET | Latest entry signal per instrument (12 non-micro instruments), polled by the FTMO MT5 EA — see below |
+
+---
+
+## MT5 EA (FTMO account, added 2026-07-04)
+
+`mt5_ea/FTMO_Signal_EA.mq5` polls `GET /latest-signal` and trades the same 12 instruments on the FTMO MT5 account (separate from the OANDA-demo paper account above — no shared state, no shared risk limits). Full spec/history in `MT5_EA_handoff.md` at repo root.
+
+- **Entry-only polling.** The EA never polls for TP1/TP2/SL lifecycle events — exit management is 100% local, driven by the EA watching live broker price. This was a deliberate choice: Pine Script's lifecycle webhooks lag real price by up to 15 min (bar-close driven) and could be missed entirely if a poll cycle or the server has any hiccup, which is an acceptable risk for the paper account's PNL tracking but not for a real funded eval account.
+- **Broker-side safety net:** every order sets SL = signal's `stop_loss` and TP = signal's `tp2` at placement time. Even if the EA process crashes, the position still has a hard floor and ceiling enforced by the broker.
+- **While running**, the EA improves on that: closes 50% at TP1 + moves SL to breakeven, then trails (1.5R → lock 1R, then 0.5R behind peak) — matching the v5 strategy's documented TP/SL behavior, computed locally from live price, not from a server poll.
+- **Position sizing** is broker-generic (uses `SYMBOL_TRADE_TICK_VALUE`/`SYMBOL_TRADE_TICK_SIZE`, not hardcoded pip values like `risk.py`) — works uniformly across forex/indices/metals/oil/crypto and scales to whatever the live FTMO account balance actually is. `InpRiskPercent` input, default 0.5% (matches the paper bot's $500/$100K convention).
+- **Signal tracking is local-only** (MT5 `GlobalVariable`, last-seen `signal_id` per instrument) — server stays stateless, no "consumed" endpoint.
+- **Assumes a Hedging account** (not Netting) — the code relies on the filled order's ticket carrying through to the resulting position for per-ticket state (TP1 price, phase, trailing peak, stored as `GlobalVariable`s keyed by ticket). Confirm FTMO account `600063135` is in Hedge mode before running live (still an open item — see Known Gaps).
+- **Setup required before running:** whitelist the Railway URL under Tools > Options > Expert Advisors > Allow WebRequest; edit the `InpSymbolMap_*` inputs to match this specific broker's actual Market Watch symbol names (may differ from the bot's names, e.g. `US100` vs `US100.cash`).
+- Micro futures (MNQ/MES/MYM/MGC/MCL) are intentionally excluded — same reasoning as the paper bot's mirroring, no point double-trading the same underlying signal.
 
 ---
 
@@ -212,7 +262,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | Daily PNL reset | Midnight CT (scheduler) | ✅ Fully automated |
 | Weekly PNL reset | Monday midnight CT | ✅ Fully automated |
 | Weekly summary | Friday 3:50pm CT (scheduler) | ✅ Fully automated |
-| Daily monitor report | 7am CT (Anthropic cloud agent) | ✅ Fully automated |
+| Daily monitor report | 7am CT (GitHub Actions cron) | ✅ Fully automated |
 | Database persistence | Every trade / state change | ✅ Fully automated |
 | Code deployment | git push to paper-trading | ✅ Fully automated |
 | Prop firm trade entry | FTMO/Apex have no API | ⚠️ Manual — always |
@@ -230,6 +280,19 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 - **Active charts (12):** EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD, XAUUSD, XAGUSD, US100, US30, US500, USOIL, BTCUSD
 
 When updating Pine Script: reload on all 12 charts and recreate alerts.
+
+---
+
+## Deploy Timing Warning
+
+Every push to `paper-trading` triggers a Railway redeploy (~2 min downtime). TradingView does **not** retry missed webhooks. Any TP1/TP2/SL lifecycle webhook for a non-forex trade (US100, US500, US30, USOIL, XAUUSD, XAGUSD, BTCUSD) that fires during the restart window is permanently lost — the trade will eventually be marked UNKNOWN.
+
+**Avoid pushing to `paper-trading` during active trading hours when non-forex positions may be open:**
+- US indices (US100, US500, US30): 9:30am–4:00pm CT
+- Gold/Silver/Oil: nearly 24/7 — push during low-volatility hours (e.g. 5–6pm CT)
+- Bitcoin: 24/7 — push during overnight CT hours if possible
+
+Forex trades are unaffected (OANDA manages their TP/SL independently of webhooks).
 
 ---
 

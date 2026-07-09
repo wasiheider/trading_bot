@@ -85,6 +85,9 @@ div_pivot_len = input.int(5,       "Divergence Pivot Length",                   
 rsi_c_lower   = input.float(30.0,  "RSI Lower Bound at Retest",                   group="Entry C", minval=1,  maxval=49, step=1)
 rsi_c_upper   = input.float(70.0,  "RSI Upper Bound at Retest",                   group="Entry C", minval=51, maxval=99, step=1)
 
+entry_e_enabled = input.bool(true,  "Enable Entry E (Box Break — NY Kill Zone)",  group="Entry E")
+e_touch_pct_in  = input.float(0.10, "Touch proximity % of box boundary",          group="Entry E", minval=0.01, maxval=1.0, step=0.01)
+
 // =============================================================================
 // INSTRUMENT CONFIG
 // =============================================================================
@@ -99,11 +102,13 @@ is_us500      = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "S
 is_gbpusd     = str.contains(raw_ticker, "GBPUSD") or syminfo.ticker == "GBPUSD"
 is_xagusd     = str.contains(raw_ticker, "XAG")
 is_btcusd     = str.contains(raw_ticker, "BTC")
+is_eurnzd     = str.contains(raw_ticker, "EURNZD") or syminfo.ticker == "EURNZD"
+is_nzdusd     = str.contains(raw_ticker, "NZDUSD") or syminfo.ticker == "NZDUSD"
 pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
 _min_sl_price = pip_size * min_sl_pips  // minimum SL distance in price units
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
 risk_dollars  = 500.0
-risk_dollars_eff = (is_gbpusd or is_xagusd) ? risk_dollars * 0.5 : risk_dollars
+risk_dollars_eff = risk_dollars
 _nzdusd_rate  = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off)
 _quote_to_usd = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "NZD" ? _nzdusd_rate : 1.0
 
@@ -673,6 +678,93 @@ spring_signal = _sp_bos_event and not range_invalidated and no_position and atr_
      _sp_rr_ok and not na(spring_sl_stored) and entry_b_enabled and
      not long_signal and not short_signal and not long_signal_c and not short_signal_c
 
+// =============================================================================
+// ENTRY E — OVERNIGHT BOX FADE (NY KILL ZONE 7–9am ET)
+// Box = overnight Asian + London session high/low (6pm–7am ET).
+// Valid: top touched ≥2× AND bottom touched ≥2× (wick-based, rising-edge count).
+// Busted: BOTH top ≥3× AND bottom ≥3× — range exhausted, breakout likely, no trade.
+// Execution window: 7–9am ET NY only.
+// Signal: wick beyond box boundary + close back inside = liquidity sweep fade.
+// SL = signal bar wick extreme + ATR(14) buffer.
+// TP1 = box mid | TP2 = opposite box wall | min 1:1 R:R to TP1 required.
+// Instruments: XAUUSD + US100/NQ only (Telegram signal — no OANDA execution).
+// =============================================================================
+_e_in_session    = not na(time(timeframe.period, "1800-0700", "America/New_York"))
+_e_in_ny_window  = not na(time(timeframe.period, "0700-1000", "America/New_York"))
+_e_session_start = _e_in_session and not _e_in_session[1]
+_e_session_end   = not _e_in_session and _e_in_session[1]
+_e_touch_pct     = e_touch_pct_in / 100.0
+
+var float e_sess_high   = na
+var float e_sess_low    = na
+var int   e_top_touches = 0
+var int   e_bot_touches = 0
+var bool  e_prev_top_t  = false
+var bool  e_prev_bot_t  = false
+var float e_box_high    = na
+var float e_box_low     = na
+var bool  e_box_valid   = false
+var bool  e_box_busted  = false
+var bool  e_short_done  = false
+var bool  e_long_done   = false
+
+// Reset at the start of each overnight session (6pm ET)
+if _e_session_start
+    e_sess_high   := high
+    e_sess_low    := low
+    e_top_touches := 0
+    e_bot_touches := 0
+    e_prev_top_t  := true   // suppress bar-1 self-count
+    e_prev_bot_t  := true
+    e_box_high    := na
+    e_box_low     := na
+    e_box_valid   := false
+    e_box_busted  := false
+    e_short_done  := false
+    e_long_done   := false
+
+// Track rolling H/L and wick-based touch counts during the session
+if _e_in_session and not _e_session_start
+    e_sess_high  := math.max(e_sess_high, high)
+    e_sess_low   := math.min(e_sess_low,  low)
+    _e_top_touch  = not na(e_sess_high) and high >= e_sess_high * (1.0 - _e_touch_pct)
+    _e_bot_touch  = not na(e_sess_low)  and low  <= e_sess_low  * (1.0 + _e_touch_pct)
+    if _e_top_touch and not e_prev_top_t
+        e_top_touches := e_top_touches + 1
+    if _e_bot_touch and not e_prev_bot_t
+        e_bot_touches := e_bot_touches + 1
+    e_prev_top_t := _e_top_touch
+    e_prev_bot_t := _e_bot_touch
+
+// Lock box at session end (first bar at 7am ET)
+if _e_session_end
+    e_box_high   := e_sess_high
+    e_box_low    := e_sess_low
+    e_box_valid  := e_top_touches >= 2 and e_bot_touches >= 2
+    e_box_busted := e_top_touches >= 3 and e_bot_touches >= 3
+
+e_box_mid        = not na(e_box_high) and not na(e_box_low) ? (e_box_high + e_box_low) / 2.0 : na
+_e_instrument_ok = is_xauusd or is_xagusd or is_us500 or is_eurnzd or is_nzdusd or is_usoil
+_e_box_ready     = entry_e_enabled and _e_instrument_ok and not na(e_box_high) and not na(e_box_low) and e_box_valid and not e_box_busted
+
+// NY 7–9am: close beyond box boundary = breakout/breakdown
+_e_short_cond = _e_in_ny_window and _e_box_ready and close < e_box_low  and not e_short_done and no_position
+_e_long_cond  = _e_in_ny_window and _e_box_ready and close > e_box_high and not e_long_done  and no_position
+
+_ee_s_entry = close
+_ee_s_sl    = e_box_high
+_ee_s_risk  = _ee_s_sl - _ee_s_entry
+_ee_s_tp1   = _ee_s_risk > 0 ? _ee_s_entry - _ee_s_risk : na
+_ee_s_rr_ok = _ee_s_risk > 0
+
+_ee_l_entry = close
+_ee_l_sl    = e_box_low
+_ee_l_risk  = _ee_l_entry - _ee_l_sl
+_ee_l_tp1   = _ee_l_risk > 0 ? _ee_l_entry + _ee_l_risk : na
+_ee_l_rr_ok = _ee_l_risk > 0
+
+short_signal_e = _e_short_cond and _ee_s_rr_ok
+long_signal_e  = _e_long_cond  and _ee_l_rr_ok
 
 // =============================================================================
 // STRATEGY EXECUTION
@@ -977,6 +1069,58 @@ if long_signal_d
              ',"token":"paper_wasirizvi_wyckoffstrategy"}'
     _d_bos_long_active  := false
 
+if short_signal_e
+    _ee_lots = _size(_ee_s_entry, _ee_s_sl)
+    strategy.entry("SHORT_E", strategy.short, qty=_ee_lots, comment="SHORT_E " + str.tostring(_ee_lots) + "L")
+    strategy.exit("SHORT_E_TP1", from_entry="SHORT_E", limit=_ee_s_tp1, stop=_ee_s_sl, comment="TP1 1:1")
+    s_entry       := _ee_s_entry
+    s_tp2         := na
+    s_tp1         := _ee_s_tp1
+    s_tp1_lots    := _ee_lots
+    s_entry_bar   := bar_index
+    s_risk        := _ee_s_risk
+    trail_sl      := na
+    trail_peak_rr := 0.0
+    tp1_hit       := false
+    be_triggered  := false
+    _entry_alert_pending := true
+    _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"SHORT","setup":"box_break","timeframe":"15"' +
+             ',"lot_size":'    + str.tostring(_ee_lots) +
+             ',"entry_price":' + str.tostring(_ee_s_entry, price_format) +
+             ',"stop_loss":'   + str.tostring(_ee_s_sl,    price_format) +
+             ',"tp1":'         + str.tostring(_ee_s_tp1,   price_format) +
+             ',"box_high":'    + str.tostring(e_box_high,  price_format) +
+             ',"box_low":'     + str.tostring(e_box_low,   price_format) +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}'
+    e_short_done := true
+
+if long_signal_e
+    _ee_lots = _size(_ee_l_entry, _ee_l_sl)
+    strategy.entry("LONG_E", strategy.long, qty=_ee_lots, comment="LONG_E " + str.tostring(_ee_lots) + "L")
+    strategy.exit("LONG_E_TP1", from_entry="LONG_E", limit=_ee_l_tp1, stop=_ee_l_sl, comment="TP1 1:1")
+    s_entry       := _ee_l_entry
+    s_tp2         := na
+    s_tp1         := _ee_l_tp1
+    s_tp1_lots    := _ee_lots
+    s_entry_bar   := bar_index
+    s_risk        := _ee_l_risk
+    trail_sl      := na
+    trail_peak_rr := 0.0
+    tp1_hit       := false
+    be_triggered  := false
+    _entry_alert_pending := true
+    _entry_alert_msg     := '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"LONG","setup":"box_break","timeframe":"15"' +
+             ',"lot_size":'    + str.tostring(_ee_lots) +
+             ',"entry_price":' + str.tostring(_ee_l_entry, price_format) +
+             ',"stop_loss":'   + str.tostring(_ee_l_sl,    price_format) +
+             ',"tp1":'         + str.tostring(_ee_l_tp1,   price_format) +
+             ',"box_high":'    + str.tostring(e_box_high,  price_format) +
+             ',"box_low":'     + str.tostring(e_box_low,   price_format) +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}'
+    e_long_done := true
+
 // =============================================================================
 // TP CASCADE — PROGRESSIVE SL MANAGEMENT
 //   TP1 hit (1:1, 50%) → SL moves to entry (breakeven) for remaining position
@@ -1168,16 +1312,31 @@ if show_signals and long_signal_d
     label.new(bar_index, low, "D TP1:1:1(50%)+BE | TP2:1:3(50%)",
          color=color.new(color.teal,30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
+// Entry E — Box Break visuals
+plot(_e_instrument_ok and not na(e_box_high) ? e_box_high : na, "E Box High", color=color.new(color.orange, 0),  linewidth=1, style=plot.style_linebr)
+plot(_e_instrument_ok and not na(e_box_low)  ? e_box_low  : na, "E Box Low",  color=color.new(color.orange, 0),  linewidth=1, style=plot.style_linebr)
+plot(_e_instrument_ok and not na(e_box_mid)  ? e_box_mid  : na, "E Box Mid",  color=color.new(color.orange, 60), linewidth=1, style=plot.style_linebr)
+
+plotshape(show_signals and short_signal_e, "SHORT_E", shape.triangledown, location.abovebar, color.fuchsia, size=size.normal)
+plotshape(show_signals and long_signal_e,  "LONG_E",  shape.triangleup,   location.belowbar, color.fuchsia, size=size.normal)
+
+if show_signals and short_signal_e
+    label.new(bar_index, high, "E BOX FADE ↓ | TP1:mid TP2:low",
+         color=color.new(color.fuchsia, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
+if show_signals and long_signal_e
+    label.new(bar_index, low, "E BOX FADE ↑ | TP1:mid TP2:high",
+         color=color.new(color.fuchsia, 30), textcolor=color.white, style=label.style_label_up, size=size.small)
+
 // Open-trade level lines
 var float active_entry = na
 var float active_sl    = na
 var float active_tp1   = na
 var float active_tp2   = na
 
-_is_new_entry = short_signal or short_signal_c or long_signal or long_signal_c or spring_signal or upthrust_signal or short_signal_d or long_signal_d
+_is_new_entry = short_signal or short_signal_c or long_signal or long_signal_c or spring_signal or upthrust_signal or short_signal_d or long_signal_d or short_signal_e or long_signal_e
 if _is_new_entry
     active_entry := close
-    active_sl    := short_signal or short_signal_c ? short_sl : long_signal or long_signal_c ? long_sl : spring_signal ? spring_sl_stored : upthrust_signal ? upthrust_sl_stored : short_signal_d ? d_short_sl : d_long_sl
+    active_sl    := short_signal or short_signal_c ? short_sl : long_signal or long_signal_c ? long_sl : spring_signal ? spring_sl_stored : upthrust_signal ? upthrust_sl_stored : short_signal_d ? d_short_sl : long_signal_d ? d_long_sl : short_signal_e ? _ee_s_sl : _ee_l_sl
     active_tp1   := s_tp1
     active_tp2   := s_tp2
 
@@ -1220,7 +1379,7 @@ if _make_labels
     label.delete(lbl_sl)
     label.delete(lbl_tp1)
     label.delete(lbl_tp2)
-    _dir = strategy.position_size < 0 or short_signal or short_signal_c or upthrust_signal or short_signal_d ? "SHORT " : "LONG "
+    _dir = strategy.position_size < 0 or short_signal or short_signal_c or upthrust_signal or short_signal_d or short_signal_e ? "SHORT " : "LONG "
     lbl_entry := label.new(bar_index, active_entry, _dir + str.tostring(active_entry, price_format),
                   color=color.new(color.white, 55), textcolor=color.white, style=label.style_label_right, size=size.tiny)
     lbl_sl    := label.new(bar_index, active_sl, "SL   " + str.tostring(active_sl, price_format),
@@ -1283,7 +1442,7 @@ if show_signals and sl_long_hit
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 29, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 33, bgcolor=color.new(color.black, 70), border_width=1)
 if show_info
     arm_display = not use_rotation ? "OFF" :
          armed_side == "none" ? "WAIT->" + (waiting_for_high ? "HIGH" : "LOW") :
@@ -1382,3 +1541,18 @@ if show_info
     _ed_inst_clr = (is_xagusd or is_usoil or is_btcusd or is_gbpusd) ? color.red : color.green
     table.cell(info, 0, 28, "Entry D Filter",                 text_color=color.gray)
     table.cell(info, 1, 28, _ed_inst_txt,                     text_color=_ed_inst_clr)
+    _e_box_str   = not _e_instrument_ok ? "N/A" : not na(e_box_high) ? str.tostring(e_box_high, price_format) + " / " + str.tostring(e_box_low, price_format) : _e_in_session ? "BUILDING" : "--"
+    _e_box_clr   = not _e_instrument_ok ? color.gray : not na(e_box_high) ? (e_box_valid and not e_box_busted ? color.green : e_box_busted ? color.red : color.orange) : color.orange
+    table.cell(info, 0, 29, "E Box H / L",                   text_color=color.gray)
+    table.cell(info, 1, 29, _e_box_str,                       text_color=_e_box_clr)
+    _e_touch_str = not _e_instrument_ok ? "N/A" : _e_in_session ? "Top:" + str.tostring(e_top_touches) + " Bot:" + str.tostring(e_bot_touches) + " (live)" : not na(e_box_high) ? "Top:" + str.tostring(e_top_touches) + " Bot:" + str.tostring(e_bot_touches) + " (locked)" : "--"
+    table.cell(info, 0, 30, "E Touches",                      text_color=color.gray)
+    table.cell(info, 1, 30, _e_touch_str,                     text_color=color.gray)
+    _e_status_txt = not _e_instrument_ok ? "N/A" : not entry_e_enabled ? "DISABLED" : _e_in_ny_window and _e_box_ready ? "ARMED — NY WINDOW" : _e_in_ny_window and not _e_box_ready ? (e_box_busted ? "BUSTED (3+3)" : not na(e_box_high) and not e_box_valid ? "INVALID (<2 touches)" : "NO BOX") : _e_in_session ? "BUILDING SESSION" : not na(e_box_high) ? (e_box_valid and not e_box_busted ? "VALID — await NY" : e_box_busted ? "BUSTED" : "INVALID") : "NO BOX YET"
+    _e_status_clr = not _e_instrument_ok or not entry_e_enabled ? color.gray : _e_in_ny_window and _e_box_ready ? color.green : e_box_busted ? color.red : _e_in_session ? color.orange : e_box_valid ? color.blue : color.gray
+    table.cell(info, 0, 31, "E Status",                       text_color=color.gray)
+    table.cell(info, 1, 31, _e_status_txt,                    text_color=_e_status_clr)
+    _e_ny_txt = _e_in_ny_window ? "ACTIVE (7–10am ET)" : "--"
+    _e_ny_clr = _e_in_ny_window ? color.green : color.gray
+    table.cell(info, 0, 32, "E NY Window",                    text_color=color.gray)
+    table.cell(info, 1, 32, _e_ny_txt,                        text_color=_e_ny_clr)

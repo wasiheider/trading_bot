@@ -11,7 +11,7 @@ import os
 import json
 import psycopg2
 import psycopg2.extras
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import pytz
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -87,9 +87,16 @@ def init_db():
             bos_level   REAL,
             created_at  TIMESTAMP DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS cot_cache (
+            id          INTEGER PRIMARY KEY DEFAULT 1,
+            payload     TEXT NOT NULL DEFAULT '{"updated": "", "instruments": []}',
+            updated_at  TIMESTAMP DEFAULT NOW()
+        );
     """)
     # Ensure bot_state always has exactly one row
     cur.execute("INSERT INTO bot_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+    cur.execute("INSERT INTO cot_cache (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
     conn.commit()
     cur.close()
     conn.close()
@@ -144,7 +151,7 @@ def update_trade(instrument: str, direction: str, result: str, pnl: float):
             SELECT id FROM trades
             WHERE UPPER(instrument) = UPPER(%s)
               AND UPPER(direction)  = UPPER(%s)
-              AND result = 'OPEN'
+              AND result IN ('OPEN', 'UNKNOWN')
             ORDER BY id DESC LIMIT 1
         )
     """, (result, pnl or 0, instrument, direction))
@@ -169,7 +176,8 @@ def get_oanda_trade_id(instrument: str, direction: str):
     return row[0] if row else None
 
 
-def has_open_trade(instrument: str, direction: str = None) -> bool:
+def has_open_trade(instrument: str, direction: str = None, include_unknown: bool = False) -> bool:
+    states = ('OPEN', 'UNKNOWN') if include_unknown else ('OPEN',)
     conn = get_conn()
     cur = conn.cursor()
     if direction:
@@ -177,16 +185,16 @@ def has_open_trade(instrument: str, direction: str = None) -> bool:
             SELECT 1 FROM trades
             WHERE UPPER(instrument) = UPPER(%s)
               AND UPPER(direction)  = UPPER(%s)
-              AND result = 'OPEN'
+              AND result = ANY(%s)
             LIMIT 1
-        """, (instrument, direction))
+        """, (instrument, direction, list(states)))
     else:
         cur.execute("""
             SELECT 1 FROM trades
             WHERE UPPER(instrument) = UPPER(%s)
-              AND result = 'OPEN'
+              AND result = ANY(%s)
             LIMIT 1
-        """, (instrument,))
+        """, (instrument, list(states)))
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -227,20 +235,21 @@ def open_trade_count() -> int:
     return count
 
 
-def close_stale_non_forex_opens(forex_instruments: set):
+def close_stale_non_forex_opens(forex_instruments: set, min_age_hours: int = 4):
     """
-    Mark any OPEN trade that has no oanda_trade_id AND is not a forex instrument as UNKNOWN.
-    These are log-only trades (US100, XAUUSD, etc.) whose lifecycle events were never received.
-    Safe to call on every startup — only touches rows that are genuinely unresolvable.
+    Mark non-forex OPEN trades as UNKNOWN only if they are older than min_age_hours.
+    Fresh trades (entered recently) are left OPEN so lifecycle webhooks can still resolve them.
     """
     conn = get_conn()
     cur = conn.cursor()
+    threshold = datetime.now(timezone.utc) - timedelta(hours=min_age_hours)
     cur.execute("""
         UPDATE trades SET result = 'UNKNOWN', pnl = 0
         WHERE result = 'OPEN'
           AND (oanda_trade_id IS NULL OR oanda_trade_id = '')
           AND UPPER(instrument) != ALL(%s)
-    """, (list(forex_instruments),))
+          AND created_at < %s
+    """, (list(forex_instruments), threshold))
     affected = cur.rowcount
     conn.commit()
     cur.close()
@@ -248,6 +257,30 @@ def close_stale_non_forex_opens(forex_instruments: set):
     if affected:
         print(f"[db] Closed {affected} stale non-forex OPEN trade(s) → UNKNOWN", flush=True)
     return affected
+
+
+def delete_stale_non_forex_opens(forex_instruments: set, min_age_hours: int = 120) -> int:
+    """
+    Delete non-forex OPEN or UNKNOWN trades older than min_age_hours.
+    Runs on a schedule so stale log-only positions don't linger on the dashboard.
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    threshold = datetime.now(timezone.utc) - timedelta(hours=min_age_hours)
+    cur.execute("""
+        DELETE FROM trades
+        WHERE result IN ('OPEN', 'UNKNOWN')
+          AND (oanda_trade_id IS NULL OR oanda_trade_id = '')
+          AND UPPER(instrument) != ALL(%s)
+          AND created_at < %s
+    """, (list(forex_instruments), threshold))
+    deleted = cur.rowcount
+    conn.commit()
+    cur.close()
+    conn.close()
+    if deleted:
+        print(f"[db] Deleted {deleted} stale non-forex OPEN/UNKNOWN trade(s)", flush=True)
+    return deleted
 
 
 def clear_trades():
@@ -350,3 +383,68 @@ def log_signal(data: dict):
         conn.close()
     except Exception as e:
         print(f"[db] log_signal failed: {e}", flush=True)
+
+
+def get_latest_signals(instruments: list, max_age_hours: int = 6) -> dict:
+    """
+    Latest signal per instrument, for the MT5 EA to poll. Signals older than
+    max_age_hours are excluded — a setup that's gone stale (EA was offline,
+    price has moved on) should never be blindly executed on a live account.
+    """
+    result = {i.upper(): None for i in instruments}
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    threshold = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    cur.execute("""
+        SELECT DISTINCT ON (UPPER(symbol)) id, ts, symbol, direction, setup, timeframe,
+               entry_price, stop_loss, tp1, tp2, rr_to_tp1, bos_level
+        FROM signals
+        WHERE UPPER(symbol) = ANY(%s) AND created_at >= %s
+        ORDER BY UPPER(symbol), id DESC
+    """, (list(instruments), threshold))
+    for row in cur.fetchall():
+        result[row["symbol"].upper()] = {
+            "signal_id":   row["id"],
+            "symbol":      row["symbol"].upper(),
+            "direction":   row["direction"],
+            "setup":       row["setup"],
+            "timeframe":   row["timeframe"],
+            "entry_price": row["entry_price"],
+            "stop_loss":   row["stop_loss"],
+            "tp1":         row["tp1"],
+            "tp2":         row["tp2"],
+            "rr_to_tp1":   row["rr_to_tp1"],
+            "bos_level":   row["bos_level"],
+            "timestamp":   row["ts"],
+        }
+    cur.close()
+    conn.close()
+    return result
+
+
+# ── COT cache ──────────────────────────────────────────────
+# Single-row cache of the /cot dashboard payload. Written by cot_fetch.py
+# (run externally, weekly) via POST /admin/cot-update -- Railway's own
+# outbound IP is blocked by CFTC's API, so the server never fetches this
+# itself. See cot_fetch.py's docstring for the full story.
+
+def get_cot_cache() -> dict:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT payload FROM cot_cache WHERE id = 1")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return json.loads(row[0]) if row else {"updated": "", "instruments": []}
+
+
+def save_cot_cache(payload: dict):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE cot_cache SET payload = %s, updated_at = NOW() WHERE id = 1",
+        (json.dumps(payload),),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
