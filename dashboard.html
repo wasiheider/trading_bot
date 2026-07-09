@@ -240,17 +240,18 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="ct">Strategy v5 Architecture</div>
     <div class="row"><span class="rl">Range High/Low</span><span class="rv" style="color:var(--b)">4H Pivot-anchored · locked until break</span></div>
     <div class="row"><span class="rl">Range Mid</span><span class="rv" style="color:var(--t2)">(High + Low) / 2</span></div>
-    <div class="row"><span class="rl">Quality Gate</span><span class="rv" style="color:var(--a)">1H swing ↓↑↓ or ↑↓↑ (4+4+4 bars)</span></div>
+    <div class="row"><span class="rl">Quality Gate</span><span class="rv" style="color:var(--a)">30M swing ph→pl→ph→pl / pl→ph→pl→ph · each leg ≥ 4 bars</span></div>
     <div class="row"><span class="rl">+ Boundary Touches</span><span class="rv" style="color:var(--t2)">≥ 3 combined H+L · pivot H/L = 1+1 on lock</span></div>
     <div class="row"><span class="rl">+ Mid Crosses</span><span class="rv" style="color:var(--t2)">≥ 3 · settled side by close</span></div>
     <div class="row"><span class="rl" style="color:var(--t3)">Entry A — BOS</span><span class="rv"><span class="bd2 bdim">DISABLED</span></span></div>
     <div class="row"><span class="rl" style="color:var(--t3)">Entry B — Wyckoff</span><span class="rv"><span class="bd2 bdim">DISABLED</span></span></div>
     <div class="row"><span class="rl">Entry C — BOS+Div</span><span class="rv" style="color:#ffd600">BOS + RSI divergence · RSI 30–70 · blocked: USOIL / XAGUSD</span></div>
     <div class="row"><span class="rl">Entry D — Mid Retest</span><span class="rv" style="color:#00b8b8">15M BOS near mid → retest → entry · blocked: GBPUSD / XAGUSD / USOIL / BTCUSD</span></div>
+    <div class="row"><span class="rl">Entry E — Box Break</span><span class="rv" style="color:#ff9800">NY 7–10am ET · 2+2 touches overnight · close beyond box = entry · SL = opposite wall · 1:1 TP full position · XAUUSD / XAGUSD / US500 / EURNZD / NZDUSD / USOIL</span></div>
     <div class="row"><span class="rl">TP1 (50%)</span><span class="rv" style="color:var(--g)">1:1 RR · partial close → SL moves to entry (breakeven)</span></div>
     <div class="row"><span class="rl">TP2 (50%)</span><span class="rv" style="color:var(--g)">1:3 RR · trail 0.5R behind peak → widens to 1R above 2R · full close</span></div>
     <div class="row"><span class="rl">SL</span><span class="rv" style="color:var(--r)">15M swing + 1× ATR buffer</span></div>
-    <div class="row"><span class="rl">Risk / Trade</span><span class="rv">$500 · GBPUSD $250 (Entry C only) · Min R:R 1.5</span></div>
+    <div class="row"><span class="rl">Risk / Trade</span><span class="rv">$500 all instruments · Min R:R 1.5</span></div>
     <div class="row"><span class="rl">Range Reset</span><span class="rv" style="color:var(--t2)">Price breaks 30% beyond boundary</span></div>
   </div>
 </div>
@@ -262,7 +263,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="exec-banner">
     <div>
       <div class="exec-mode">&#9654; Auto-Executing — OANDA Demo (Forex) · Log+Telegram (All Others)</div>
-      <div class="exec-sub">C: BOS+RSI Div (blocked: USOIL/XAGUSD) · D: Mid BOS+Retest (blocked: GBPUSD/XAGUSD/USOIL/BTCUSD) · A/B disabled · TP1@1:1(50%)+BE | TP2@1:3(50%) trail 0.5R→1R@2R · GBPUSD: 50% size (Entry C only) · Active: EURUSD/GBPUSD/USDJPY/EURNZD/NZDUSD/US30/US500/US100/XAUUSD/BTCUSD</div>
+      <div class="exec-sub">A/B disabled · C: BOS+RSI Div (blocked: USOIL/XAGUSD) · D: Mid BOS+Retest (blocked: GBPUSD/XAGUSD/USOIL/BTCUSD) · E: Box Break 1:1 (XAUUSD/XAGUSD/US500/EURNZD/NZDUSD/USOIL) · TP1@1:1(50%)+BE · TP2@1:3(50%) trail 0.5R→1R@2R · $500/trade · Active: EURUSD/GBPUSD/USDJPY/EURNZD/NZDUSD/XAUUSD/XAGUSD/US30/US500/US100/USOIL/BTCUSD</div>
     </div>
     <span class="bd2 bg2">PAPER</span>
   </div>
@@ -367,39 +368,24 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 
   <div class="card">
-    <div class="ct">Next FOMC — Sep 15–16</div>
+    <div class="ct" id="fomc-title">Next FOMC</div>
     <div class="fcount">
       <div class="fc-lbl">Days Until Rate Decision</div>
       <div class="fc-val" id="fomc-days">--</div>
-      <div class="fc-sub">Sep 15–16, 2026 &nbsp;|&nbsp; Rate: 3.50–3.75%</div>
+      <div class="fc-sub" id="fomc-sub">Loading...</div>
     </div>
-    <div style="margin-top:8px">
-      <div class="row"><span class="rl">Jan 27–28</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
-      <div class="row"><span class="rl">Mar 17–18</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
-      <div class="row"><span class="rl">Apr 28–29</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
-      <div class="row"><span class="rl">Jun 16–17</span><span class="rv" style="color:var(--t3)">HOLD ✓</span></div>
-      <div class="row"><span class="rl" style="color:var(--a)">Sep 15–16 ✦</span><span class="bd2 ba2">NEXT</span></div>
-      <div class="row"><span class="rl">Dec 8–9 ✦</span><span class="rv" style="color:var(--t3)">—</span></div>
-    </div>
+    <div style="margin-top:8px" id="fomc-schedule"></div>
     <div style="font-size:7px;color:var(--t3);margin-top:5px">✦ includes dot plot &amp; projections</div>
   </div>
 
   <div class="card">
-    <div class="ct">Next NFP — Jul 2</div>
+    <div class="ct" id="nfp-title">Next NFP</div>
     <div class="fcount">
       <div class="fc-lbl">Days Until NFP Release</div>
       <div class="fc-val" id="nfp-days">--</div>
-      <div class="fc-sub">Jul 2, 2026 &nbsp;|&nbsp; 7:30 CT &nbsp;|&nbsp; Jun jobs report</div>
+      <div class="fc-sub" id="nfp-sub">Loading...</div>
     </div>
-    <div style="margin-top:8px">
-      <div class="row"><span class="rl">Apr 3</span><span class="rv" style="color:var(--t3)">DONE ✓</span></div>
-      <div class="row"><span class="rl">May 1</span><span class="rv" style="color:var(--t3)">DONE ✓</span></div>
-      <div class="row"><span class="rl">Jun 5</span><span class="rv" style="color:var(--t3)">DONE ✓</span></div>
-      <div class="row"><span class="rl" style="color:var(--a)">Jul 2 ★</span><span class="bd2 ba2">NEXT</span></div>
-      <div class="row"><span class="rl">Aug 7</span><span class="rv" style="color:var(--t3)">—</span></div>
-      <div class="row"><span class="rl">Sep 4</span><span class="rv" style="color:var(--t3)">—</span></div>
-    </div>
-    <div style="font-size:7px;color:var(--t3);margin-top:5px">★ holiday-adjusted — Jul 4 (Sat) observed Fri Jul 3</div>
+    <div style="margin-top:8px" id="nfp-schedule"></div>
   </div>
 </div>
 
@@ -465,19 +451,70 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-// ── FOMC countdown ─────────────────────────────────────────
-function updateFOMC() {
-  const days = Math.ceil((new Date('2026-09-15') - new Date()) / 86400000);
-  document.getElementById('fomc-days').textContent = days > 0 ? days + ' days' : 'TODAY';
-}
-updateFOMC();
+// ── FOMC — fetched from /fomc (server-side schedule, updated annually) ──────
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-// ── NFP countdown ──────────────────────────────────────────
+async function fetchFOMC() {
+  try {
+    const res = await fetch(RAILWAY_URL + '/fomc?bust=' + Date.now(), {cache:'no-store'});
+    if (!res.ok) throw new Error('FOMC ' + res.status);
+    const {meetings, rate} = await res.json();
+    const next = meetings.find(m => m.next);
+    if (!next) return;
+    const days = Math.ceil((new Date(next.decision) - new Date()) / 86400000);
+    document.getElementById('fomc-title').textContent = `Next FOMC — ${next.dates}`;
+    document.getElementById('fomc-days').textContent   = days > 0 ? days + ' days' : 'TODAY';
+    document.getElementById('fomc-sub').innerHTML      = `${next.dates}, ${next.decision.slice(0,4)} &nbsp;|&nbsp; Rate: ${rate}`;
+    document.getElementById('fomc-schedule').innerHTML = meetings.map(m => {
+      const label = m.dates + (m.projections ? ' ✦' : '');
+      if (m.past)
+        return `<div class="row"><span class="rl">${label}</span><span class="rv" style="color:var(--t3)">${m.outcome || 'DONE'} ✓</span></div>`;
+      if (m.next)
+        return `<div class="row"><span class="rl" style="color:var(--a)">${label}</span><span class="bd2 ba2">NEXT</span></div>`;
+      return `<div class="row"><span class="rl">${label}</span><span class="rv" style="color:var(--t3)">—</span></div>`;
+    }).join('');
+  } catch(e) { console.warn('FOMC fetch failed:', e); }
+}
+fetchFOMC();
+setInterval(fetchFOMC, 3600000);
+
+// ── NFP — first Friday of each month, calculated client-side ────────────────
+function firstFridayOfMonth(year, month) {
+  const d = new Date(year, month, 1);
+  while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
+  return d;
+}
+
 function updateNFP() {
-  const days = Math.ceil((new Date('2026-07-02') - new Date()) / 86400000);
-  document.getElementById('nfp-days').textContent = days > 0 ? days + ' days' : 'TODAY';
+  const now  = new Date();
+  const dates = [];
+  let y = now.getFullYear(), m = now.getMonth() - 3;
+  while (m < 0) { m += 12; y--; }
+  while (dates.length < 9) {
+    dates.push(firstFridayOfMonth(y, m));
+    m++; if (m > 11) { m = 0; y++; }
+  }
+  const nextIdx = dates.findIndex(d => d >= now);
+  const next    = dates[nextIdx];
+  const days    = Math.ceil((next - now) / 86400000);
+  const fmtDate = d => `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+  const jobsMonth = d => MONTHS_SHORT[(d.getMonth() + 11) % 12];
+  document.getElementById('nfp-title').textContent  = `Next NFP — ${fmtDate(next)}`;
+  document.getElementById('nfp-days').textContent   = days > 0 ? days + ' days' : 'TODAY';
+  document.getElementById('nfp-sub').innerHTML      = `${fmtDate(next)}, ${next.getFullYear()} &nbsp;|&nbsp; 7:30 CT &nbsp;|&nbsp; ${jobsMonth(next)} jobs report`;
+  document.getElementById('nfp-schedule').innerHTML = dates.map((d, i) => {
+    const isPast = d < now && i !== nextIdx;
+    const isNext = i === nextIdx;
+    const label  = fmtDate(d) + (isNext ? ' ★' : '');
+    if (isPast)
+      return `<div class="row"><span class="rl">${label}</span><span class="rv" style="color:var(--t3)">DONE ✓</span></div>`;
+    if (isNext)
+      return `<div class="row"><span class="rl" style="color:var(--a)">${label}</span><span class="bd2 ba2">NEXT</span></div>`;
+    return `<div class="row"><span class="rl">${label}</span><span class="rv" style="color:var(--t3)">—</span></div>`;
+  }).join('');
 }
 updateNFP();
+setInterval(updateNFP, 3600000);
 
 // ── Format helpers ─────────────────────────────────────────
 const fmt$ = v => (v >= 0 ? '+$' : '-$') + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -630,7 +667,7 @@ function patchOpenTradeRows() {
 }
 
 function updateAllTimeStats(trades) {
-  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN');
+  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN' && t.result !== 'UNKNOWN');
   const wins   = closed.filter(t => (t.result||'').includes('TP')).length;
   const losses = closed.length - wins;
   const wr     = closed.length ? Math.round((wins / closed.length) * 100) : 0;
@@ -786,7 +823,7 @@ function inferSession(trade) {
 function renderSessionBreakdown(trades) {
   const el = document.getElementById('session-breakdown-body');
   if (!el) return;
-  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN');
+  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN' && t.result !== 'UNKNOWN');
   if (!closed.length) {
     el.innerHTML = '<div class="empty" style="padding:12px"><div style="font-size:8px;color:var(--t3)">No closed trades yet</div></div>';
     return;
@@ -816,10 +853,11 @@ function renderSessionBreakdown(trades) {
     if (s === 'spring' || s === 'upthrust') return 'B — Wyckoff';
     if (s === 'bos_div') return 'C — BOS+Div';
     if (s === 'mid_bos') return 'D — Mid Retest';
+    if (s === 'box_fade' || s === 'box_break') return 'E — Box Break';
     return 'A — BOS';
   }
   const mBuckets = bucket(closed, t => setupToModel(t.setup));
-  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div', 'D — Mid Retest'];
+  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div', 'D — Mid Retest', 'E — Box Break'];
 
   const totalTrades = closed.length;
   const totalWins   = closed.filter(t => (t.result||'').includes('TP')).length;
@@ -861,11 +899,12 @@ function renderSessionBreakdown(trades) {
     <td style="text-align:right;font-weight:800;color:${tpnlColor}">${fmt$(totalPnl)}</td>
   </tr></tfoot>`;
 
-  const mKeys = [...MODEL_ORDER.filter(m => mBuckets[m]), ...Object.keys(mBuckets).filter(m => !MODEL_ORDER.includes(m))];
+  const _emptyBucket = {wins:0, losses:0, pnl:0};
+  const mKeys = [...MODEL_ORDER, ...Object.keys(mBuckets).filter(m => !MODEL_ORDER.includes(m))];
 
   el.innerHTML = `<div style="margin-bottom:16px">
     <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Entry Model</div>
-    <table class="tbl">${thead}<tbody>${mKeys.map(m => mkRow(m, mBuckets[m])).join('')}</tbody>${tfoot}</table>
+    <table class="tbl">${thead}<tbody>${mKeys.map(m => mkRow(m, mBuckets[m] || _emptyBucket)).join('')}</tbody>${tfoot}</table>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
     <div>
@@ -981,52 +1020,11 @@ function renderCalendarFallback() {
   document.getElementById('week-events').innerHTML  = '<div class="ni"><div class="ntime" style="color:var(--t3)">Calendar unavailable</div></div>';
 }
 
-// ── CFTC COT Index (Larry Williams method) ─────────────────
-// TFF dataset: ES, NQ, US30, BTC, USD, VIX → leveraged fund net position
-// Disaggregated dataset: GOLD, SILVER, CRUDE → managed money net position
-// Index = (current_net - 52wk_min) / (52wk_max - 52wk_min) × 100
-// Weekly Δ = this week's lev fund net change vs last week (upcoming week signal)
-// VIX is inverted: high lev-fund longs = high fear = bearish for market
-// MM signal: money managers closing longs faster than their 8-week avg
-const COT_TFF   = { 'ES':'13874+', 'NQ':'209742', 'RTY':'239742', 'US30':'12460+', 'BTC':'133741', 'USD':'098662', 'EUR':'099741', 'GBP':'096742', 'JPY':'097741', 'NZD':'112741', 'VIX':'1170E1' };
-const COT_LEG   = { 'GOLD':'088691', 'SILVER':'084691', 'CRUDE':'067651' };
+// ── COT — dual-source bias (server-computed) ────────────────
+// Source 1: CFTC TFF Lev Funds / Disaggregated Managed Money
+// Source 2: Tradingster Legacy Non-Commercial
+// Server endpoint: /cot  (1-hour cache, alignment confirmed|diverge|neutral)
 const COT_ORDER = ['ES','NQ','RTY','US30','BTC','GOLD','SILVER','CRUDE','USD','EUR','GBP','JPY','NZD','VIX'];
-
-function _cotIndex(nets) {
-  const min = Math.min(...nets), max = Math.max(...nets);
-  const range = max - min || 1;
-  return nets.map(n => Math.round(((n - min) / range) * 100));
-}
-
-// Returns 'closing'|'adding'|null vs 4-week average
-function _mmSignal(changes) {
-  if (changes.length < 4) return null;
-  const w       = changes.slice(-4);
-  const current = w[w.length - 1];
-  const avg     = w.reduce((s, v) => s + v, 0) / w.length;
-  const std     = Math.sqrt(w.reduce((s, v) => s + (v - avg) ** 2, 0) / w.length) || 1;
-  if (current < avg - std * 0.75) return 'closing';
-  if (current > avg + std * 0.75) return 'adding';
-  return null;
-}
-
-// Lev fund delta signal: are they covering/pressing vs their 4-week avg?
-// 'covering' = delta significantly more positive than avg (reducing bearish position)
-// 'pressing' = delta significantly more negative than avg (adding to bearish position)
-// 'flipped'  = direction reversal: last week negative, this week positive
-function _levSignal(deltas) {
-  if (deltas.length < 2) return null;
-  const prev    = deltas[deltas.length - 2];
-  const current = deltas[deltas.length - 1];
-  if (prev < 0 && current > 0) return 'flipped';
-  if (deltas.length < 4) return null;
-  const w   = deltas.slice(-4);
-  const avg = w.reduce((s, v) => s + v, 0) / w.length;
-  const std = Math.sqrt(w.reduce((s, v) => s + (v - avg) ** 2, 0) / w.length) || 1;
-  if (current > avg + std * 0.75) return 'covering';
-  if (current < avg - std * 0.75) return 'pressing';
-  return null;
-}
 
 // Synthesises lev signal + delta + bias into a single near-term directional read.
 // Separate from the structural COT bias (index) which is a 2-4 week horizon.
@@ -1034,7 +1032,8 @@ function _levSignal(deltas) {
 // 'covering' = delta significantly more positive than 4-week avg (buying/covering).
 // 'pressing' = delta significantly more negative than 4-week avg (selling/adding shorts).
 function _nearTermSignal(item) {
-  const { bias, weeklyDelta, lev } = item;
+  // item fields now use server names: weekly_delta, lev_signal, bias
+  const bias = item.bias, lev = item.lev_signal, weeklyDelta = item.weekly_delta;
   const dPos = weeklyDelta > 500;
   const dNeg = weeklyDelta < -500;
 
@@ -1062,71 +1061,14 @@ function _nearTermSignal(item) {
 
 async function fetchCOT() {
   try {
-    const tffCodes = Object.values(COT_TFF).map(c=>`'${c.replace(/\+/g,'%2B')}'`).join(',');
-    const legCodes = Object.values(COT_LEG).map(c=>`'${c}'`).join(',');
-    const [tffRes, legRes] = await Promise.all([
-      fetch(`https://publicreporting.cftc.gov/resource/gpe5-46if.json?$where=cftc_contract_market_code in(${tffCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=600`, {headers:{Accept:'application/json'}}),
-      fetch(`https://publicreporting.cftc.gov/resource/kh3c-gbw2.json?$where=cftc_contract_market_code in(${legCodes})&$order=report_date_as_yyyy_mm_dd DESC&$limit=200`, {headers:{Accept:'application/json'}}),
-    ]);
-    if (!tffRes.ok || !legRes.ok) throw new Error('CFTC API error');
-    const [tffRows, legRows] = await Promise.all([tffRes.json(), legRes.json()]);
-
-    const results = [];
-
-    // TFF instruments — leveraged fund COT index + weekly Δ + asset manager MM signal
-    for (const [sym, code] of Object.entries(COT_TFF)) {
-      const rows = tffRows
-        .filter(r => r.cftc_contract_market_code === code)
-        .sort((a, b) => a.report_date_as_yyyy_mm_dd.localeCompare(b.report_date_as_yyyy_mm_dd));
-      if (rows.length < 2) continue;
-      const nets = rows.map(r => parseInt(r.lev_money_positions_long || 0) - parseInt(r.lev_money_positions_short || 0));
-      let idxs = _cotIndex(nets);
-      if (sym === 'VIX') idxs = idxs.map(i => 100 - i);
-      const idx  = idxs[idxs.length - 1];
-      const bias = idx >= 60 ? 'Bullish' : idx <= 40 ? 'Bearish' : 'Neutral';
-      const date = rows[rows.length - 1].report_date_as_yyyy_mm_dd?.substring(0, 10);
-      // Weekly Δ: net contracts lev funds added/removed this week vs last week
-      const latestRow = rows[rows.length - 1];
-      let weeklyDelta = parseInt(latestRow.change_in_lev_money_long || 0) - parseInt(latestRow.change_in_lev_money_short || 0);
-      if (sym === 'VIX') weeklyDelta = -weeklyDelta;
-      // Lev fund signal: covering/pressing/flipped vs 4-week avg of weekly deltas
-      const levDeltas = rows.map(r => {
-        let d = parseInt(r.change_in_lev_money_long || 0) - parseInt(r.change_in_lev_money_short || 0);
-        return sym === 'VIX' ? -d : d;
-      });
-      const lev = _levSignal(levDeltas);
-      // MM signal: asset managers closing/adding longs vs their 4-week avg
-      const amChanges = rows.map(r => parseInt(r.change_in_asset_mgr_long || 0));
-      const mm = sym === 'VIX' ? null : _mmSignal(amChanges);
-      results.push({ sym, idx, bias, weeklyDelta, date, pop: sym === 'VIX' ? 'LevF (inv)' : 'Lev Funds', lev, mm });
-    }
-
-    // Legacy commodity instruments — non-commercial COT index + weekly Δ + MM signal
-    for (const [sym, code] of Object.entries(COT_LEG)) {
-      const rows = legRows
-        .filter(r => r.cftc_contract_market_code === code)
-        .sort((a, b) => a.report_date_as_yyyy_mm_dd.localeCompare(b.report_date_as_yyyy_mm_dd));
-      if (rows.length < 2) continue;
-      const nets = rows.map(r => parseInt(r.m_money_positions_long_all || 0) - parseInt(r.m_money_positions_short_all || 0));
-      const idxs = _cotIndex(nets);
-      const idx  = idxs[idxs.length - 1];
-      const bias = idx >= 60 ? 'Bullish' : idx <= 40 ? 'Bearish' : 'Neutral';
-      const date = rows[rows.length - 1].report_date_as_yyyy_mm_dd?.substring(0, 10);
-      // Weekly Δ: net contracts managed money added/removed this week vs last week
-      const latestRow   = rows[rows.length - 1];
-      const weeklyDelta = parseInt(latestRow.change_in_m_money_long_all || 0) - parseInt(latestRow.change_in_m_money_short_all || 0);
-      // Lev signal on managed money deltas (covering/pressing/flipped vs 4-week avg)
-      const mmDeltas = rows.map(r => parseInt(r.change_in_m_money_long_all || 0) - parseInt(r.change_in_m_money_short_all || 0));
-      const lev = _levSignal(mmDeltas);
-      // MM signal: managed money closing/adding longs vs their 4-week avg
-      const mmChanges = rows.map(r => parseInt(r.change_in_m_money_long_all || 0));
-      const mm = _mmSignal(mmChanges);
-      results.push({ sym, idx, bias, weeklyDelta, date, pop: 'Mgd Money', lev, mm });
-    }
-
-    const latest = results.map(r => r.date).filter(Boolean).sort().reverse()[0];
-    document.getElementById('cot-updated').textContent = latest ? 'CFTC ' + latest.slice(5).replace('-', '/') : 'CFTC Live';
-    renderCOT(results);
+    const res = await fetch(RAILWAY_URL + '/cot', {cache:'no-store'});
+    if (!res.ok) throw new Error('COT ' + res.status);
+    const data = await res.json();
+    const updated = data.updated || '';
+    document.getElementById('cot-updated').textContent = updated
+      ? 'CFTC+Tradingster ' + updated.slice(5).replace('-', '/')
+      : 'CFTC+Tradingster';
+    renderCOT(data.instruments || []);
   } catch(e) {
     console.warn('COT fetch failed:', e);
     document.getElementById('cot-updated').textContent = 'Fetch error';
@@ -1140,44 +1082,75 @@ function renderCOT(items) {
   grid.innerHTML = items.map(item => {
     const biasClass = item.bias === 'Bullish' ? 'cbull' : item.bias === 'Bearish' ? 'cbear' : 'cneut';
     const barColor  = item.bias === 'Bullish' ? 'var(--g)' : item.bias === 'Bearish' ? 'var(--r)' : 'var(--t2)';
-    // Weekly Δ: how many net contracts lev funds added/removed this week
+
     let deltaHtml = '';
-    if (item.weeklyDelta !== undefined && item.weeklyDelta !== null) {
-      const dk    = (item.weeklyDelta / 1000).toFixed(1);
-      const sign  = item.weeklyDelta >= 0 ? '+' : '';
-      const arrow = item.weeklyDelta > 0 ? '▲' : '▼';
-      const col   = item.weeklyDelta > 0 ? 'var(--g)' : 'var(--r)';
+    if (item.weekly_delta !== undefined && item.weekly_delta !== null) {
+      const dk    = (item.weekly_delta / 1000).toFixed(1);
+      const sign  = item.weekly_delta >= 0 ? '+' : '';
+      const arrow = item.weekly_delta > 0 ? '▲' : '▼';
+      const col   = item.weekly_delta > 0 ? 'var(--g)' : 'var(--r)';
       deltaHtml = `<span class="ctrend" style="color:${col}">${arrow}${sign}${dk}k</span>`;
     }
+
     let mmHtml = '';
-    if (item.mm === 'closing') {
-      mmHtml = `<div style="font-size:7px;color:var(--r);margin-top:2px;letter-spacing:.5px">MM ▼ Closing Longs</div>`;
-    } else if (item.mm === 'adding') {
-      mmHtml = `<div style="font-size:7px;color:var(--g);margin-top:2px;letter-spacing:.5px">MM ▲ Adding Longs</div>`;
+    if (item.mm_signal === 'closing') {
+      mmHtml = `<div style="font-size:7px;color:var(--r);margin-top:2px;letter-spacing:.5px">AM ▼ Closing Longs</div>`;
+    } else if (item.mm_signal === 'adding') {
+      mmHtml = `<div style="font-size:7px;color:var(--g);margin-top:2px;letter-spacing:.5px">AM ▲ Adding Longs</div>`;
     }
+
     const nt     = _nearTermSignal(item);
     const ntHtml = nt
       ? `<div style="font-size:7px;color:${nt.color};margin-top:4px;font-weight:700;letter-spacing:.5px;border-left:2px solid ${nt.color};padding-left:4px">${nt.arrow} NEAR-TERM: ${nt.label.toUpperCase()}</div>`
       : '';
+
+    // Source 2: Tradingster Legacy Non-Commercial
+    let src2Html = '';
+    if (item.leg_bias) {
+      const legClass = item.leg_bias === 'Bullish' ? 'cbull' : item.leg_bias === 'Bearish' ? 'cbear' : 'cneut';
+      const legColor = item.leg_bias === 'Bullish' ? 'var(--g)' : item.leg_bias === 'Bearish' ? 'var(--r)' : 'var(--t2)';
+      const legBar   = item.leg_idx != null ? `<div class="cbg" style="margin-top:2px"><div class="cbf" style="width:${item.leg_idx}%;background:${legColor}"></div><div class="cidx-marker" style="left:60%"></div><div class="cidx-marker" style="left:40%"></div></div>` : '';
+      src2Html = `
+        <div style="margin-top:4px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:7px;color:var(--t3);letter-spacing:.5px">NonComm</div>
+            <div style="display:flex;align-items:baseline;gap:3px">
+              <div class="cbias ${legClass}" style="font-size:7px;padding:1px 4px">${item.leg_bias}</div>
+              <div style="font-size:9px;font-weight:700;color:${legColor}">${item.leg_idx != null ? item.leg_idx : '—'}<span style="font-size:6px;color:var(--t3);font-weight:400">/100</span></div>
+            </div>
+          </div>
+          ${legBar}
+        </div>`;
+    }
+
+    // Alignment badge
+    let alignHtml = '';
+    if (item.alignment === 'confirmed') {
+      const aColor = item.bias === 'Bullish' ? '#26a69a' : '#ef5350';
+      alignHtml = `<div style="font-size:7px;color:${aColor};margin-top:3px;font-weight:700;letter-spacing:.5px">✓ CONFIRMED ${item.bias.toUpperCase()}</div>`;
+    } else if (item.alignment === 'diverge') {
+      alignHtml = `<div style="font-size:7px;color:#ff9800;margin-top:3px;font-weight:700;letter-spacing:.5px">⚡ DIVERGE — Mixed Signals</div>`;
+    }
+
     return `
       <div class="cc">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <div class="csym">${item.sym}</div>
-          <div class="cpop">${item.pop}</div>
+          <div class="cpop">${item.src1_label || 'Lev Funds'}</div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <div style="display:flex;align-items:baseline;gap:3px">
             <div class="cbias ${biasClass}">${item.bias}</div>
             ${deltaHtml}
           </div>
-          <div style="font-size:11px;font-weight:700;color:${barColor};letter-spacing:-0.5px">${item.idx}<span style="font-size:7px;color:var(--t3);font-weight:400">/100</span></div>
+          <div style="font-size:11px;font-weight:700;color:${barColor};letter-spacing:-0.5px">${item.cot_idx}<span style="font-size:7px;color:var(--t3);font-weight:400">/100</span></div>
         </div>
         <div class="cbg" style="margin-top:3px">
-          <div class="cbf" style="width:${item.idx}%;background:${barColor}"></div>
+          <div class="cbf" style="width:${item.cot_idx}%;background:${barColor}"></div>
           <div class="cidx-marker" style="left:60%"></div>
           <div class="cidx-marker" style="left:40%"></div>
         </div>
-        ${ntHtml}${mmHtml}
+        ${ntHtml}${mmHtml}${src2Html}${alignHtml}
       </div>`;
   }).join('');
 }

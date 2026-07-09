@@ -7,7 +7,7 @@ import os
 import json
 import pytz
 
-from config import PAPER_WEBHOOK_TOKEN
+from config import PAPER_WEBHOOK_TOKEN, PAPER_ACCOUNT_SIZE
 from risk import (
     check_paper_risk,
     paper_state,
@@ -20,6 +20,7 @@ from risk import (
 )
 from notifier import send_telegram
 import oanda
+import pickmytrade
 
 _MASCOT = "🩷👑🤖👑🩷"
 
@@ -33,6 +34,20 @@ _OANDA_MAP = {
     "XAGUSD":    "XAGUSD",
     "XAUUSD":    "XAUUSD",
 }
+
+# Micro futures don't get their own signal generation — they mirror the
+# already-proven v5 BOS/mid_bos detection running on the parent CFD instrument's
+# TradingView chart. A webhook arriving directly for a micro symbol (from its
+# own, separately-alerting chart) is ignored; mirrored trades are derived
+# server-side from the parent's own signal/lifecycle events instead.
+MICRO_MIRROR_MAP = {
+    "US100":  "MNQ",
+    "US500":  "MES",
+    "US30":   "MYM",
+    "XAUUSD": "MGC",
+    "USOIL":  "MCL",
+}
+MICRO_MIRROR_TARGETS = set(MICRO_MIRROR_MAP.values())
 
 
 def _normalize_instrument(raw: str) -> str:
@@ -117,6 +132,11 @@ def webhook_paper():
     if data.get("token") != PAPER_WEBHOOK_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
 
+    instrument = _normalize_instrument(data.get("symbol", data.get("instrument", "")))
+    if instrument in MICRO_MIRROR_TARGETS:
+        print(f"[mirror] Ignoring direct webhook for {instrument} — mirrored from its parent instrument", flush=True)
+        return jsonify({"status": "ignored", "reason": f"{instrument} is mirrored from its parent instrument"}), 200
+
     event = data.get("event", "").lower()
     if event in ("tp1_hit", "tp2_hit", "sl_hit"):
         return handle_paper_lifecycle(data, event)
@@ -158,12 +178,22 @@ def handle_paper_signal(data):
     oanda_trade_id   = None
     oanda_fill_price = price
     oanda_error      = None
+    oanda_pending    = False
     oanda_supported  = instrument.upper() in oanda.INSTRUMENT_MAP
     if not limit_hit and oanda_supported:
         try:
-            fill = oanda.place_order(instrument, direction, risk["lot_size"], sl_price=sl)
-            oanda_trade_id   = fill["trade_id"]
-            oanda_fill_price = fill["price"]
+            if setup == "box_break":
+                fill = oanda.place_stop_order(instrument, direction, risk["lot_size"], price=price, sl_price=sl)
+            else:
+                try:
+                    fill = oanda.place_limit_order(instrument, direction, risk["lot_size"], price=price, sl_price=sl)
+                except RuntimeError as limit_err:
+                    # Limit rejected (price already past entry level) — fall back to market
+                    print(f"[oanda] Limit order rejected, falling back to market: {limit_err}", flush=True)
+                    fill = oanda.place_order(instrument, direction, risk["lot_size"], sl_price=sl)
+            oanda_trade_id   = fill.get("trade_id")
+            oanda_fill_price = fill.get("price", price)
+            oanda_pending    = fill.get("pending", False)
         except Exception as e:
             oanda_error = str(e)
             print(f"[oanda] ERROR placing order: {e}", flush=True)
@@ -173,12 +203,15 @@ def handle_paper_signal(data):
     rr_line  = f"\nR:R: <code>{rr}</code>" if rr else ""
     bos_line = f"\nBOS: <code>{bos_level}</code>" if bos_level else ""
     tf_label = f"15M" if str(timeframe) == "15" else f"{timeframe}M"
-    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS"}.get(setup, "")
+    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS", "box_break": " · BOX BREAK"}.get(setup, "")
 
     if limit_hit:
         exec_line = f"\n⚠️ <b>NOT EXECUTED — {limit_reason}</b>"
     elif not oanda_supported:
-        exec_line = "\n📋 Log + Telegram only (not a forex pair)"
+        exec_line = "\n🏦 FTMO/Apex Eval Trade"
+    elif oanda_pending:
+        order_type = "STOP" if setup == "box_break" else "LIMIT"
+        exec_line = f"\nOANDA: ⏳ {order_type} ORDER PENDING @ <code>{oanda_fill_price}</code>"
     elif oanda_trade_id:
         exec_line = f"\nOANDA ID: <code>{oanda_trade_id}</code> @ <code>{oanda_fill_price}</code>"
     else:
@@ -198,7 +231,7 @@ def handle_paper_signal(data):
         f"{exec_line}"
     )
 
-    db.log_signal(data)
+    db.log_signal({**data, "symbol": instrument})
     record_paper_signal(data)
 
     if not limit_hit:
@@ -223,6 +256,33 @@ def handle_paper_signal(data):
         })
 
     send_telegram(msg)
+
+    mirror_symbol = MICRO_MIRROR_MAP.get(instrument)
+    if mirror_symbol:
+        mirror_data = dict(data)
+        mirror_data["symbol"] = mirror_symbol
+        mirror_data["instrument"] = mirror_symbol
+        handle_paper_signal(mirror_data)
+
+        # DISABLED 2026-07-06: Apex support (ticket #1628893) confirmed fully
+        # automated order entry/modification is a strict user-agreement
+        # violation, grounds for account closure -- "semi-automated" tools
+        # need written approval first, which this pipeline does not have.
+        # Do not re-enable without that written approval from Apex.
+        #
+        # try:
+        #     pickmytrade.send_entry(
+        #         instrument=mirror_symbol,
+        #         direction=direction,
+        #         setup=setup,
+        #         price=price,
+        #         sl=sl,
+        #         tp2=tp2,
+        #     )
+        # except Exception as e:
+        #     print(f"[pickmytrade] ERROR relaying to Apex: {e}", flush=True)
+        #     send_telegram(f"{_MASCOT}\n🔴 <b>APEX/PICKMYTRADE RELAY FAILED</b>\n<code>{mirror_symbol} {direction}</code>\nError: <code>{e}</code>")
+
     return jsonify({"status": "approved", "lot_size": risk["lot_size"], "oanda_trade_id": oanda_trade_id, "limit_hit": limit_hit}), 200
 
 
@@ -254,7 +314,7 @@ def handle_paper_lifecycle(data, event):
 
     final_pnl = oanda_pnl if oanda_pnl is not None else pine_pnl
 
-    locally_tracked = bool(oanda_trade_id) or db.has_open_trade(instrument, direction)
+    locally_tracked = bool(oanda_trade_id) or db.has_open_trade(instrument, direction, include_unknown=True)
     if locally_tracked:
         won = event in ("tp1_hit", "tp2_hit")
         update_paper_outcome(won=won, pnl=final_pnl)
@@ -279,6 +339,14 @@ def handle_paper_lifecycle(data, event):
         f"Price: <code>{price}</code>{pnl_line}"
     )
     send_telegram(msg)
+
+    mirror_symbol = MICRO_MIRROR_MAP.get(instrument)
+    if mirror_symbol:
+        mirror_data = dict(data)
+        mirror_data["symbol"] = mirror_symbol
+        mirror_data["instrument"] = mirror_symbol
+        handle_paper_lifecycle(mirror_data, event)
+
     return jsonify({"status": "logged", "event": event, "symbol": instrument}), 200
 
 
@@ -297,13 +365,20 @@ def state():
     total_trades = total_wins + total_losses
     total_wr     = round((total_wins / total_trades) * 100) if total_trades > 0 else 0
 
-    oanda_balance      = paper_state.get("account_balance", 100000)
-    unrealized_pnl     = 0.0
-    open_trade_details = []
+    # paper_account_balance is the all-instrument simulated balance (every
+    # instrument's realized PNL, log-only ones included) — this is what the
+    # dashboard's Balance/all-time PNL/equity curve are anchored to.
+    # oanda_demo_balance is the real OANDA demo account balance, which only
+    # ever reflects the 5 forex pairs actually executed there — kept
+    # separately for verification, never used as the headline number.
+    paper_balance       = paper_state.get("account_balance", 100000)
+    oanda_demo_balance  = None
+    unrealized_pnl      = 0.0
+    open_trade_details  = []
 
     try:
-        acct_summary  = oanda.get_account_summary()
-        oanda_balance = acct_summary["balance"]
+        acct_summary       = oanda.get_account_summary()
+        oanda_demo_balance = acct_summary["balance"]
     except Exception as e:
         print(f"[state] OANDA account summary failed: {e}", flush=True)
 
@@ -329,6 +404,7 @@ def state():
         if s in ("spring", "upthrust"): return "B"
         if s == "bos_div":              return "C"
         if s == "mid_bos":              return "D"
+        if s == "box_break":            return "E"
         return "A"
 
     model_stats = {
@@ -336,11 +412,12 @@ def state():
         "B": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
         "C": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
         "D": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
+        "E": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
     }
     try:
         for t in db.load_trades():
             res = t.get("result", "OPEN")
-            if res == "OPEN":
+            if res in ("OPEN", "UNKNOWN"):
                 continue
             m = _setup_to_model(t.get("setup", ""))
             model_stats[m]["trades"] += 1
@@ -359,7 +436,9 @@ def state():
 
     return jsonify({
         "time_ct":                now.strftime("%Y-%m-%d %H:%M:%S"),
-        "paper_account_balance":  round(oanda_balance, 2),
+        "paper_account_balance":  round(paper_balance, 2),
+        "oanda_demo_balance":     round(oanda_demo_balance, 2) if oanda_demo_balance is not None else None,
+        "paper_total_pnl":        round(paper_balance - PAPER_ACCOUNT_SIZE, 2),
         "paper_daily_pnl":        round(paper_state.get("daily_pnl",    0.0), 2),
         "paper_weekly_pnl":       round(paper_state.get("weekly_pnl",   0.0), 2),
         "paper_unrealized_pnl":   round(unrealized_pnl, 2),
@@ -383,6 +462,26 @@ def state():
 @app.route("/trades", methods=["GET"])
 def trades():
     return jsonify({"paper": db.load_trades()}), 200
+
+
+# ── Latest Signal Endpoint (MT5 EA polling) ─────────────────
+# Polled by the FTMO MT5 EA — entry signals only. Exit management (TP1/TP2/
+# trailing) is handled by the EA itself watching live price, not by polling
+# this endpoint, so no lifecycle events are exposed here. Micro futures are
+# intentionally excluded — they're just server-side mirrors of these same 12.
+EA_INSTRUMENTS = [
+    "EURUSD", "GBPUSD", "USDJPY", "EURNZD", "NZDUSD",
+    "XAUUSD", "XAGUSD", "US100", "US30", "US500", "USOIL", "BTCUSD",
+]
+SIGNAL_MAX_AGE_HOURS = 6
+
+@app.route("/latest-signal", methods=["GET"])
+def latest_signal():
+    signals = db.get_latest_signals(EA_INSTRUMENTS, max_age_hours=SIGNAL_MAX_AGE_HOURS)
+    return jsonify({
+        "time_ct": ct_now().strftime("%Y-%m-%d %H:%M:%S"),
+        "signals": signals,
+    }), 200
 
 
 # ── News Endpoint ──────────────────────────────────────────
@@ -466,6 +565,70 @@ def calendar():
         if _cal_cache["data"]:
             return jsonify(_cal_cache["data"]), 200
         return jsonify([]), 200
+
+
+# ── FOMC Endpoint ─────────────────────────────────────────
+# Schedule published annually by the Fed — update each December for the next year.
+# Rate field: update manually after each FOMC decision.
+
+_FOMC_RATE = "3.50–3.75%"
+
+_FOMC_2026 = [
+    {"dates": "Jan 27–28", "decision": "2026-01-28", "projections": False, "outcome": "HOLD"},
+    {"dates": "Mar 17–18", "decision": "2026-03-18", "projections": True,  "outcome": "HOLD"},
+    {"dates": "Apr 28–29", "decision": "2026-04-29", "projections": False, "outcome": "HOLD"},
+    {"dates": "Jun 16–17", "decision": "2026-06-17", "projections": True,  "outcome": "HOLD"},
+    {"dates": "Jul 28–29", "decision": "2026-07-29", "projections": False, "outcome": None},
+    {"dates": "Sep 15–16", "decision": "2026-09-16", "projections": True,  "outcome": None},
+    {"dates": "Oct 27–28", "decision": "2026-10-28", "projections": False, "outcome": None},
+    {"dates": "Dec 8–9",   "decision": "2026-12-09", "projections": True,  "outcome": None},
+]
+
+@app.route("/fomc", methods=["GET"])
+def fomc():
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    meetings = []
+    next_found = False
+    for m in _FOMC_2026:
+        is_past = m["decision"] < today
+        is_next = not is_past and not next_found
+        if is_next:
+            next_found = True
+        meetings.append({
+            "dates":      m["dates"],
+            "decision":   m["decision"],
+            "projections": m["projections"],
+            "outcome":    m["outcome"],
+            "past":       is_past,
+            "next":       is_next,
+        })
+    return jsonify({"meetings": meetings, "rate": _FOMC_RATE}), 200
+
+
+# ── COT Endpoint ───────────────────────────────────────────
+# Served from Postgres (cot_cache table), not fetched live -- Railway's
+# outbound IP is blocked (HTTP 403) by CFTC's Socrata-hosted API, confirmed
+# not a header/User-Agent issue (see project memory 2026-07-07). CFTC only
+# publishes new data weekly, so cot_fetch.py runs from an unblocked
+# environment (on a weekly schedule) and POSTs the refreshed payload to
+# /admin/cot-update below -- see cot_fetch.py's docstring for details.
+
+@app.route("/cot", methods=["GET"])
+def cot():
+    return jsonify(db.get_cot_cache()), 200
+
+
+@app.route("/admin/cot-update", methods=["POST"])
+def admin_cot_update():
+    token = request.json.get("token") if request.is_json else None
+    if token != PAPER_WEBHOOK_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
+    payload = request.json.get("payload")
+    if not isinstance(payload, dict) or "instruments" not in payload:
+        return jsonify({"error": "invalid payload"}), 400
+    db.save_cot_cache(payload)
+    return jsonify({"status": "saved", "count": len(payload["instruments"])}), 200
 
 
 # ── Dashboard ──────────────────────────────────────────────
