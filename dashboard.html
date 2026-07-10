@@ -1020,10 +1020,15 @@ function renderCalendarFallback() {
   document.getElementById('week-events').innerHTML  = '<div class="ni"><div class="ntime" style="color:var(--t3)">Calendar unavailable</div></div>';
 }
 
-// ── COT — dual-source bias (server-computed) ────────────────
+// ── COT — dual-source bias + Commercial/Retail + third-source (server-computed) ──
 // Source 1: CFTC TFF Lev Funds / Disaggregated Managed Money
 // Source 2: Tradingster Legacy Non-Commercial
-// Server endpoint: /cot  (1-hour cache, alignment confirmed|diverge|neutral)
+// Comm/Retail: CFTC Legacy 3-way split (Commercial/Non-Commercial/Non-Reportable),
+//   same Tradingster data as Source 2, extra fields
+// Third source (non-CFTC, genuinely independent): OANDA position book (forex),
+//   Fear & Greed Index (BTC), EIA crude stocks (Oil) -- no free equivalent found
+//   for indices (NQ/ES/US30) or Gold/Silver, see cot_fetch.py docstring
+// Server endpoint: /cot  (served from Postgres, refreshed weekly by cot_fetch.py)
 const COT_ORDER = ['ES','NQ','RTY','US30','BTC','GOLD','SILVER','CRUDE','USD','EUR','GBP','JPY','NZD','VIX'];
 
 // Synthesises lev signal + delta + bias into a single near-term directional read.
@@ -1132,6 +1137,42 @@ function renderCOT(items) {
       alignHtml = `<div style="font-size:7px;color:#ff9800;margin-top:3px;font-weight:700;letter-spacing:.5px">⚡ DIVERGE — Mixed Signals</div>`;
     }
 
+    // Commercial (hedgers) vs Non-Reportable (retail) — CFTC Legacy 3-way split,
+    // same Tradingster data as Source 2, just extra fields.
+    let commRetailHtml = '';
+    if (item.comm_bias || item.retail_bias) {
+      const cc = b => b === 'Bullish' ? 'var(--g)' : b === 'Bearish' ? 'var(--r)' : 'var(--t2)';
+      commRetailHtml = `
+        <div style="margin-top:4px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:10px;font-size:7px">
+          ${item.comm_bias ? `<div><span style="color:var(--t3)">Comm </span><span style="color:${cc(item.comm_bias)};font-weight:700">${item.comm_bias}</span></div>` : ''}
+          ${item.retail_bias ? `<div><span style="color:var(--t3)">Retail </span><span style="color:${cc(item.retail_bias)};font-weight:700">${item.retail_bias}</span></div>` : ''}
+        </div>`;
+    }
+
+    // Third, non-CFTC independent source — OANDA position book (forex),
+    // Fear & Greed Index (BTC), or EIA crude stocks (Oil). Mutually exclusive per instrument.
+    let thirdSourceHtml = '';
+    if (item.oanda_bias) {
+      const oc = item.oanda_bias === 'Bullish' ? 'var(--g)' : item.oanda_bias === 'Bearish' ? 'var(--r)' : 'var(--t2)';
+      thirdSourceHtml = `
+        <div style="margin-top:3px;font-size:7px">
+          <span style="color:var(--t3)">OANDA Clients </span><span style="color:${oc};font-weight:700">${item.oanda_long_pct}% Long / ${item.oanda_short_pct}% Short</span>
+        </div>`;
+    } else if (item.fng_value != null) {
+      const fc = item.fng_value <= 25 ? 'var(--r)' : item.fng_value >= 75 ? 'var(--g)' : 'var(--t2)';
+      thirdSourceHtml = `
+        <div style="margin-top:3px;font-size:7px">
+          <span style="color:var(--t3)">Fear &amp; Greed </span><span style="color:${fc};font-weight:700">${item.fng_value}/100 (${item.fng_classification})</span>
+        </div>`;
+    } else if (item.eia_bias) {
+      const ec = item.eia_bias === 'Bullish' ? 'var(--g)' : item.eia_bias === 'Bearish' ? 'var(--r)' : 'var(--t2)';
+      const chg = item.eia_stocks_now - item.eia_stocks_1wk;
+      thirdSourceHtml = `
+        <div style="margin-top:3px;font-size:7px">
+          <span style="color:var(--t3)">EIA Crude Stocks </span><span style="color:${ec};font-weight:700">${chg >= 0 ? '+' : ''}${(chg/1000).toFixed(1)}M bbl (${item.eia_bias})</span>
+        </div>`;
+    }
+
     return `
       <div class="cc">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
@@ -1150,7 +1191,7 @@ function renderCOT(items) {
           <div class="cidx-marker" style="left:60%"></div>
           <div class="cidx-marker" style="left:40%"></div>
         </div>
-        ${ntHtml}${mmHtml}${src2Html}${alignHtml}
+        ${ntHtml}${mmHtml}${src2Html}${alignHtml}${commRetailHtml}${thirdSourceHtml}
       </div>`;
   }).join('');
 }

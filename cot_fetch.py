@@ -20,13 +20,48 @@ layer." Postgres + an authenticated POST endpoint keeps that principle
 intact and avoids a redeploy just to refresh data.)
 
 Run this after each week's CFTC release (Friday afternoon ET). Requires
-PAPER_WEBHOOK_TOKEN as an environment variable (same shared secret the
-Pine Script webhook and /admin/reset use) -- authenticates the POST to
-/admin/cot-update. A weekly scheduled cloud routine handles this
-automatically -- see project memory for the routine ID.
+these environment variables:
+  PAPER_WEBHOOK_TOKEN -- same shared secret the Pine Script webhook and
+                         /admin/reset use, authenticates the POST to
+                         /admin/cot-update.
+  OANDA_API_TOKEN      -- same OANDA demo token oanda.py uses, for the
+                          position book third-source check on forex.
+  EIA_API_KEY          -- free key from eia.gov/opendata/register.php,
+                          for the crude oil inventory third-source check.
+A weekly scheduled cloud routine handles this automatically -- see
+project memory for the routine ID.
+
+Commercial/Non-Commercial/Retail breakdown (added 2026-07-10): the
+Tradingster Legacy endpoint we already call for Source 2 (NonComm)
+also returns Commercial_Positions_Long/Short_All and
+Nonreportable_Positions_Long/Short_All in the same response -- these
+are the CFTC Legacy report's classic three-way split (Commercial =
+hedgers/producers/banks, Non-Commercial = large speculators/hedge
+funds, Non-Reportable = small/retail traders below CFTC's reporting
+threshold). No new API call needed, just extracting fields that were
+already being fetched and ignored.
+
+Third-source checks (added 2026-07-10): CFTC TFF/Disaggregated (Source
+1) and Tradingster Legacy (Source 2) are NOT independent measurements --
+they're two different CFTC report formats slicing the same underlying
+weekly survey of the same reporting traders. A genuinely independent
+third check needs a non-CFTC data source:
+  - Forex (EUR/GBP/JPY/NZD/USD): OANDA's own position book -- aggregate
+    client long/short % by instrument, a real broker order book, not
+    CFTC survey data.
+  - BTC: Crypto Fear & Greed Index (alternative.me) -- aggregates
+    volatility, momentum, social sentiment, exchange dominance.
+  - CRUDE: EIA weekly U.S. crude oil ending stocks (excl. SPR, series
+    WCESTUS1) -- real supply/demand fundamentals, not positioning.
+  - NQ/ES/US30 and GOLD/SILVER have no viable free independent source
+    (researched and ruled out 2026-07-10 -- CBOE put/call ratio has no
+    live free feed, only stale archives; GLD/SLV ETF holdings have no
+    working free API; CME warehouse stocks explicitly blocks automated
+    access via their Terms of Use). These stay 2-source (COT only).
 
 Field names/shape match server.py's /cot route exactly (dashboard.html's
-consumer needs zero changes): {"updated": "YYYY-MM-DD", "instruments": [...]}
+consumer needs zero changes to existing fields): {"updated": "YYYY-MM-DD",
+"instruments": [...]}. New optional fields are additive.
 """
 import concurrent.futures
 import json
@@ -36,6 +71,8 @@ import urllib.request
 
 SERVER_URL = "https://tradingbot-production-1e5a.up.railway.app"
 PAPER_WEBHOOK_TOKEN = os.environ["PAPER_WEBHOOK_TOKEN"]
+OANDA_API_TOKEN = os.environ["OANDA_API_TOKEN"]
+EIA_API_KEY = os.environ["EIA_API_KEY"]
 
 _COT_TFF = {
     "EUR": "099741", "GBP": "096742", "JPY": "097741", "NZD": "112741",
@@ -44,6 +81,15 @@ _COT_TFF = {
 }
 _COT_DISAGG = {"GOLD": "088691", "SILVER": "084691", "CRUDE": "067651"}
 _COT_INVERT = {"VIX"}
+
+# Bot COT symbol -> OANDA instrument, and whether the pair's "long" side
+# means long the *quote* currency (JPY) rather than the base (need to invert).
+_OANDA_FOREX_PAIRS = {
+    "EUR": ("EUR_USD", False),
+    "GBP": ("GBP_USD", False),
+    "JPY": ("USD_JPY", True),   # long USD_JPY = long USD / short JPY
+    "NZD": ("NZD_USD", False),
+}
 
 
 def _cot_get(url):
@@ -134,6 +180,95 @@ def _fetch_tradingster_legacy(sym_code):
         return sym, []
 
 
+def _comm_retail_breakdown(leg_rows, invert):
+    """Commercial (hedgers) vs Non-Reportable (retail) bias, from the same
+    Tradingster Legacy rows already fetched for Source 2 -- CFTC Legacy
+    report's classic three-way split, just extracting fields we weren't
+    using before."""
+    if len(leg_rows) < 4:
+        return {"comm_net_now": None, "comm_net_1wk": None, "comm_bias": None,
+                "retail_net_now": None, "retail_net_1wk": None, "retail_bias": None}
+
+    comm_nets = [
+        int(r.get("Commercial_Positions_Long_All") or 0) - int(r.get("Commercial_Positions_Short_All") or 0)
+        for r in leg_rows
+    ]
+    retail_nets = [
+        int(r.get("Nonreportable_Positions_Long_All") or 0) - int(r.get("Nonreportable_Positions_Short_All") or 0)
+        for r in leg_rows
+    ]
+    comm_idxs = _cot_index(comm_nets)
+    retail_idxs = _cot_index(retail_nets)
+    if invert:
+        comm_idxs = [100 - i for i in comm_idxs]
+        retail_idxs = [100 - i for i in retail_idxs]
+
+    return {
+        "comm_net_now": comm_nets[-1], "comm_net_1wk": comm_nets[-2], "comm_bias": _bias(comm_idxs[-1]),
+        "retail_net_now": retail_nets[-1], "retail_net_1wk": retail_nets[-2], "retail_bias": _bias(retail_idxs[-1]),
+    }
+
+
+def _fetch_oanda_position_book(pair):
+    req = urllib.request.Request(
+        f"https://api-fxpractice.oanda.com/v3/instruments/{pair}/positionBook",
+        headers={"Authorization": f"Bearer {OANDA_API_TOKEN}"},
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.loads(r.read())
+    buckets = data["positionBook"]["buckets"]
+    long_pct = sum(float(b["longCountPercent"]) for b in buckets)
+    short_pct = sum(float(b["shortCountPercent"]) for b in buckets)
+    return long_pct, short_pct
+
+
+def _fetch_oanda_all():
+    """Returns {sym: (long_pct, short_pct)} for EUR/GBP/JPY/NZD, plus a
+    synthesized USD (average of the "USD side" of the four pairs)."""
+    out = {}
+    for sym, (pair, invert) in _OANDA_FOREX_PAIRS.items():
+        try:
+            long_pct, short_pct = _fetch_oanda_position_book(pair)
+            if invert:
+                long_pct, short_pct = short_pct, long_pct
+            out[sym] = (long_pct, short_pct)
+        except Exception as e:
+            print(f"[cot_fetch] OANDA position book failed {sym} ({pair}): {e}", flush=True)
+
+    usd_sides = []
+    for sym, (pair, invert) in _OANDA_FOREX_PAIRS.items():
+        if sym not in out:
+            continue
+        long_pct, short_pct = out[sym]
+        # "USD side" of each pair: JPY's pair already has USD as the base once un-inverted,
+        # the rest have USD as the quote currency, so USD-long = the pair's short side.
+        usd_sides.append(long_pct if invert else short_pct)
+    if usd_sides:
+        out["USD"] = (sum(usd_sides) / len(usd_sides), 100 - (sum(usd_sides) / len(usd_sides)))
+
+    return out
+
+
+def _fetch_fear_greed():
+    data = _cot_get("https://api.alternative.me/fng/?limit=1")
+    row = data["data"][0]
+    return int(row["value"]), row["value_classification"]
+
+
+def _fetch_eia_crude_stocks():
+    url = (
+        "https://api.eia.gov/v2/petroleum/stoc/wstk/data/"
+        f"?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value"
+        "&facets[product][]=EPC0&facets[process][]=SAX&facets[duoarea][]=NUS"
+        "&sort[0][column]=period&sort[0][direction]=desc&length=3"
+    )
+    data = _cot_get(url)
+    rows = data["response"]["data"]
+    now = int(rows[0]["value"])
+    prev = int(rows[1]["value"])
+    return now, prev
+
+
 def build_payload():
     results = []
 
@@ -156,6 +291,24 @@ def build_payload():
     with concurrent.futures.ThreadPoolExecutor(max_workers=13) as ex:
         for sym, rows in ex.map(_fetch_tradingster_legacy, all_codes.items()):
             leg2[sym] = rows
+
+    try:
+        oanda_pos = _fetch_oanda_all()
+    except Exception as e:
+        print(f"[cot_fetch] OANDA position book fetch failed entirely: {e}", flush=True)
+        oanda_pos = {}
+
+    try:
+        fng_value, fng_class = _fetch_fear_greed()
+    except Exception as e:
+        print(f"[cot_fetch] Fear & Greed fetch failed: {e}", flush=True)
+        fng_value, fng_class = None, None
+
+    try:
+        eia_now, eia_prev = _fetch_eia_crude_stocks()
+    except Exception as e:
+        print(f"[cot_fetch] EIA crude stocks fetch failed: {e}", flush=True)
+        eia_now, eia_prev = None, None
 
     for sym, code in _COT_TFF.items():
         raw_code = code.replace("%2B", "+")
@@ -211,7 +364,7 @@ def build_payload():
             leg_net_now = nc_nets[-1]
             leg_net_1wk = nc_nets[-2]
 
-        results.append({
+        item = {
             "sym": sym, "date": latest_date,
             "net_now": lev_nets[-1], "net_1wk": lev_nets[-2],
             "net_2wk": lev_nets[-3] if len(lev_nets) >= 3 else None,
@@ -224,7 +377,20 @@ def build_payload():
             "leg_lev": leg_lev,
             "leg_net_now": leg_net_now, "leg_net_1wk": leg_net_1wk,
             "alignment": _alignment(bias1, leg_bias1),
-        })
+        }
+        item.update(_comm_retail_breakdown(leg_rows, invert))
+
+        if sym in oanda_pos:
+            long_pct, short_pct = oanda_pos[sym]
+            item["oanda_long_pct"] = round(long_pct, 1)
+            item["oanda_short_pct"] = round(short_pct, 1)
+            item["oanda_bias"] = _bias(long_pct)
+
+        if sym == "BTC" and fng_value is not None:
+            item["fng_value"] = fng_value
+            item["fng_classification"] = fng_class
+
+        results.append(item)
 
     for sym, code in _COT_DISAGG.items():
         rows = sorted(
@@ -268,7 +434,7 @@ def build_payload():
             leg_net_now = nc_nets[-1]
             leg_net_1wk = nc_nets[-2]
 
-        results.append({
+        item = {
             "sym": sym, "date": latest_date,
             "net_now": mm_nets[-1], "net_1wk": mm_nets[-2],
             "net_2wk": mm_nets[-3] if len(mm_nets) >= 3 else None,
@@ -281,7 +447,16 @@ def build_payload():
             "leg_lev": leg_lev,
             "leg_net_now": leg_net_now, "leg_net_1wk": leg_net_1wk,
             "alignment": _alignment(bias1, leg_bias1),
-        })
+        }
+        item.update(_comm_retail_breakdown(leg_rows, invert=False))
+
+        if sym == "CRUDE" and eia_now is not None:
+            change = eia_now - eia_prev
+            item["eia_stocks_now"] = eia_now
+            item["eia_stocks_1wk"] = eia_prev
+            item["eia_bias"] = "Bullish" if change < -2000 else "Bearish" if change > 2000 else "Neutral"
+
+        results.append(item)
 
     latest = max((r["date"] for r in results if r.get("date")), default="")
     return {"updated": latest, "instruments": results}
