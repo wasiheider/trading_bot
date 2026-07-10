@@ -2,8 +2,20 @@
 """
 COT Weekly Breakdown Generator
 Run after CFTC publishes (typically Friday afternoon ET).
-Sources: CFTC TFF / Disaggregated + Tradingster Legacy Non-Commercial.
+Sources: CFTC TFF / Disaggregated + Tradingster Legacy Non-Commercial,
+plus (added 2026-07-10) the Commercial/Non-Reportable (Retail) breakdown
+from the same Tradingster data, and genuine third-source independent
+checks where a free one exists: OANDA position book (forex), Crypto
+Fear & Greed Index (BTC), EIA weekly crude stocks (Oil). See
+cot_fetch.py's docstring for the full reasoning on why Source 1/Source 2
+aren't truly independent of each other, and why NQ/ES/US30/Gold/Silver
+have no viable free third source.
+
 Produces a dated PDF in the same directory.
+
+Requires environment variables:
+  OANDA_API_TOKEN -- same OANDA demo token oanda.py uses
+  EIA_API_KEY     -- free key from eia.gov/opendata/register.php
 
 Usage:
     python cot_generate.py
@@ -49,6 +61,18 @@ SECTION_MAP = {
 }
 OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+OANDA_API_TOKEN = os.environ["OANDA_API_TOKEN"]
+EIA_API_KEY = os.environ["EIA_API_KEY"]
+
+# Bot COT symbol -> OANDA instrument, and whether the pair's "long" side
+# means long the *quote* currency (JPY) rather than the base (need to invert).
+OANDA_FOREX_PAIRS = {
+    "EUR": ("EUR_USD", False),
+    "GBP": ("GBP_USD", False),
+    "JPY": ("USD_JPY", True),   # long USD_JPY = long USD / short JPY
+    "NZD": ("NZD_USD", False),
+}
+
 # ── Fetch ─────────────────────────────────────────────────────────────────────
 
 def fetch(url):
@@ -75,6 +99,57 @@ def fetch_tradingster(sym):
                      f"{TRADINGSTER_CODES[sym]}")
     except Exception:
         return []
+
+def fetch_oanda_position_book(pair):
+    req = urllib.request.Request(
+        f"https://api-fxpractice.oanda.com/v3/instruments/{pair}/positionBook",
+        headers={"Authorization": f"Bearer {OANDA_API_TOKEN}"},
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.loads(r.read())
+    buckets = data["positionBook"]["buckets"]
+    long_pct = sum(float(b["longCountPercent"]) for b in buckets)
+    short_pct = sum(float(b["shortCountPercent"]) for b in buckets)
+    return long_pct, short_pct
+
+def fetch_oanda_all():
+    """Returns {sym: (long_pct, short_pct)} for EUR/GBP/JPY/NZD, plus a
+    synthesized USD (average of the "USD side" of the four pairs)."""
+    out = {}
+    for sym, (pair, invert) in OANDA_FOREX_PAIRS.items():
+        try:
+            long_pct, short_pct = fetch_oanda_position_book(pair)
+            if invert:
+                long_pct, short_pct = short_pct, long_pct
+            out[sym] = (long_pct, short_pct)
+        except Exception as e:
+            print(f"  OANDA position book failed {sym} ({pair}): {e}")
+
+    usd_sides = []
+    for sym, (pair, invert) in OANDA_FOREX_PAIRS.items():
+        if sym not in out:
+            continue
+        long_pct, short_pct = out[sym]
+        usd_sides.append(long_pct if invert else short_pct)
+    if usd_sides:
+        out["USD"] = (sum(usd_sides) / len(usd_sides), 100 - (sum(usd_sides) / len(usd_sides)))
+    return out
+
+def fetch_fear_greed():
+    data = fetch("https://api.alternative.me/fng/?limit=1")
+    row = data["data"][0]
+    return int(row["value"]), row["value_classification"]
+
+def fetch_eia_crude_stocks():
+    url = (
+        "https://api.eia.gov/v2/petroleum/stoc/wstk/data/"
+        f"?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value"
+        "&facets[product][]=EPC0&facets[process][]=SAX&facets[duoarea][]=NUS"
+        "&sort[0][column]=period&sort[0][direction]=desc&length=3"
+    )
+    data = fetch(url)
+    rows = data["response"]["data"]
+    return int(rows[0]["value"]), int(rows[1]["value"])
 
 # ── Compute ───────────────────────────────────────────────────────────────────
 
@@ -127,6 +202,23 @@ def alignment(b1, b2):
         return "CONFIRMED"
     return "DIVERGE" if v[b1] != v[b2] else "NEUTRAL"
 
+def comm_retail_breakdown(leg_rows, is_inv):
+    """Commercial (hedgers) vs Non-Reportable (retail) -- CFTC Legacy 3-way
+    split, from the same Tradingster rows already fetched for Source 2."""
+    if len(leg_rows) < 5:
+        return {"comm_idx": "?", "comm_bias": "?", "retail_idx": "?", "retail_bias": "?"}
+    comm_nets = [int(r["Commercial_Positions_Long_All"]) - int(r["Commercial_Positions_Short_All"]) for r in leg_rows]
+    retail_nets = [int(r["Nonreportable_Positions_Long_All"]) - int(r["Nonreportable_Positions_Short_All"]) for r in leg_rows]
+    comm_idxs = cot_index(comm_nets)
+    retail_idxs = cot_index(retail_nets)
+    if is_inv:
+        comm_idxs = [100 - i for i in comm_idxs]
+        retail_idxs = [100 - i for i in retail_idxs]
+    return {
+        "comm_idx": comm_idxs[-1], "comm_bias": bias_label(comm_idxs[-1]),
+        "retail_idx": retail_idxs[-1], "retail_bias": bias_label(retail_idxs[-1]),
+    }
+
 # ── Narratives ────────────────────────────────────────────────────────────────
 
 def _net_str(n): return f"{'net long' if n > 0 else 'net short'} {abs(n):,}"
@@ -166,7 +258,30 @@ def trend_text(sym, d):
         else:
             parts.append(f"S2 NonComm net {s2n[0]:+,} -> {s2n[-1]:+,} ({s2_chg:+,}). "
                          f"COT Index {d['s2_idx']} ({d['s2_bias']}).")
+
+    if d.get("comm_bias", "?") != "?":
+        parts.append(f"Commercial (hedgers) IDX {d['comm_idx']} ({d['comm_bias']}), "
+                     f"Retail (non-reportable) IDX {d['retail_idx']} ({d['retail_bias']}).")
+
     return " ".join(parts)
+
+
+def third_source_text(sym, d):
+    """Genuinely independent, non-CFTC third check -- only present for
+    forex (OANDA), BTC (Fear & Greed), and CRUDE (EIA). None for
+    indices or Gold/Silver -- no viable free source exists, see
+    cot_fetch.py docstring."""
+    if d.get("oanda_bias"):
+        return (f"OANDA clients: {d['oanda_long_pct']:.1f}% long / {d['oanda_short_pct']:.1f}% short "
+                f"({d['oanda_bias']}) -- independent broker order book, not CFTC data.")
+    if d.get("fng_value") is not None:
+        return (f"Crypto Fear & Greed Index: {d['fng_value']}/100 ({d['fng_classification']}) -- "
+                f"independent retail/market sentiment gauge, not CFTC data.")
+    if d.get("eia_bias"):
+        chg = d["eia_now"] - d["eia_prev"]
+        return (f"EIA weekly crude stocks: {chg:+,} thousand barrels ({d['eia_bias']}) -- "
+                f"real supply/demand fundamentals, not positioning data.")
+    return None
 
 
 def analysis_text(sym, d):
@@ -215,6 +330,22 @@ def analysis_text(sym, d):
     if has2 and len(s2n) >= 2 and (s2n[-2] > 0) != (s2n[-1] > 0):
         direction = "net long" if s2n[-1] > 0 else "net short"
         parts.append(f"NonComm crossed to {direction} last week -- notable shift in broader spec group.")
+
+    # Commercial/Retail divergence from the crowd (e.g. retail one-sided while commercials aren't)
+    comm_b, retail_b = d.get("comm_bias", "?"), d.get("retail_bias", "?")
+    if comm_b != "?" and retail_b != "?" and comm_b != retail_b:
+        parts.append(f"Commercials ({comm_b}) and Retail ({retail_b}) disagree -- worth noting who's "
+                     f"on which side of this move.")
+
+    # Third-source vs. Source 1 divergence (institutional vs. independent retail/fundamental read)
+    ts_bias = d.get("oanda_bias") or (
+        ("Bearish" if isinstance(d.get("fng_value"), int) and d["fng_value"] <= 25
+         else "Bullish" if isinstance(d.get("fng_value"), int) and d["fng_value"] >= 75
+         else None) if d.get("fng_value") is not None else None
+    ) or d.get("eia_bias")
+    if ts_bias and s1b != "Neutral" and ts_bias != "?" and ts_bias != s1b:
+        parts.append(f"Third-source check ({ts_bias}) diverges from Source 1 ({s1b}) -- "
+                     f"institutional COT positioning and the independent check disagree.")
 
     return " ".join(parts) or "Insufficient data for clear analysis."
 
@@ -366,13 +497,18 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     today_str = today.strftime("%B %d, %Y").replace(" 0", " ")
     report_str   = datetime.strptime(latest_report_date, "%Y-%m-%d").strftime("%B %d, %Y").replace(" 0"," ")
 
-    story.append(Paragraph("COT DUAL-SOURCE BREAKDOWN", sty["H1"]))
+    story.append(Paragraph("COT DUAL-SOURCE + COMMERCIAL/RETAIL BREAKDOWN", sty["H1"]))
     story.append(Paragraph(
         f"Data: Week Ending {report_str}  |  Analysis: {today_str}", sty["META"]))
     story.append(Paragraph(
         "<b>Source 1:</b> CFTC TFF -- Leveraged Funds (hedge funds/CTAs) and Asset Managers; "
         "Disaggregated Managed Money for GOLD/SILVER/CRUDE.  "
         "<b>Source 2:</b> Tradingster Legacy Non-Commercial (broader spec group = Lev Fund + Asset Mgr combined).  "
+        "<b>Commercial/Retail:</b> CFTC Legacy report's classic 3-way split (hedgers vs. large specs vs. small/retail "
+        "traders), same underlying Tradingster data as Source 2.  "
+        "<b>Third Source:</b> a genuinely independent, non-CFTC check where a free one exists -- OANDA position "
+        "book (forex), Crypto Fear &amp; Greed Index (BTC), EIA weekly crude stocks (Oil). No free independent source "
+        "exists for indices or Gold/Silver.  "
         "<b>COT Index:</b> Larry Williams percentile over full history -- Bullish >=60 | Bearish <=40 | Neutral 40-60.",
         sty["META"]))
     story.append(HRFlowable(width=W, thickness=1.5, color=colors.HexColor("#1a1a2e")))
@@ -415,6 +551,68 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     t2 = Table(rows2, colWidths=cw2, repeatRows=1)
     t2.setStyle(TableStyle(ts2))
     story.append(t2)
+    story.append(Spacer(1, 8))
+
+    # ─ Commercial / Retail breakdown table (new 2026-07-10)
+    story.append(Paragraph(
+        "Commercial (Hedgers) vs. Non-Reportable (Retail) -- CFTC Legacy 3-Way Split", sty["H2"]))
+    hdr3 = [ph(h) for h in ["SYM","COMM IDX","COMM BIAS","RETAIL IDX","RETAIL BIAS","COMM vs RETAIL"]]
+    cw3  = [16*mm,20*mm,25*mm,20*mm,25*mm,50*mm]
+    ts3  = list(BASE_TS)
+    rows3 = [hdr3]
+    for i, sym in enumerate(ORDER):
+        if sym not in result: continue
+        d = result[sym]
+        comm_b, retail_b = d.get("comm_bias","?"), d.get("retail_bias","?")
+        agree = ("Agree" if comm_b == retail_b and comm_b != "?"
+                 else "Diverge" if comm_b != "?" and retail_b != "?" and comm_b != retail_b
+                 else "?")
+        rows3.append([ps_(sym), pd_(d.get("comm_idx","?")), pd_(comm_b),
+                     pd_(d.get("retail_idx","?")), pd_(retail_b), pl_(agree)])
+        ts3.append(("BACKGROUND",(2,i+1),(2,i+1), bc(comm_b)))
+        ts3.append(("BACKGROUND",(4,i+1),(4,i+1), bc(retail_b)))
+    t3 = Table(rows3, colWidths=cw3, repeatRows=1)
+    t3.setStyle(TableStyle(ts3))
+    story.append(t3)
+    story.append(Spacer(1, 8))
+
+    # ─ Third-source independent check table (new 2026-07-10)
+    story.append(Paragraph(
+        "Third-Source Independent Check (non-CFTC -- forex/BTC/Oil only, see note above)", sty["H2"]))
+    hdr4 = [ph(h) for h in ["SYM","SOURCE","READING","BIAS"]]
+    cw4  = [16*mm,35*mm,70*mm,35*mm]
+    ts4  = list(BASE_TS)
+    rows4 = [hdr4]
+    has_third = False
+    for i, sym in enumerate(ORDER):
+        if sym not in result: continue
+        d = result[sym]
+        if d.get("oanda_bias"):
+            has_third = True
+            rows4.append([ps_(sym), pl_("OANDA Position Book"),
+                         pl_(f"{d['oanda_long_pct']:.1f}% Long / {d['oanda_short_pct']:.1f}% Short"),
+                         pd_(d["oanda_bias"])])
+            ts4.append(("BACKGROUND",(3,len(rows4)-1),(3,len(rows4)-1), bc(d["oanda_bias"])))
+        elif d.get("fng_value") is not None:
+            has_third = True
+            fbias = "Bearish" if d["fng_value"] <= 25 else "Bullish" if d["fng_value"] >= 75 else "Neutral"
+            rows4.append([ps_(sym), pl_("Crypto Fear & Greed"),
+                         pl_(f"{d['fng_value']}/100 ({d['fng_classification']})"),
+                         pd_(fbias)])
+            ts4.append(("BACKGROUND",(3,len(rows4)-1),(3,len(rows4)-1), bc(fbias)))
+        elif d.get("eia_bias"):
+            has_third = True
+            chg = d["eia_now"] - d["eia_prev"]
+            rows4.append([ps_(sym), pl_("EIA Weekly Crude Stocks"),
+                         pl_(f"{chg:+,} thousand bbl"),
+                         pd_(d["eia_bias"])])
+            ts4.append(("BACKGROUND",(3,len(rows4)-1),(3,len(rows4)-1), bc(d["eia_bias"])))
+    if has_third:
+        t4 = Table(rows4, colWidths=cw4, repeatRows=1)
+        t4.setStyle(TableStyle(ts4))
+        story.append(t4)
+    else:
+        story.append(Paragraph("No third-source data available this run.", sty["META"]))
     story.append(Spacer(1, 8))
 
     # ─ Narratives
@@ -473,6 +671,9 @@ def build_pdf(result, today, next_date_str, latest_report_date):
         story.append(ht)
         story.append(Paragraph("<b>4-Week Trend:</b>  " + trend_text(sym, d), sty["BODY"]))
         story.append(Paragraph("<b>Analysis:</b>  " + analysis_text(sym, d), sty["BODY"]))
+        ts_text = third_source_text(sym, d)
+        if ts_text:
+            story.append(Paragraph("<b>Third-Source Check:</b>  " + ts_text, sty["BODY"]))
         story.append(Paragraph(f"This week ({today.strftime('%b %d').replace(' 0', ' ')}):",
                                sty["LBL"]))
         story.append(Paragraph(this_week_text(sym, d), sty["BODY"]))
@@ -522,6 +723,12 @@ def build_pdf(result, today, next_date_str, latest_report_date):
                       and result[sym]["s1_bias"]=="Bearish"]
     diverge = [sym for sym in ORDER
                if sym in result and result[sym].get("alignment")=="DIVERGE"]
+    ts_diverge = [sym for sym in ORDER
+                  if sym in result and result[sym].get("s1_bias") != "Neutral"
+                  and (result[sym].get("oanda_bias") or result[sym].get("eia_bias")
+                       or result[sym].get("fng_value") is not None)
+                  and third_source_text(sym, result[sym])
+                  and "diverge" in analysis_text(sym, result[sym]).lower()]
 
     themes = []
     if extremes:
@@ -536,6 +743,9 @@ def build_pdf(result, today, next_date_str, latest_report_date):
         themes.append(f"<b>CONFIRMED Bearish:</b> {', '.join(confirmed_bear)}.")
     if diverge:
         themes.append(f"<b>Diverging sources (watch closely):</b> {', '.join(diverge)}.")
+    if ts_diverge:
+        themes.append(f"<b>Institutional vs. independent third-source divergence:</b> {', '.join(ts_diverge)} -- "
+                      f"COT positioning disagrees with the non-CFTC check.")
 
     if themes:
         story.append(Paragraph(
@@ -568,6 +778,26 @@ def main():
         r = fetch_tradingster(sym)
         leg_raw[sym] = r if isinstance(r, list) else []
         print(f"  {sym}: {len(leg_raw[sym])} rows")
+
+    print("Fetching OANDA position book (forex)...")
+    oanda_pos = fetch_oanda_all()
+    print(f"  {len(oanda_pos)} pairs")
+
+    print("Fetching Crypto Fear & Greed Index (BTC)...")
+    try:
+        fng_value, fng_class = fetch_fear_greed()
+        print(f"  {fng_value}/100 ({fng_class})")
+    except Exception as e:
+        print(f"  failed: {e}")
+        fng_value, fng_class = None, None
+
+    print("Fetching EIA weekly crude stocks (Oil)...")
+    try:
+        eia_now, eia_prev = fetch_eia_crude_stocks()
+        print(f"  now={eia_now} prev={eia_prev}")
+    except Exception as e:
+        print(f"  failed: {e}")
+        eia_now, eia_prev = None, None
 
     # ── Process Source 1 (CFTC) ───────────────────────────────────────────────
     result = {}
@@ -623,13 +853,14 @@ def main():
             "mm_sig":  "--",
         }
 
-    # ── Process Source 2 (Tradingster) ────────────────────────────────────────
+    # ── Process Source 2 (Tradingster) + Commercial/Retail ───────────────────
     for sym in ORDER:
         if sym not in result: continue
         is_inv = sym in INVERT
         lr = leg_raw.get(sym, [])
         if len(lr) < 5:
             result[sym].update({"s2_nets5":["?"]*5,"s2_idx":"?","s2_bias":"?","alignment":"?"})
+            result[sym].update(comm_retail_breakdown(lr, is_inv))
             continue
 
         all_nets = [int(r["Noncommercial_Positions_Long_All"]) - int(r["Noncommercial_Positions_Short_All"])
@@ -641,6 +872,24 @@ def main():
         result[sym]["s2_idx"]   = idxs[-1]
         result[sym]["s2_bias"]  = bias_label(idxs[-1])
         result[sym]["alignment"]= alignment(result[sym]["s1_bias"], result[sym]["s2_bias"])
+        result[sym].update(comm_retail_breakdown(lr, is_inv))
+
+    # ── Third-source checks ───────────────────────────────────────────────────
+    for sym, (long_pct, short_pct) in oanda_pos.items():
+        if sym in result:
+            result[sym]["oanda_long_pct"] = long_pct
+            result[sym]["oanda_short_pct"] = short_pct
+            result[sym]["oanda_bias"] = bias_label(long_pct)
+
+    if "BTC" in result and fng_value is not None:
+        result["BTC"]["fng_value"] = fng_value
+        result["BTC"]["fng_classification"] = fng_class
+
+    if "CRUDE" in result and eia_now is not None:
+        change = eia_now - eia_prev
+        result["CRUDE"]["eia_now"] = eia_now
+        result["CRUDE"]["eia_prev"] = eia_prev
+        result["CRUDE"]["eia_bias"] = "Bullish" if change < -2000 else "Bearish" if change > 2000 else "Neutral"
 
     # ── Dates ─────────────────────────────────────────────────────────────────
     latest_report_date = result[ORDER[0]]["dates"][-1]  # "06-16"
