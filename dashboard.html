@@ -21,7 +21,7 @@
   --mono:'JetBrains Mono',monospace;--head:'Syne',sans-serif;
 }
 
-html,body{height:100%;background:var(--bg0);color:var(--t1);font-family:var(--mono);font-size:12px;overflow-x:hidden}
+html,body{height:100%;background:var(--bg0);color:var(--t1);font-family:var(--mono);font-size:13px;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none;z-index:9999}
 
 /* TOPBAR */
@@ -43,23 +43,34 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .live-badge{display:inline-flex;align-items:center;gap:4px;font-size:8px;color:var(--g);letter-spacing:1px}
 .live-dot{width:5px;height:5px;border-radius:50%;background:var(--g);animation:blink 1.5s infinite}
 
-/* LAYOUT */
-.layout{display:grid;grid-template-columns:2fr 4fr 2fr 2fr;min-height:calc(100vh - 52px);gap:0}
-.col{border-right:1px solid var(--bo);padding:12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
-.col:last-child{border-right:none}
+/* PAGE — sections stacked vertically, each a distinct part of the page */
+.page{padding:16px;display:flex;flex-direction:column;gap:28px;max-width:1800px;margin:0 auto}
+
+.psection{display:flex;flex-direction:column;gap:12px}
+.psec-hdr{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:2px solid var(--bo2)}
+.psec-icon{font-size:18px}
+.psec-title{font-family:var(--head);font-size:16px;font-weight:800;letter-spacing:1.5px;color:var(--t1);text-transform:uppercase}
+.psec-sub{font-size:10px;color:var(--t3);letter-spacing:.5px;margin-left:auto}
+
+/* Sub-grids within a section */
+.tsec-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;align-items:start}
+.tcol{display:flex;flex-direction:column;gap:14px}
+.dates-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px}
+@media (max-width:1400px){.tsec-grid{grid-template-columns:1fr 1fr}.dates-grid{grid-template-columns:1fr 1fr}}
+@media (max-width:900px){.tsec-grid{grid-template-columns:1fr}.dates-grid{grid-template-columns:1fr}}
 
 /* CARDS */
-.card{background:var(--bg1);border:1px solid var(--bo);border-radius:4px;padding:10px 12px}
-.ct{font-size:8px;letter-spacing:2.5px;text-transform:uppercase;color:var(--t3);font-weight:700;margin-bottom:8px;font-family:var(--head)}
+.card{background:var(--bg1);border:1px solid var(--bo);border-radius:6px;padding:14px 16px}
+.ct{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--t2);font-weight:700;margin-bottom:10px;font-family:var(--head)}
 
 /* ROWS */
-.row{display:flex;justify-content:space-between;align-items:center;padding:3.5px 0;border-bottom:1px solid var(--bo)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--bo)}
 .row:last-child{border-bottom:none}
-.rl{color:var(--t2);font-size:10px}
-.rv{font-size:10px;font-weight:600}
+.rl{color:var(--t2);font-size:12px}
+.rv{font-size:12px;font-weight:600}
 
 /* BADGES */
-.bd2{padding:1px 7px;border-radius:2px;font-size:8px;font-weight:800;letter-spacing:.8px}
+.bd2{padding:2px 8px;border-radius:3px;font-size:10px;font-weight:800;letter-spacing:.8px}
 .bg2{background:var(--gd);color:var(--g);border:1px solid var(--gb)}
 .br2{background:var(--rd);color:var(--r);border:1px solid var(--rb)}
 .ba2{background:var(--ad);color:var(--a);border:1px solid var(--ab)}
@@ -67,76 +78,78 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .bdim{background:rgba(255,255,255,.05);color:var(--t2);border:1px solid var(--bo2)}
 
 /* STAT GRID */
-.sg{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px}
-.sb{background:var(--bg2);border-radius:3px;padding:7px 9px}
-.sl2{font-size:7px;letter-spacing:1.5px;color:var(--t3);text-transform:uppercase;margin-bottom:3px}
-.sv2{font-size:16px;font-weight:700;letter-spacing:-1px}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.sb{background:var(--bg2);border-radius:4px;padding:9px 11px}
+.sl2{font-size:9px;letter-spacing:1.5px;color:var(--t3);text-transform:uppercase;margin-bottom:4px}
+.sv2{font-size:18px;font-weight:700;letter-spacing:-.5px}
 
 /* SIGNAL TABLE */
 .tbl{width:100%;border-collapse:collapse;table-layout:fixed}
-.tbl th{font-size:7px;letter-spacing:1.5px;color:var(--t3);padding:0 5px 6px;text-align:left;font-weight:700;font-family:var(--head)}
-.tbl td{padding:6px 5px;border-top:1px solid var(--bo);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl th{font-size:10px;letter-spacing:1px;color:var(--t3);padding:0 6px 8px;text-align:left;font-weight:700;font-family:var(--head)}
+.tbl td{padding:8px 6px;border-top:1px solid var(--bo);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tbl tr:hover td{background:var(--bg2)}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;color:var(--t3);gap:5px;text-align:center}
 .empty-icon{font-size:22px;margin-bottom:4px}
 
 /* CHART */
-.chart-wrap{position:relative;width:100%;height:140px}
+.chart-wrap{position:relative;width:100%;height:180px}
 
 /* INFRA */
-.ir{display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--bo)}
+.ir{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bo)}
 .ir:last-child{border-bottom:none}
-.il{display:flex;align-items:center;gap:6px;color:var(--t2);font-size:10px}
-.dlv{width:5px;height:5px;border-radius:50%;background:var(--g);box-shadow:0 0 4px var(--g)}
+.il{display:flex;align-items:center;gap:6px;color:var(--t2);font-size:12px}
+.dlv{width:6px;height:6px;border-radius:50%;background:var(--g);box-shadow:0 0 4px var(--g)}
 
 /* NEWS */
-.ni{padding:7px 0;border-bottom:1px solid var(--bo)}
+.ni{padding:10px 0;border-bottom:1px solid var(--bo)}
 .ni:last-child{border-bottom:none}
-.ntime{font-size:8px;color:var(--t3);letter-spacing:.5px;margin-bottom:3px}
-.ntitle{font-size:10px;color:var(--t1);line-height:1.4;margin-bottom:3px;font-weight:600}
-.ntags{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:2px}
-.ntag{font-size:7px;padding:1px 5px;border-radius:2px;letter-spacing:.5px;font-weight:800}
+.ntime{font-size:10px;color:var(--t3);letter-spacing:.5px;margin-bottom:4px}
+.ntitle{font-size:13px;color:var(--t1);line-height:1.4;margin-bottom:5px;font-weight:600}
+.ntags{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:3px}
+.ntag{font-size:9px;padding:2px 6px;border-radius:3px;letter-spacing:.5px;font-weight:800}
 .nhigh{background:rgba(255,68,68,.15);color:#ff8888;border:1px solid rgba(255,68,68,.3)}
 .nmed{background:rgba(245,166,35,.13);color:var(--a);border:1px solid rgba(245,166,35,.25)}
 .nlow{background:var(--bd);color:var(--b);border:1px solid var(--bb)}
-.ndata{font-size:8px;color:var(--t3);margin-top:2px}
+.ndata{font-size:10px;color:var(--t3);margin-top:3px}
 .ndata span{color:var(--t2);font-weight:600}
 
 /* COT */
-.cg{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-.cc{background:var(--bg2);border-radius:3px;padding:6px 8px}
-.csym{font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700}
-.cpop{font-size:7px;color:var(--t3)}
-.cbias{font-size:11px;font-weight:700;margin:2px 0}
+.cg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media (max-width:1400px){.cg{grid-template-columns:1fr 1fr}}
+@media (max-width:800px){.cg{grid-template-columns:1fr}}
+.cc{background:var(--bg2);border-radius:5px;padding:11px 13px}
+.csym{font-size:12px;letter-spacing:1px;color:var(--t2);font-weight:700}
+.cpop{font-size:10px;color:var(--t3)}
+.cbias{font-size:14px;font-weight:700;margin:3px 0}
 .cbull{color:var(--g)}.cbear{color:var(--r)}.cneut{color:var(--t2)}
-.ctrend{font-size:9px;margin-left:4px}
-.cconf{font-size:8px;color:var(--t3);margin-bottom:3px}
-.cbg{background:var(--bg3);border-radius:1px;height:3px;position:relative}
-.cbf{height:3px;border-radius:1px}
-.cidx-marker{position:absolute;top:-1px;width:2px;height:5px;border-radius:1px;background:var(--t2);transform:translateX(-50%)}
+.ctrend{font-size:11px;margin-left:5px}
+.cconf{font-size:10px;color:var(--t3);margin-bottom:4px}
+.cbg{background:var(--bg3);border-radius:1px;height:4px;position:relative}
+.cbf{height:4px;border-radius:1px}
+.cidx-marker{position:absolute;top:-1px;width:2px;height:6px;border-radius:1px;background:var(--t2);transform:translateX(-50%)}
 
 /* FOMC */
-.fcount{background:var(--bg2);border-radius:3px;padding:10px;text-align:center}
-.fc-lbl{font-size:7px;letter-spacing:2px;color:var(--t3);margin-bottom:4px;text-transform:uppercase}
-.fc-val{font-size:24px;font-weight:700;color:var(--a);letter-spacing:-2px}
-.fc-sub{font-size:8px;color:var(--t3);margin-top:3px}
+.fcount{background:var(--bg2);border-radius:4px;padding:12px;text-align:center}
+.fc-lbl{font-size:9px;letter-spacing:2px;color:var(--t3);margin-bottom:5px;text-transform:uppercase}
+.fc-val{font-size:26px;font-weight:700;color:var(--a);letter-spacing:-1px}
+.fc-sub{font-size:10px;color:var(--t3);margin-top:4px}
 
 /* SCHED */
-.sr2{display:flex;justify-content:space-between;align-items:center;padding:3.5px 0;border-bottom:1px solid var(--bo)}
+.sr2{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--bo)}
 .sr2:last-child{border-bottom:none}
-.sl3{color:var(--t2);font-size:9px;display:flex;align-items:center;gap:4px}
-.st{font-size:9px;text-align:right;line-height:1.5}
-.sd{font-size:7px;color:var(--t3)}
+.sl3{color:var(--t2);font-size:11px;display:flex;align-items:center;gap:4px}
+.st{font-size:11px;text-align:right;line-height:1.5}
+.sd{font-size:9px;color:var(--t3)}
 
 /* TABS */
 .tabrow{display:flex;gap:1px;background:var(--bg2);border-radius:2px;padding:2px}
-.tab{flex:1;text-align:center;padding:4px;font-size:8px;letter-spacing:.5px;cursor:pointer;border-radius:1px;color:var(--t3);font-weight:700;transition:all .15s}
+.tab{flex:1;text-align:center;padding:5px;font-size:10px;letter-spacing:.5px;cursor:pointer;border-radius:2px;color:var(--t3);font-weight:700;transition:all .15s}
 .tab.act{background:var(--bg3);color:var(--t1)}
 
 /* EXECUTION BANNER */
-.exec-banner{background:var(--gd);border:1px solid var(--gb);border-radius:4px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
-.exec-mode{font-size:10px;font-weight:700;color:var(--g);letter-spacing:.5px}
-.exec-sub{font-size:8px;color:var(--t2);margin-top:2px}
+.exec-banner{background:var(--gd);border:1px solid var(--gb);border-radius:6px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+.exec-mode{font-size:12px;font-weight:700;color:var(--g);letter-spacing:.5px}
+.exec-sub{font-size:10px;color:var(--t2);margin-top:4px;line-height:1.5}
 
 @keyframes flash{0%{background:rgba(0,230,118,.15)}100%{background:transparent}}
 .signal-new{animation:flash .8s ease}
@@ -187,77 +200,19 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <div class="acct">
       <div class="acct-lbl">Paper Balance</div>
       <div class="acct-val" style="color:var(--g)" id="paper-bal">$100,000</div>
-      <div id="paper-unr-line" style="font-size:8px;color:var(--t3);text-align:right;margin-top:1px"></div>
+      <div id="paper-unr-line" style="font-size:10px;color:var(--t3);text-align:right;margin-top:2px"></div>
     </div>
     <div class="sep"></div>
     <span class="live-badge"><span class="live-dot"></span>LIVE</span>
   </div>
 </div>
 
-<!-- MAIN GRID -->
-<div class="layout">
+<!-- PAGE — sections stacked vertically -->
+<div class="page">
 
-<!-- COL 1: SYSTEM -->
-<div class="col">
-  <div class="card">
-    <div class="ct">System Health</div>
-    <div class="row"><span class="rl">Bot Status</span><span class="bd2" id="bot-status-badge">--</span></div>
-    <div class="row"><span class="rl">Mode</span><span class="bd2 ba2">PAPER</span></div>
-    <div class="row"><span class="rl">Railway State</span><span class="rv" style="color:var(--g)">Persistent</span></div>
-    <div class="row"><span class="rl">Last Updated</span><span class="rv" style="color:var(--t3)" id="last-update">--</span></div>
-  </div>
-
-  <div class="card">
-    <div class="ct">Paper Performance</div>
-    <div class="sg">
-      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl-side">$0</div></div>
-      <div class="sb"><div class="sl2">Win % All-Time</div><div class="sv2" style="color:var(--b)" id="paper-wr-side">0%</div></div>
-      <div class="sb"><div class="sl2">Signals</div><div class="sv2" id="paper-sigs-side">0</div></div>
-      <div class="sb"><div class="sl2">W / L All-Time</div><div class="sv2" id="paper-wl-side" style="font-size:12px">0 / 0</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="ct">Infrastructure</div>
-    <div class="ir"><div class="il"><div class="dlv" id="dot-railway"></div>Railway Cluster</div><span style="font-size:8px;color:var(--t3)" id="railway-status">connecting</span></div>
-    <div class="ir"><div class="il"><div class="dlv"></div>TradingView Webhook</div><span style="font-size:8px;color:var(--t3)">live</span></div>
-    <div class="ir"><div class="il"><div class="dlv"></div>Telegram Notifier</div><span style="font-size:8px;color:var(--t3)">live</span></div>
-    <div class="ir"><div class="il"><div class="dlv"></div>OANDA Demo</div><span style="font-size:8px;color:var(--g)">Forex execution</span></div>
-    <div class="ir"><div class="il"><div class="dlv"></div>Paper Account</div><span style="font-size:8px;color:var(--g)">$100k simulated</span></div>
-  </div>
-
-  <div class="card">
-    <div class="ct">Schedule &amp; Filters</div>
-    <div class="sr2"><span class="sl3">&#8635; Daily Reset</span><div class="st">00:00 CT<div class="sd">P&L + signal counters</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; ATR Filter</span><div class="st">15M ATR<div class="sd">&gt; 50-bar avg · min volatility</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; Range Armed</span><div class="st">Quality gate<div class="sd">touches ≥3 · mid-cross ≥3 · 1H swing</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">30% beyond<div class="sd">boundary breach = range reset</div></div></div>
-    <div class="sr2"><span class="sl3">&#9654; Max Positions</span><div class="st">5 open<div class="sd">one per instrument</div></div></div>
-    <div class="sr2"><span class="sl3">&#9825; Heartbeat</span><div class="st">Hourly<div class="sd">Railway keepalive</div></div></div>
-  </div>
-
-  <div class="card">
-    <div class="ct">Strategy v5 Architecture</div>
-    <div class="row"><span class="rl">Range High/Low</span><span class="rv" style="color:var(--b)">4H Pivot-anchored · locked until break</span></div>
-    <div class="row"><span class="rl">Range Mid</span><span class="rv" style="color:var(--t2)">(High + Low) / 2</span></div>
-    <div class="row"><span class="rl">Quality Gate</span><span class="rv" style="color:var(--a)">30M swing ph→pl→ph→pl / pl→ph→pl→ph · each leg ≥ 4 bars</span></div>
-    <div class="row"><span class="rl">+ Boundary Touches</span><span class="rv" style="color:var(--t2)">≥ 3 combined H+L · pivot H/L = 1+1 on lock</span></div>
-    <div class="row"><span class="rl">+ Mid Crosses</span><span class="rv" style="color:var(--t2)">≥ 3 · settled side by close</span></div>
-    <div class="row"><span class="rl" style="color:var(--t3)">Entry A — BOS</span><span class="rv"><span class="bd2 bdim">DISABLED</span></span></div>
-    <div class="row"><span class="rl" style="color:var(--t3)">Entry B — Wyckoff</span><span class="rv"><span class="bd2 bdim">DISABLED</span></span></div>
-    <div class="row"><span class="rl">Entry C — BOS+Div</span><span class="rv" style="color:#ffd600">BOS + RSI divergence · RSI 30–70 · blocked: USOIL / XAGUSD</span></div>
-    <div class="row"><span class="rl">Entry D — Mid Retest</span><span class="rv" style="color:#00b8b8">15M BOS near mid → retest → entry · blocked: GBPUSD / XAGUSD / USOIL / BTCUSD</span></div>
-    <div class="row"><span class="rl">Entry E — Box Break</span><span class="rv" style="color:#ff9800">NY 7–10am ET · 2+2 touches overnight · close beyond box = entry · SL = opposite wall · 1:1 TP full position · XAUUSD / XAGUSD / US500 / EURNZD / NZDUSD / USOIL</span></div>
-    <div class="row"><span class="rl">TP1 (50%)</span><span class="rv" style="color:var(--g)">1:1 RR · partial close → SL moves to entry (breakeven)</span></div>
-    <div class="row"><span class="rl">TP2 (50%)</span><span class="rv" style="color:var(--g)">1:3 RR · trail 0.5R behind peak → widens to 1R above 2R · full close</span></div>
-    <div class="row"><span class="rl">SL</span><span class="rv" style="color:var(--r)">15M swing + 1× ATR buffer</span></div>
-    <div class="row"><span class="rl">Risk / Trade</span><span class="rv">$500 all instruments · Min R:R 1.5</span></div>
-    <div class="row"><span class="rl">Range Reset</span><span class="rv" style="color:var(--t2)">Price breaks 30% beyond boundary</span></div>
-  </div>
-</div>
-
-<!-- COL 2: PAPER TRADING PANEL -->
-<div class="col">
+<!-- ══════════════════ SECTION 1: TRADING DETAILS ══════════════════ -->
+<section class="psection">
+  <div class="psec-hdr"><span class="psec-icon">📊</span><span class="psec-title">Trading Details</span><span class="psec-sub">System · Account · Signals · History · Strategy</span></div>
 
   <!-- Execution banner -->
   <div class="exec-banner">
@@ -268,167 +223,235 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <span class="bd2 bg2">PAPER</span>
   </div>
 
-  <!-- Performance stats -->
-  <div class="card" style="flex:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Paper Account — POC</span>
-      <span class="bd2" id="paper-alert-badge">0 ALERTS</span>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px">
-      <div class="sb"><div class="sl2">Balance</div><div class="sv2" style="color:var(--g)" id="paper-bal-card">$100,000</div><div style="font-size:8px;margin-top:2px" id="paper-alltime-pnl" style="color:var(--t3)">+$0.00 all-time</div></div>
-      <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl">+$0.00</div><div style="font-size:8px;color:var(--t3);margin-top:2px">Week: <span id="paper-week-pnl" style="color:var(--t2)">$0</span></div></div>
-      <div class="sb"><div class="sl2">Win % (All-Time)</div><div class="sv2" style="color:var(--b)" id="paper-wr">0%</div></div>
-      <div class="sb"><div class="sl2">W / L (All-Time)</div><div class="sv2" style="font-size:12px" id="paper-wl">0 / 0</div></div>
-    </div>
-    <div style="display:flex;gap:16px;font-size:8px;color:var(--t3)">
-      <span>Signals today: <span style="color:var(--t2)" id="paper-sigs">0</span></span>
-      <span>Open trades: <span style="color:var(--t2)" id="paper-open">0</span><span style="color:var(--t3)">/5</span></span>
-      <span style="color:var(--t3)">Risk/trade: <span style="color:var(--t2)">$500 · TP1@1:1+BE · TP2@1:3 · trail 0.5R→1R@2R</span></span>
-    </div>
-  </div>
-
-  <!-- Signal Feed -->
-  <div class="card" style="flex:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Signal Feed</span>
-      <span class="live-badge"><span class="live-dot"></span>LIVE</span>
-    </div>
-    <table class="tbl">
-      <colgroup><col style="width:36px"><col style="width:44px"><col style="width:40px"><col style="width:35px"><col style="width:55px"><col style="width:55px"><col style="width:40px"></colgroup>
-      <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>Entry</th><th>SL / TP1</th><th>R:R</th></tr></thead>
-      <tbody id="signal-body">
-        <tr><td colspan="7"><div class="empty"><div class="empty-icon">&#9685;</div><div style="font-size:8px;letter-spacing:1px">WAITING FOR SIGNAL</div></div></td></tr>
-      </tbody>
-    </table>
-    <!-- Last signal key levels -->
-    <div id="last-signal-levels" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--bo)">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
-        <div class="sb"><div class="sl2">Entry</div><div style="font-size:11px;font-weight:700" id="ls-entry">--</div></div>
-        <div class="sb"><div class="sl2">SL</div><div style="font-size:11px;font-weight:700;color:var(--r)" id="ls-sl">--</div></div>
-        <div class="sb"><div class="sl2">TP1</div><div style="font-size:11px;font-weight:700;color:var(--g)" id="ls-tp1">--</div></div>
-        <div class="sb"><div class="sl2">TP2</div><div style="font-size:11px;font-weight:700;color:var(--g)" id="ls-tp2">--</div></div>
+  <div class="tsec-grid">
+    <!-- Column A: System status -->
+    <div class="tcol">
+      <div class="card">
+        <div class="ct">System Health</div>
+        <div class="row"><span class="rl">Bot Status</span><span class="bd2" id="bot-status-badge">--</span></div>
+        <div class="row"><span class="rl">Mode</span><span class="bd2 ba2">PAPER</span></div>
+        <div class="row"><span class="rl">Railway State</span><span class="rv" style="color:var(--g)">Persistent</span></div>
+        <div class="row"><span class="rl">Last Updated</span><span class="rv" style="color:var(--t3)" id="last-update">--</span></div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:4px;font-size:8px;color:var(--t3)">
-        <span>BOS: <span id="ls-bos" style="color:var(--t2)">--</span></span>
-        <span>Lots: <span id="ls-lots" style="color:var(--g)">--</span></span>
-        <span>R:R: <span id="ls-rr" style="color:var(--b)">--</span></span>
+
+      <div class="card">
+        <div class="ct">Paper Performance</div>
+        <div class="sg">
+          <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl-side">$0</div></div>
+          <div class="sb"><div class="sl2">Win % All-Time</div><div class="sv2" style="color:var(--b)" id="paper-wr-side">0%</div></div>
+          <div class="sb"><div class="sl2">Signals</div><div class="sv2" id="paper-sigs-side">0</div></div>
+          <div class="sb"><div class="sl2">W / L All-Time</div><div class="sv2" id="paper-wl-side" style="font-size:14px">0 / 0</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ct">Infrastructure</div>
+        <div class="ir"><div class="il"><div class="dlv" id="dot-railway"></div>Railway Cluster</div><span style="font-size:11px;color:var(--t3)" id="railway-status">connecting</span></div>
+        <div class="ir"><div class="il"><div class="dlv"></div>TradingView Webhook</div><span style="font-size:11px;color:var(--t3)">live</span></div>
+        <div class="ir"><div class="il"><div class="dlv"></div>Telegram Notifier</div><span style="font-size:11px;color:var(--t3)">live</span></div>
+        <div class="ir"><div class="il"><div class="dlv"></div>OANDA Demo</div><span style="font-size:11px;color:var(--g)">Forex execution</span></div>
+        <div class="ir"><div class="il"><div class="dlv"></div>Paper Account</div><span style="font-size:11px;color:var(--g)">$100k simulated</span></div>
+      </div>
+
+      <div class="card">
+        <div class="ct">Schedule &amp; Filters</div>
+        <div class="sr2"><span class="sl3">&#8635; Daily Reset</span><div class="st">00:00 CT<div class="sd">P&L + signal counters</div></div></div>
+        <div class="sr2"><span class="sl3">&#9654; ATR Filter</span><div class="st">15M ATR<div class="sd">&gt; 50-bar avg · min volatility</div></div></div>
+        <div class="sr2"><span class="sl3">&#9654; Range Armed</span><div class="st">Quality gate<div class="sd">touches ≥3 · mid-cross ≥3 · 1H swing</div></div></div>
+        <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">30% beyond<div class="sd">boundary breach = range reset</div></div></div>
+        <div class="sr2"><span class="sl3">&#9654; Max Positions</span><div class="st">5 open<div class="sd">one per instrument</div></div></div>
+        <div class="sr2"><span class="sl3">&#9825; Heartbeat</span><div class="st">Hourly<div class="sd">Railway keepalive</div></div></div>
       </div>
     </div>
-  </div>
 
-  <!-- Equity Curve -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Equity Curve — Paper</span>
-      <div class="tabrow" style="width:120px">
-        <div class="tab act" onclick="setR('1W',this)">1W</div>
-        <div class="tab" onclick="setR('1M',this)">1M</div>
-        <div class="tab" onclick="setR('ALL',this)">All</div>
+    <!-- Column B: Live account + signals + equity -->
+    <div class="tcol">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span class="ct" style="margin:0">Paper Account — POC</span>
+          <span class="bd2" id="paper-alert-badge">0 ALERTS</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div class="sb"><div class="sl2">Balance</div><div class="sv2" style="color:var(--g)" id="paper-bal-card">$100,000</div><div style="font-size:10px;margin-top:3px;color:var(--t3)" id="paper-alltime-pnl">+$0.00 all-time</div></div>
+          <div class="sb"><div class="sl2">P&L Today</div><div class="sv2" id="paper-pnl">+$0.00</div><div style="font-size:10px;color:var(--t3);margin-top:3px">Week: <span id="paper-week-pnl" style="color:var(--t2)">$0</span></div></div>
+          <div class="sb"><div class="sl2">Win % (All-Time)</div><div class="sv2" style="color:var(--b)" id="paper-wr">0%</div></div>
+          <div class="sb"><div class="sl2">W / L (All-Time)</div><div class="sv2" style="font-size:14px" id="paper-wl">0 / 0</div></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:var(--t3)">
+          <span>Signals today: <span style="color:var(--t2)" id="paper-sigs">0</span></span>
+          <span>Open trades: <span style="color:var(--t2)" id="paper-open">0</span><span style="color:var(--t3)">/5</span></span>
+          <span style="color:var(--t3)">Risk/trade: <span style="color:var(--t2)">$500 · TP1@1:1+BE · TP2@1:3 · trail 0.5R→1R@2R</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span class="ct" style="margin:0">Signal Feed</span>
+          <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+        </div>
+        <table class="tbl">
+          <colgroup><col style="width:15%"><col style="width:18%"><col style="width:15%"><col style="width:13%"><col style="width:20%"><col style="width:20%"><col style="width:14%"></colgroup>
+          <thead><tr><th>Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>Entry</th><th>SL / TP1</th><th>R:R</th></tr></thead>
+          <tbody id="signal-body">
+            <tr><td colspan="7"><div class="empty"><div class="empty-icon">&#9685;</div><div style="font-size:10px;letter-spacing:1px">WAITING FOR SIGNAL</div></div></td></tr>
+          </tbody>
+        </table>
+        <!-- Last signal key levels -->
+        <div id="last-signal-levels" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--bo)">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px">
+            <div class="sb"><div class="sl2">Entry</div><div style="font-size:13px;font-weight:700" id="ls-entry">--</div></div>
+            <div class="sb"><div class="sl2">SL</div><div style="font-size:13px;font-weight:700;color:var(--r)" id="ls-sl">--</div></div>
+            <div class="sb"><div class="sl2">TP1</div><div style="font-size:13px;font-weight:700;color:var(--g)" id="ls-tp1">--</div></div>
+            <div class="sb"><div class="sl2">TP2</div><div style="font-size:13px;font-weight:700;color:var(--g)" id="ls-tp2">--</div></div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:6px;font-size:10px;color:var(--t3)">
+            <span>BOS: <span id="ls-bos" style="color:var(--t2)">--</span></span>
+            <span>Lots: <span id="ls-lots" style="color:var(--g)">--</span></span>
+            <span>R:R: <span id="ls-rr" style="color:var(--b)">--</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span class="ct" style="margin:0">Equity Curve — Paper</span>
+          <div class="tabrow" style="width:130px">
+            <div class="tab act" onclick="setR('1W',this)">1W</div>
+            <div class="tab" onclick="setR('1M',this)">1M</div>
+            <div class="tab" onclick="setR('ALL',this)">All</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="ec"></canvas></div>
       </div>
     </div>
-    <div class="chart-wrap"><canvas id="ec"></canvas></div>
-  </div>
 
-  <!-- Trade History -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Trade History — Paper</span>
-      <span style="font-size:8px;color:var(--t3)" id="trade-count">0 trades</span>
-    </div>
-    <table class="tbl">
-      <colgroup><col style="width:60px"><col style="width:44px"><col style="width:40px"><col style="width:32px"><col style="width:55px"><col style="width:45px"></colgroup>
-      <thead><tr><th>Date/Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>P&L</th><th>Result</th></tr></thead>
-      <tbody id="trades-body">
-        <tr><td colspan="6"><div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">No trades yet</div></div></td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+    <!-- Column C: Trade history + strategy reference -->
+    <div class="tcol">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span class="ct" style="margin:0">Trade History — Paper</span>
+          <span style="font-size:10px;color:var(--t3)" id="trade-count">0 trades</span>
+        </div>
+        <table class="tbl">
+          <colgroup><col style="width:26%"><col style="width:18%"><col style="width:14%"><col style="width:12%"><col style="width:16%"><col style="width:14%"></colgroup>
+          <thead><tr><th>Date/Time</th><th>Asset</th><th>Side</th><th>Lots</th><th>P&L</th><th>Result</th></tr></thead>
+          <tbody id="trades-body">
+            <tr><td colspan="6"><div class="empty" style="padding:16px"><div style="font-size:10px;color:var(--t3)">No trades yet</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
 
-<!-- COL 3: EVENTS -->
-<div class="col">
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Today's Events</span>
-      <span class="bd2" id="today-impact-badge">LOADING</span>
-    </div>
-    <div id="today-events">
-      <div class="empty" style="padding:16px"><div style="font-size:8px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">This Week</span>
-      <span class="bd2" id="week-impact-badge">LOADING</span>
-    </div>
-    <div id="week-events">
-      <div class="empty" style="padding:16px"><div style="font-size:8px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="ct" id="fomc-title">Next FOMC</div>
-    <div class="fcount">
-      <div class="fc-lbl">Days Until Rate Decision</div>
-      <div class="fc-val" id="fomc-days">--</div>
-      <div class="fc-sub" id="fomc-sub">Loading...</div>
-    </div>
-    <div style="margin-top:8px" id="fomc-schedule"></div>
-    <div style="font-size:7px;color:var(--t3);margin-top:5px">✦ includes dot plot &amp; projections</div>
-  </div>
-
-  <div class="card">
-    <div class="ct" id="nfp-title">Next NFP</div>
-    <div class="fcount">
-      <div class="fc-lbl">Days Until NFP Release</div>
-      <div class="fc-val" id="nfp-days">--</div>
-      <div class="fc-sub" id="nfp-sub">Loading...</div>
-    </div>
-    <div style="margin-top:8px" id="nfp-schedule"></div>
-  </div>
-</div>
-
-<!-- COL 4: NEWS + COT + ANALYTICS -->
-<div class="col" style="overflow-y:auto">
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">Market News</span>
-      <span class="live-badge"><span class="live-dot"></span>LIVE</span>
-    </div>
-    <div id="news-feed">
-      <div class="empty" style="padding:12px"><div style="font-size:8px;color:var(--t3);letter-spacing:1px">FETCHING NEWS...</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="ct" style="margin:0">COT Bias</span>
-      <span style="font-size:8px;color:var(--t3)" id="cot-updated">Loading...</span>
-    </div>
-    <div class="cg" id="cot-grid">
-      <div class="cc" style="grid-column:1/-1;text-align:center;padding:12px">
-        <div style="font-size:8px;color:var(--t3);letter-spacing:1px">FETCHING CFTC DATA...</div>
+      <div class="card">
+        <div class="ct">Strategy v5 Architecture</div>
+        <div class="row"><span class="rl">Range High/Low</span><span class="rv" style="color:var(--b)">4H Pivot-anchored · locked until break</span></div>
+        <div class="row"><span class="rl">Range Mid</span><span class="rv" style="color:var(--t2)">(High + Low) / 2</span></div>
+        <div class="row"><span class="rl">Quality Gate</span><span class="rv" style="color:var(--a)">30M swing ph→pl→ph→pl / pl→ph→pl→ph · each leg ≥ 4 bars</span></div>
+        <div class="row"><span class="rl">+ Boundary Touches</span><span class="rv" style="color:var(--t2)">≥ 3 combined H+L · pivot H/L = 1+1 on lock</span></div>
+        <div class="row"><span class="rl">+ Mid Crosses</span><span class="rv" style="color:var(--t2)">≥ 3 · settled side by close</span></div>
+        <div class="row"><span class="rl" style="color:var(--t3)">Entry A — BOS</span><span class="rv"><span class="bd2 bdim">DISABLED</span></span></div>
+        <div class="row"><span class="rl" style="color:var(--t3)">Entry B — Wyckoff</span><span class="rv"><span class="bd2 bdim">DISABLED</span></span></div>
+        <div class="row"><span class="rl">Entry C — BOS+Div</span><span class="rv" style="color:#ffd600">BOS + RSI divergence · RSI 30–70 · blocked: USOIL / XAGUSD</span></div>
+        <div class="row"><span class="rl">Entry D — Mid Retest</span><span class="rv" style="color:#00b8b8">15M BOS near mid → retest → entry · blocked: GBPUSD / XAGUSD / USOIL / BTCUSD</span></div>
+        <div class="row"><span class="rl">Entry E — Box Break</span><span class="rv" style="color:#ff9800">NY 7–10am ET · 2+2 touches overnight · close beyond box = entry · SL = opposite wall · 1:1 TP full position · XAUUSD / XAGUSD / US500 / EURNZD / NZDUSD / USOIL</span></div>
+        <div class="row"><span class="rl">TP1 (50%)</span><span class="rv" style="color:var(--g)">1:1 RR · partial close → SL moves to entry (breakeven)</span></div>
+        <div class="row"><span class="rl">TP2 (50%)</span><span class="rv" style="color:var(--g)">1:3 RR · trail 0.5R behind peak → widens to 1R above 2R · full close</span></div>
+        <div class="row"><span class="rl">SL</span><span class="rv" style="color:var(--r)">15M swing + 1× ATR buffer</span></div>
+        <div class="row"><span class="rl">Risk / Trade</span><span class="rv">$500 all instruments · Min R:R 1.5</span></div>
+        <div class="row"><span class="rl">Range Reset</span><span class="rv" style="color:var(--t2)">Price breaks 30% beyond boundary</span></div>
       </div>
     </div>
   </div>
 
-</div>
-
-</div><!-- /layout -->
-
-<!-- SESSION + INSTRUMENT BREAKDOWN -->
-<div style="padding:0 12px 12px 12px">
-  <div class="card" style="padding:12px 16px">
+  <!-- Session + Instrument Breakdown - full width -->
+  <div class="card" style="padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <span class="ct" style="margin:0">Session &amp; Instrument Breakdown — Paper</span>
       <span class="bd2 ba2">POC</span>
     </div>
     <div id="session-breakdown-body">
-      <div class="empty" style="padding:16px"><div style="font-size:8px;color:var(--t3)">Waiting for trade data...</div></div>
+      <div class="empty" style="padding:16px"><div style="font-size:10px;color:var(--t3)">Waiting for trade data...</div></div>
     </div>
   </div>
-</div>
+</section>
+
+<!-- ══════════════════ SECTION 2: IMPORTANT DATES ══════════════════ -->
+<section class="psection">
+  <div class="psec-hdr"><span class="psec-icon">📅</span><span class="psec-title">Important Dates</span><span class="psec-sub">Economic Calendar · FOMC · NFP</span></div>
+  <div class="dates-grid">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span class="ct" style="margin:0">Today's Events</span>
+        <span class="bd2" id="today-impact-badge">LOADING</span>
+      </div>
+      <div id="today-events">
+        <div class="empty" style="padding:16px"><div style="font-size:10px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span class="ct" style="margin:0">This Week</span>
+        <span class="bd2" id="week-impact-badge">LOADING</span>
+      </div>
+      <div id="week-events">
+        <div class="empty" style="padding:16px"><div style="font-size:10px;letter-spacing:1px;color:var(--t3)">FETCHING CALENDAR...</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ct" id="fomc-title">Next FOMC</div>
+      <div class="fcount">
+        <div class="fc-lbl">Days Until Rate Decision</div>
+        <div class="fc-val" id="fomc-days">--</div>
+        <div class="fc-sub" id="fomc-sub">Loading...</div>
+      </div>
+      <div style="margin-top:10px" id="fomc-schedule"></div>
+      <div style="font-size:9px;color:var(--t3);margin-top:6px">✦ includes dot plot &amp; projections</div>
+    </div>
+
+    <div class="card">
+      <div class="ct" id="nfp-title">Next NFP</div>
+      <div class="fcount">
+        <div class="fc-lbl">Days Until NFP Release</div>
+        <div class="fc-val" id="nfp-days">--</div>
+        <div class="fc-sub" id="nfp-sub">Loading...</div>
+      </div>
+      <div style="margin-top:10px" id="nfp-schedule"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SECTION 3: NEWS ══════════════════ -->
+<section class="psection">
+  <div class="psec-hdr"><span class="psec-icon">📰</span><span class="psec-title">News</span><span class="psec-sub">Live Market Headlines</span></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span class="ct" style="margin:0">Market News</span>
+      <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+    </div>
+    <div id="news-feed">
+      <div class="empty" style="padding:12px"><div style="font-size:10px;color:var(--t3);letter-spacing:1px">FETCHING NEWS...</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SECTION 4: COT ══════════════════ -->
+<section class="psection">
+  <div class="psec-hdr"><span class="psec-icon">📈</span><span class="psec-title">COT Bias</span><span class="psec-sub">CFTC + Tradingster + Third-Source Checks</span></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span class="ct" style="margin:0">COT Bias</span>
+      <span style="font-size:10px;color:var(--t3)" id="cot-updated">Loading...</span>
+    </div>
+    <div class="cg" id="cot-grid">
+      <div class="cc" style="grid-column:1/-1;text-align:center;padding:12px">
+        <div style="font-size:10px;color:var(--t3);letter-spacing:1px">FETCHING CFTC DATA...</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /page -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
@@ -661,7 +684,7 @@ function patchOpenTradeRows() {
     if (cells[4]) {
       const v = live.unrealized_pnl;
       cells[4].style.color = v >= 0 ? 'var(--g)' : 'var(--r)';
-      cells[4].innerHTML = fmt$(v) + ' <span style="font-size:7px;color:var(--t3)">live</span>';
+      cells[4].innerHTML = fmt$(v) + ' <span style="font-size:10px;color:var(--t3)">live</span>';
     }
   });
 }
@@ -765,7 +788,7 @@ function renderTradeHistory(trades) {
         o.instrument.toUpperCase() === (t.instrument||'').toUpperCase() &&
         o.direction.toUpperCase()  === (t.direction||'').toUpperCase()
       );
-      if (live) { displayPnl = live.unrealized_pnl; pnlSuffix = ' <span style="font-size:7px;color:var(--t3)">live</span>'; }
+      if (live) { displayPnl = live.unrealized_pnl; pnlSuffix = ' <span style="font-size:10px;color:var(--t3)">live</span>'; }
     }
 
     const resultClass = result.includes('TP') ? 'bd2 bg2' : result.includes('SL') ? 'bd2 br2' : isOpen ? 'bd2 bb3' : 'bd2 bdim';
@@ -775,7 +798,7 @@ function renderTradeHistory(trades) {
     row.setAttribute('data-direction',  (t.direction||'').toUpperCase());
     row.setAttribute('data-open', isOpen ? '1' : '0');
     row.innerHTML = `
-      <td style="color:var(--t3);font-size:9px">${displayTime}</td>
+      <td style="color:var(--t3);font-size:11px">${displayTime}</td>
       <td style="font-weight:700">${t.instrument||'--'}</td>
       <td style="color:${t.direction==='LONG'?'var(--g)':'var(--r)'};font-weight:700">${t.direction||'--'}</td>
       <td style="text-align:center">${t.lot_size||'--'}</td>
@@ -825,7 +848,7 @@ function renderSessionBreakdown(trades) {
   if (!el) return;
   const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN' && t.result !== 'UNKNOWN');
   if (!closed.length) {
-    el.innerHTML = '<div class="empty" style="padding:12px"><div style="font-size:8px;color:var(--t3)">No closed trades yet</div></div>';
+    el.innerHTML = '<div class="empty" style="padding:12px"><div style="font-size:11px;color:var(--t3)">No closed trades yet</div></div>';
     return;
   }
 
@@ -870,18 +893,18 @@ function renderSessionBreakdown(trades) {
     const wrColor  = wr >= 55 ? 'var(--g)' : wr >= 45 ? 'var(--a)' : 'var(--r)';
     const pnlColor = b.pnl >= 0 ? 'var(--g)' : 'var(--r)';
     return `<tr>
-      <td style="font-weight:700;font-size:9px">${label}</td>
-      <td style="text-align:center;color:var(--t2);font-size:9px">${total}</td>
-      <td style="text-align:center;font-size:9px;color:var(--t2)">${b.wins}W / ${b.losses}L</td>
+      <td style="font-weight:700;font-size:12px">${label}</td>
+      <td style="text-align:center;color:var(--t2);font-size:12px">${total}</td>
+      <td style="text-align:center;font-size:12px;color:var(--t2)">${b.wins}W / ${b.losses}L</td>
       <td style="text-align:center">
-        <div style="display:flex;align-items:center;gap:4px;justify-content:center">
-          <div style="width:48px;height:5px;background:var(--bg3);border-radius:2px;overflow:hidden">
-            <div style="width:${wr}%;height:100%;background:${wrColor};border-radius:2px"></div>
+        <div style="display:flex;align-items:center;gap:6px;justify-content:center">
+          <div style="width:56px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+            <div style="width:${wr}%;height:100%;background:${wrColor};border-radius:3px"></div>
           </div>
-          <span style="color:${wrColor};font-weight:800;font-size:10px">${wr}%</span>
+          <span style="color:${wrColor};font-weight:800;font-size:12px">${wr}%</span>
         </div>
       </td>
-      <td style="text-align:right;color:${pnlColor};font-weight:700;font-size:9px">${fmt$(b.pnl)}</td>
+      <td style="text-align:right;color:${pnlColor};font-weight:700;font-size:12px">${fmt$(b.pnl)}</td>
     </tr>`;
   }
 
@@ -892,9 +915,9 @@ function renderSessionBreakdown(trades) {
 
   const thead = `<thead><tr><th>Name</th><th style="text-align:center">Trades</th><th style="text-align:center">W/L</th><th style="text-align:center">Win%</th><th style="text-align:right">P&L</th></tr></thead>`;
   const tfoot = `<tfoot><tr style="border-top:1px solid var(--bo2)">
-    <td style="font-weight:800;font-size:9px;color:var(--t1)">TOTAL</td>
+    <td style="font-weight:800;font-size:12px;color:var(--t1)">TOTAL</td>
     <td style="text-align:center;font-weight:700;color:var(--t1)">${totalTrades}</td>
-    <td style="text-align:center;font-size:9px;color:var(--t2)">${totalWins}W / ${totalTrades-totalWins}L</td>
+    <td style="text-align:center;font-size:12px;color:var(--t2)">${totalWins}W / ${totalTrades-totalWins}L</td>
     <td style="text-align:center;font-weight:800;color:${twrColor}">${totalWR}%</td>
     <td style="text-align:right;font-weight:800;color:${tpnlColor}">${fmt$(totalPnl)}</td>
   </tr></tfoot>`;
@@ -902,17 +925,17 @@ function renderSessionBreakdown(trades) {
   const _emptyBucket = {wins:0, losses:0, pnl:0};
   const mKeys = [...MODEL_ORDER, ...Object.keys(mBuckets).filter(m => !MODEL_ORDER.includes(m))];
 
-  el.innerHTML = `<div style="margin-bottom:16px">
-    <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Entry Model</div>
+  el.innerHTML = `<div style="margin-bottom:20px">
+    <div style="font-size:10px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:8px;text-transform:uppercase">By Entry Model</div>
     <table class="tbl">${thead}<tbody>${mKeys.map(m => mkRow(m, mBuckets[m] || _emptyBucket)).join('')}</tbody>${tfoot}</table>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
     <div>
-      <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Session</div>
+      <div style="font-size:10px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:8px;text-transform:uppercase">By Session</div>
       <table class="tbl">${thead}<tbody>${sKeys.map(s => mkRow(s, sBuckets[s])).join('')}</tbody>${tfoot}</table>
     </div>
     <div>
-      <div style="font-size:8px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:6px;text-transform:uppercase">By Instrument</div>
+      <div style="font-size:10px;letter-spacing:1.5px;color:var(--t3);font-weight:700;margin-bottom:8px;text-transform:uppercase">By Instrument</div>
       <table class="tbl">${thead}<tbody>${iKeys.map(i => mkRow(i, iBuckets[i])).join('')}</tbody>${tfoot}</table>
     </div>
   </div>`;
@@ -1006,7 +1029,7 @@ function renderWeekEvents(events) {
   el.innerHTML = highOnly.map(e => `<div class="ni">
     <div style="display:flex;justify-content:space-between;align-items:baseline">
       <div class="ntime">${fmtEventDate(e.time)}</div>
-      <div style="font-size:8px;font-weight:700;color:var(--t2)">${fmtEventTime(e.time)}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--t2)">${fmtEventTime(e.time)}</div>
     </div>
     <div class="ntitle">${e.event||'Economic Event'}</div>
     <div class="ntags"><span class="ntag nhigh">HIGH</span><span class="ntag nmed">USD</span></div>
@@ -1077,7 +1100,7 @@ async function fetchCOT() {
   } catch(e) {
     console.warn('COT fetch failed:', e);
     document.getElementById('cot-updated').textContent = 'Fetch error';
-    document.getElementById('cot-grid').innerHTML = '<div class="cc" style="grid-column:1/-1;text-align:center;padding:12px"><div style="font-size:8px;color:var(--r);letter-spacing:1px">COT DATA UNAVAILABLE</div></div>';
+    document.getElementById('cot-grid').innerHTML = '<div class="cc" style="grid-column:1/-1;text-align:center;padding:12px"><div style="font-size:11px;color:var(--r);letter-spacing:1px">COT DATA UNAVAILABLE</div></div>';
   }
 }
 
@@ -1099,14 +1122,14 @@ function renderCOT(items) {
 
     let mmHtml = '';
     if (item.mm_signal === 'closing') {
-      mmHtml = `<div style="font-size:7px;color:var(--r);margin-top:2px;letter-spacing:.5px">AM ▼ Closing Longs</div>`;
+      mmHtml = `<div style="font-size:10px;color:var(--r);margin-top:3px;letter-spacing:.5px">AM ▼ Closing Longs</div>`;
     } else if (item.mm_signal === 'adding') {
-      mmHtml = `<div style="font-size:7px;color:var(--g);margin-top:2px;letter-spacing:.5px">AM ▲ Adding Longs</div>`;
+      mmHtml = `<div style="font-size:10px;color:var(--g);margin-top:3px;letter-spacing:.5px">AM ▲ Adding Longs</div>`;
     }
 
     const nt     = _nearTermSignal(item);
     const ntHtml = nt
-      ? `<div style="font-size:7px;color:${nt.color};margin-top:4px;font-weight:700;letter-spacing:.5px;border-left:2px solid ${nt.color};padding-left:4px">${nt.arrow} NEAR-TERM: ${nt.label.toUpperCase()}</div>`
+      ? `<div style="font-size:10px;color:${nt.color};margin-top:5px;font-weight:700;letter-spacing:.5px;border-left:2px solid ${nt.color};padding-left:5px">${nt.arrow} NEAR-TERM: ${nt.label.toUpperCase()}</div>`
       : '';
 
     // Source 2: Tradingster Legacy Non-Commercial
@@ -1114,14 +1137,14 @@ function renderCOT(items) {
     if (item.leg_bias) {
       const legClass = item.leg_bias === 'Bullish' ? 'cbull' : item.leg_bias === 'Bearish' ? 'cbear' : 'cneut';
       const legColor = item.leg_bias === 'Bullish' ? 'var(--g)' : item.leg_bias === 'Bearish' ? 'var(--r)' : 'var(--t2)';
-      const legBar   = item.leg_idx != null ? `<div class="cbg" style="margin-top:2px"><div class="cbf" style="width:${item.leg_idx}%;background:${legColor}"></div><div class="cidx-marker" style="left:60%"></div><div class="cidx-marker" style="left:40%"></div></div>` : '';
+      const legBar   = item.leg_idx != null ? `<div class="cbg" style="margin-top:3px"><div class="cbf" style="width:${item.leg_idx}%;background:${legColor}"></div><div class="cidx-marker" style="left:60%"></div><div class="cidx-marker" style="left:40%"></div></div>` : '';
       src2Html = `
-        <div style="margin-top:4px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.06)">
+        <div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06)">
           <div style="display:flex;justify-content:space-between;align-items:baseline">
-            <div style="font-size:7px;color:var(--t3);letter-spacing:.5px">NonComm</div>
-            <div style="display:flex;align-items:baseline;gap:3px">
-              <div class="cbias ${legClass}" style="font-size:7px;padding:1px 4px">${item.leg_bias}</div>
-              <div style="font-size:9px;font-weight:700;color:${legColor}">${item.leg_idx != null ? item.leg_idx : '—'}<span style="font-size:6px;color:var(--t3);font-weight:400">/100</span></div>
+            <div style="font-size:10px;color:var(--t3);letter-spacing:.5px">NonComm</div>
+            <div style="display:flex;align-items:baseline;gap:4px">
+              <div class="cbias ${legClass}" style="font-size:10px;padding:2px 5px">${item.leg_bias}</div>
+              <div style="font-size:12px;font-weight:700;color:${legColor}">${item.leg_idx != null ? item.leg_idx : '—'}<span style="font-size:9px;color:var(--t3);font-weight:400">/100</span></div>
             </div>
           </div>
           ${legBar}
@@ -1132,9 +1155,9 @@ function renderCOT(items) {
     let alignHtml = '';
     if (item.alignment === 'confirmed') {
       const aColor = item.bias === 'Bullish' ? '#26a69a' : '#ef5350';
-      alignHtml = `<div style="font-size:7px;color:${aColor};margin-top:3px;font-weight:700;letter-spacing:.5px">✓ CONFIRMED ${item.bias.toUpperCase()}</div>`;
+      alignHtml = `<div style="font-size:10px;color:${aColor};margin-top:4px;font-weight:700;letter-spacing:.5px">✓ CONFIRMED ${item.bias.toUpperCase()}</div>`;
     } else if (item.alignment === 'diverge') {
-      alignHtml = `<div style="font-size:7px;color:#ff9800;margin-top:3px;font-weight:700;letter-spacing:.5px">⚡ DIVERGE — Mixed Signals</div>`;
+      alignHtml = `<div style="font-size:10px;color:#ff9800;margin-top:4px;font-weight:700;letter-spacing:.5px">⚡ DIVERGE — Mixed Signals</div>`;
     }
 
     // Commercial (hedgers) vs Non-Reportable (retail) — CFTC Legacy 3-way split,
@@ -1143,7 +1166,7 @@ function renderCOT(items) {
     if (item.comm_bias || item.retail_bias) {
       const cc = b => b === 'Bullish' ? 'var(--g)' : b === 'Bearish' ? 'var(--r)' : 'var(--t2)';
       commRetailHtml = `
-        <div style="margin-top:4px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:10px;font-size:7px">
+        <div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:14px;font-size:10px">
           ${item.comm_bias ? `<div><span style="color:var(--t3)">Comm </span><span style="color:${cc(item.comm_bias)};font-weight:700">${item.comm_bias}</span></div>` : ''}
           ${item.retail_bias ? `<div><span style="color:var(--t3)">Retail </span><span style="color:${cc(item.retail_bias)};font-weight:700">${item.retail_bias}</span></div>` : ''}
         </div>`;
@@ -1155,20 +1178,20 @@ function renderCOT(items) {
     if (item.oanda_bias) {
       const oc = item.oanda_bias === 'Bullish' ? 'var(--g)' : item.oanda_bias === 'Bearish' ? 'var(--r)' : 'var(--t2)';
       thirdSourceHtml = `
-        <div style="margin-top:3px;font-size:7px">
+        <div style="margin-top:5px;font-size:10px">
           <span style="color:var(--t3)">OANDA Clients </span><span style="color:${oc};font-weight:700">${item.oanda_long_pct}% Long / ${item.oanda_short_pct}% Short</span>
         </div>`;
     } else if (item.fng_value != null) {
       const fc = item.fng_value <= 25 ? 'var(--r)' : item.fng_value >= 75 ? 'var(--g)' : 'var(--t2)';
       thirdSourceHtml = `
-        <div style="margin-top:3px;font-size:7px">
+        <div style="margin-top:5px;font-size:10px">
           <span style="color:var(--t3)">Fear &amp; Greed </span><span style="color:${fc};font-weight:700">${item.fng_value}/100 (${item.fng_classification})</span>
         </div>`;
     } else if (item.eia_bias) {
       const ec = item.eia_bias === 'Bullish' ? 'var(--g)' : item.eia_bias === 'Bearish' ? 'var(--r)' : 'var(--t2)';
       const chg = item.eia_stocks_now - item.eia_stocks_1wk;
       thirdSourceHtml = `
-        <div style="margin-top:3px;font-size:7px">
+        <div style="margin-top:5px;font-size:10px">
           <span style="color:var(--t3)">EIA Crude Stocks </span><span style="color:${ec};font-weight:700">${chg >= 0 ? '+' : ''}${(chg/1000).toFixed(1)}M bbl (${item.eia_bias})</span>
         </div>`;
     }
@@ -1180,11 +1203,11 @@ function renderCOT(items) {
           <div class="cpop">${item.src1_label || 'Lev Funds'}</div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <div style="display:flex;align-items:baseline;gap:3px">
+          <div style="display:flex;align-items:baseline;gap:4px">
             <div class="cbias ${biasClass}">${item.bias}</div>
             ${deltaHtml}
           </div>
-          <div style="font-size:11px;font-weight:700;color:${barColor};letter-spacing:-0.5px">${item.cot_idx}<span style="font-size:7px;color:var(--t3);font-weight:400">/100</span></div>
+          <div style="font-size:14px;font-weight:700;color:${barColor};letter-spacing:-0.5px">${item.cot_idx}<span style="font-size:10px;color:var(--t3);font-weight:400">/100</span></div>
         </div>
         <div class="cbg" style="margin-top:3px">
           <div class="cbf" style="width:${item.cot_idx}%;background:${barColor}"></div>
@@ -1245,7 +1268,7 @@ function renderNews(articles) {
     return `
     <div class="ni">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-        <span style="font-size:7px;padding:1px 5px;border-radius:2px;font-weight:800;background:rgba(255,255,255,.05);color:${color}">${cat}</span>
+        <span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:800;background:rgba(255,255,255,.05);color:${color}">${cat}</span>
         <span class="ntime" style="margin:0">${fmtNewsAge(a.datetime)}</span>
       </div>
       <div class="ntitle"><a href="${a.url}" target="_blank" style="color:var(--t1);text-decoration:none">${a.headline}</a></div>
