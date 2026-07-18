@@ -72,7 +72,7 @@ max_break_pct   = input.float(30.0, "Invalidate range if price breaks by % of ra
 use_atr_filter   = input.bool(false, "ATR Volatility Filter (block when ATR < avg)", group="Filters")
 atr_avg_len      = input.int(50,    "ATR average length (above = entry allowed)",   group="Filters", minval=10, maxval=200)
 entry_a_enabled  = input.bool(false, "Enable Entry A (BOS+Boundary Reject)",        group="Filters")
-entry_b_enabled  = input.bool(false, "Enable Entry B (Spring/Upthrust)",             group="Filters")
+entry_b_enabled  = input.bool(true,  "Enable Entry B (Spring/Upthrust)",             group="Filters")
 
 show_range      = input.bool(true,  "Show range levels",                           group="Display")
 show_bos        = input.bool(true,  "Show BOS level",                              group="Display")
