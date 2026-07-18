@@ -51,6 +51,8 @@ strategy(
      commission_value  = 0.0
  )
 
+import TradingView/LibraryCOT/6 as cot
+
 // =============================================================================
 // INPUTS
 // =============================================================================
@@ -89,6 +91,20 @@ entry_e_enabled = input.bool(true,  "Enable Entry E (Box Break — NY Kill Zone)
 e_touch_pct_in  = input.float(0.10, "Touch proximity % of box boundary",          group="Entry E", minval=0.01, maxval=1.0, step=0.01)
 
 // =============================================================================
+// ENTRY B FILTERS — volume confirmation + COT bias, backtested and approved
+// 2026-07-18. Scoped to Entry B (Spring/Upthrust) ONLY — do not apply to A/C/D/E.
+// =============================================================================
+use_volume_filter  = input.bool(true,  "Entry B: Volume Confirmation Filter",             group="Entry B")
+vol_avg_len        = input.int(20,     "Entry B: Volume Average Length",                  group="Entry B", minval=5, maxval=100)
+vol_low_mult       = input.float(0.8,  "Entry B: Low-Volume Threshold (spring/upthrust wick)", group="Entry B", minval=0.1, maxval=1.0, step=0.05)
+vol_high_mult      = input.float(1.2,  "Entry B: High-Volume Threshold (BOS confirm)",    group="Entry B", minval=1.0, maxval=3.0, step=0.05)
+
+use_cot_filter     = input.bool(true,  "Entry B: COT Bias Hard-Block Filter",             group="Entry B")
+cot_bullish_idx    = input.int(60,     "Entry B: COT Bullish Threshold (Larry Williams %ile)", group="Entry B", minval=50, maxval=90)
+cot_bearish_idx    = input.int(40,     "Entry B: COT Bearish Threshold (Larry Williams %ile)", group="Entry B", minval=10, maxval=50)
+cot_history_len    = input.int(260,    "Entry B: COT Percentile Lookback (weekly readings, ~5yr)", group="Entry B", minval=20, maxval=1000)
+
+// =============================================================================
 // INSTRUMENT CONFIG
 // =============================================================================
 raw_ticker    = syminfo.tickerid
@@ -104,6 +120,8 @@ is_xagusd     = str.contains(raw_ticker, "XAG")
 is_btcusd     = str.contains(raw_ticker, "BTC")
 is_eurnzd     = str.contains(raw_ticker, "EURNZD") or syminfo.ticker == "EURNZD"
 is_nzdusd     = str.contains(raw_ticker, "NZDUSD") or syminfo.ticker == "NZDUSD"
+is_eurusd     = (str.contains(raw_ticker, "EURUSD") or syminfo.ticker == "EURUSD") and not is_eurnzd
+is_usdjpy     = str.contains(raw_ticker, "USDJPY") or syminfo.ticker == "USDJPY"
 pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
 _min_sl_price = pip_size * min_sl_pips  // minimum SL distance in price units
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
@@ -118,6 +136,120 @@ _quote_to_usd = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "N
 atr_now = ta.atr(14)
 atr_avg = ta.sma(atr_now, atr_avg_len)
 atr_ok  = not use_atr_filter or atr_now > atr_avg
+
+// =============================================================================
+// ENTRY B — VOLUME CONFIRMATION (Wyckoff Spring/SOS)
+// Scoped to Entry B only. NOTE: OANDA forex "volume" in TradingView is
+// tick-count, a real activity proxy but not literal financial order-flow
+// volume -- still directionally meaningful, just worth knowing when reading
+// backtest/live results.
+// =============================================================================
+vol_avg  = ta.sma(volume, vol_avg_len)
+vol_low  = not use_volume_filter or volume < vol_avg * vol_low_mult   // quiet shakeout wick
+vol_high = not use_volume_filter or volume > vol_avg * vol_high_mult  // loud breakout/SOS bar
+
+// =============================================================================
+// ENTRY B — COT BIAS (native TradingView LibraryCOT, historically backtestable)
+// Scoped to Entry B only. CFTC codes are the SAME codes already verified
+// working in this repo's cot_fetch.py / dashboard (see _COT_TFF / _COT_DISAGG
+// there) -- reused for consistency, not re-guessed. requestCommitmentOfTraders()
+// RAISES A RUNTIME ERROR (not na) if a code/metric has no data at all -- all
+// codes below are real, long-standing CFTC codes with decades of history, so
+// they're called unconditionally on every chart; only which result gets
+// SELECTED as this chart's cot_idx is conditional per instrument.
+//
+// Direction convention: for a chart where the COT currency is the BASE
+// (EURUSD, GBPUSD, NZDUSD, EURNZD's EUR leg, XAUUSD, XAGUSD, USOIL, BTCUSD,
+// US100/30/500) a net-long COT reading is bullish for the chart's "long".
+// USDJPY is the one INVERTED case -- USD is the base, JPY is the COT currency
+// in the quote position, so a net-long JPY COT reading is BEARISH for
+// USDJPY's "long" direction. EURNZD (a cross, no direct CFTC contract)
+// combines both legs: blocks a EURNZD long if EITHER EUR is bearish OR NZD
+// is bullish (either leg contradicts), and symmetrically for shorts.
+//
+// Percentile: ta.percentrank() applied directly to a weekly series repeated
+// across 15M bars would be dominated by duplicate values, so this instead
+// tracks a deduplicated history of actual weekly readings (only pushes when
+// the value changes) and ranks the current reading against that history --
+// same Larry Williams 0-100 percentile convention already used in
+// cot_generate.py (>=60 bullish, <=40 bearish), computed independently here.
+// =============================================================================
+f_cot_net(cftcType, cftcCode, metricName) =>
+    _long  = cot.requestCommitmentOfTraders(cftcType, cftcCode, false, metricName, "Long",  "All")
+    _short = cot.requestCommitmentOfTraders(cftcType, cftcCode, false, metricName, "Short", "All")
+    _long - _short
+
+f_cot_pct(net_val) =>
+    var array<float> _hist = array.new<float>()
+    if not na(net_val) and (array.size(_hist) == 0 or net_val != array.get(_hist, array.size(_hist) - 1))
+        array.push(_hist, net_val)
+        if array.size(_hist) > cot_history_len
+            array.shift(_hist)
+    _sz  = array.size(_hist)
+    _pct = float(na)
+    if _sz >= 10
+        _below = 0
+        for i = 0 to _sz - 1
+            if array.get(_hist, i) <= net_val
+                _below += 1
+        _pct := _below / _sz * 100.0
+    _pct
+
+// Per-instrument CFTC codes (Financial/TFF report -> "Leveraged Funds Positions",
+// Disaggregated report -> "Managed Money Positions" -- matches this project's
+// existing Source-1 convention documented in cot_generate.py).
+_eur_net  = f_cot_net("Financial", "099741", "Leveraged Funds Positions")
+_gbp_net  = f_cot_net("Financial", "096742", "Leveraged Funds Positions")
+_jpy_net  = f_cot_net("Financial", "097741", "Leveraged Funds Positions")
+_nzd_net  = f_cot_net("Financial", "112741", "Leveraged Funds Positions")
+_gold_net = f_cot_net("Disaggregated", "088691", "Managed Money Positions")
+_slvr_net = f_cot_net("Disaggregated", "084691", "Managed Money Positions")
+_cl_net   = f_cot_net("Disaggregated", "067651", "Managed Money Positions")
+_btc_net  = f_cot_net("Financial", "133741", "Leveraged Funds Positions")
+_nq_net   = f_cot_net("Financial", "209742", "Leveraged Funds Positions")
+_us30_net = f_cot_net("Financial", "12460+", "Leveraged Funds Positions")
+_es_net   = f_cot_net("Financial", "13874+", "Leveraged Funds Positions")
+
+_eur_pct  = not na(_eur_net)  ? f_cot_pct(_eur_net)  : na
+_gbp_pct  = not na(_gbp_net)  ? f_cot_pct(_gbp_net)  : na
+_jpy_pct  = not na(_jpy_net)  ? f_cot_pct(_jpy_net)  : na
+_nzd_pct  = not na(_nzd_net)  ? f_cot_pct(_nzd_net)  : na
+_gold_pct = not na(_gold_net) ? f_cot_pct(_gold_net) : na
+_slvr_pct = not na(_slvr_net) ? f_cot_pct(_slvr_net) : na
+_cl_pct   = not na(_cl_net)   ? f_cot_pct(_cl_net)   : na
+_btc_pct  = not na(_btc_net)  ? f_cot_pct(_btc_net)  : na
+_nq_pct   = not na(_nq_net)   ? f_cot_pct(_nq_net)   : na
+_us30_pct = not na(_us30_net) ? f_cot_pct(_us30_net) : na
+_es_pct   = not na(_es_net)   ? f_cot_pct(_es_net)   : na
+
+// cot_idx: this instrument's own direct COT percentile (na for EURNZD, which
+// is resolved separately below via its two legs instead of one index).
+cot_idx = is_eurusd ? _eur_pct : is_gbpusd ? _gbp_pct : is_usdjpy ? _jpy_pct :
+     is_nzdusd ? _nzd_pct : is_xauusd ? _gold_pct : is_xagusd ? _slvr_pct :
+     is_usoil ? _cl_pct : is_btcusd ? _btc_pct : is_us100 ? _nq_pct :
+     is_us30 ? _us30_pct : is_us500 ? _es_pct : na
+
+cot_supported = not na(cot_idx) or is_eurnzd
+
+// Direct instruments: standard mapping (base currency long = COT-currency long).
+_cot_blocks_long_direct  = not na(cot_idx) and cot_idx <= cot_bearish_idx
+_cot_blocks_short_direct = not na(cot_idx) and cot_idx >= cot_bullish_idx
+
+// USDJPY: inverted (JPY is the COT currency, sitting in the quote position).
+_cot_blocks_long_jpy  = not na(cot_idx) and cot_idx >= cot_bullish_idx
+_cot_blocks_short_jpy = not na(cot_idx) and cot_idx <= cot_bearish_idx
+
+// EURNZD: combine both legs -- a long is blocked if EITHER leg disagrees.
+_cot_blocks_long_eurnzd  = (not na(_eur_pct) and _eur_pct <= cot_bearish_idx) or
+     (not na(_nzd_pct) and _nzd_pct >= cot_bullish_idx)
+_cot_blocks_short_eurnzd = (not na(_eur_pct) and _eur_pct >= cot_bullish_idx) or
+     (not na(_nzd_pct) and _nzd_pct <= cot_bearish_idx)
+
+cot_blocks_long  = is_usdjpy ? _cot_blocks_long_jpy  : is_eurnzd ? _cot_blocks_long_eurnzd  : _cot_blocks_long_direct
+cot_blocks_short = is_usdjpy ? _cot_blocks_short_jpy : is_eurnzd ? _cot_blocks_short_eurnzd : _cot_blocks_short_direct
+
+cot_ok_long  = not use_cot_filter or not cot_supported or not cot_blocks_long
+cot_ok_short = not use_cot_filter or not cot_supported or not cot_blocks_short
 
 // =============================================================================
 // RSI + DIVERGENCE (Entry C)
@@ -614,7 +746,7 @@ var float upthrust_sl_stored   = na
 // Detection: upthrust bar (wick above range_high, close back below)
 _upthrust_detect = in_upthrust_zone and close < _rh_ref and was_near_high and range_armed and
      not range_invalidated and no_position and atr_ok and
-     not long_signal and not short_signal and not upthrust_pending
+     not long_signal and not short_signal and not upthrust_pending and vol_low
 
 if _upthrust_detect
     upthrust_pending     := true
@@ -634,13 +766,13 @@ _ut_rr_ok = not na(_ut_risk) and _ut_risk > 0
 // Upthrust BOS: fire SHORT the moment price breaks below a 15M swing low while pending
 // Entry = close of BOS bar, SL = stored wick high + ATR buffer, no retest wait
 var bool _ut_bos_prev = false
-_ut_bos_raw   = upthrust_pending and not na(last_m15_pl) and close < last_m15_pl
+_ut_bos_raw   = upthrust_pending and not na(last_m15_pl) and close < last_m15_pl and vol_high
 _ut_bos_event = _ut_bos_raw and not _ut_bos_prev
 _ut_bos_prev := _ut_bos_raw
 
 upthrust_signal = _ut_bos_event and not range_invalidated and no_position and atr_ok and
      _ut_rr_ok and not na(upthrust_sl_stored) and entry_b_enabled and
-     not long_signal and not short_signal and not long_signal_c and not short_signal_c
+     not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_short
 
 // --- Spring pending state ---
 var bool  spring_pending     = false
@@ -650,7 +782,7 @@ var float spring_sl_stored   = na
 // Detection: spring bar (wick below range_low, close back above)
 _spring_detect = in_spring_zone and close > _rl_ref and was_near_low and range_armed and
      not range_invalidated and no_position and atr_ok and
-     not long_signal and not short_signal and not spring_pending
+     not long_signal and not short_signal and not spring_pending and vol_low
 
 if _spring_detect
     spring_pending     := true
@@ -670,13 +802,13 @@ _sp_rr_ok = not na(_sp_risk) and _sp_risk > 0
 // Spring BOS: fire LONG the moment price breaks above a 15M swing high while pending
 // Entry = close of BOS bar, SL = stored wick low - ATR buffer, no retest wait
 var bool _sp_bos_prev = false
-_sp_bos_raw   = spring_pending and not na(last_m15_ph) and close > last_m15_ph
+_sp_bos_raw   = spring_pending and not na(last_m15_ph) and close > last_m15_ph and vol_high
 _sp_bos_event = _sp_bos_raw and not _sp_bos_prev
 _sp_bos_prev := _sp_bos_raw
 
 spring_signal = _sp_bos_event and not range_invalidated and no_position and atr_ok and
      _sp_rr_ok and not na(spring_sl_stored) and entry_b_enabled and
-     not long_signal and not short_signal and not long_signal_c and not short_signal_c
+     not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_long
 
 // =============================================================================
 // ENTRY E — OVERNIGHT BOX FADE (NY KILL ZONE 7–9am ET)
@@ -1442,7 +1574,7 @@ if show_signals and sl_long_hit
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 33, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 35, bgcolor=color.new(color.black, 70), border_width=1)
 if show_info
     arm_display = not use_rotation ? "OFF" :
          armed_side == "none" ? "WAIT->" + (waiting_for_high ? "HIGH" : "LOW") :
@@ -1556,3 +1688,11 @@ if show_info
     _e_ny_clr = _e_in_ny_window ? color.green : color.gray
     table.cell(info, 0, 32, "E NY Window",                    text_color=color.gray)
     table.cell(info, 1, 32, _e_ny_txt,                        text_color=_e_ny_clr)
+    _cot_txt = not use_cot_filter ? "OFF" : not cot_supported ? "N/A" : na(cot_idx) and not is_eurnzd ? "--" : is_eurnzd ? "EUR " + (na(_eur_pct) ? "--" : str.tostring(_eur_pct, "#")) + " / NZD " + (na(_nzd_pct) ? "--" : str.tostring(_nzd_pct, "#")) : str.tostring(cot_idx, "#.#")
+    _cot_clr = not use_cot_filter or not cot_supported ? color.gray : cot_blocks_long or cot_blocks_short ? color.red : color.green
+    table.cell(info, 0, 33, "B — COT Bias",                   text_color=color.gray)
+    table.cell(info, 1, 33, _cot_txt,                         text_color=_cot_clr)
+    _vol_txt = not use_volume_filter ? "OFF" : str.tostring(volume / vol_avg, "#.##") + "x avg"
+    _vol_clr = not use_volume_filter ? color.gray : vol_high ? color.green : vol_low ? color.orange : color.gray
+    table.cell(info, 0, 34, "B — Volume (x avg)",             text_color=color.gray)
+    table.cell(info, 1, 34, _vol_txt,                         text_color=_vol_clr)
