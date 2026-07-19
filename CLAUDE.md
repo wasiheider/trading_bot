@@ -116,13 +116,18 @@ Push to `paper-trading` → Railway auto-deploys.
 
 ### Entry Models
 
-| Model | Setup field | Signal |
-|-------|------------|--------|
-| A — BOS + Rejection | `"bos"` or `""` | 15M BOS near boundary → retest → rejection candle |
-| B — Spring / Upthrust | `"spring"` / `"upthrust"` | Wick beyond boundary closes back inside; deferred entry |
-| C — BOS + RSI Divergence | `"bos_div"` | Same as A + RSI divergence at retest (30–70); priority over A |
-| D — Mid BOS + Retest | `"mid_bos"` | 15M structural BOS within ±35% of range mid → retest |
-| E — Box Break | `"box_break"` | NY session close beyond pre-session box boundary |
+| Model | Setup field | Signal | Status |
+|-------|------------|--------|--------|
+| A — BOS + Rejection | `"bos"` or `""` | 15M BOS near boundary → retest → rejection candle | **Disabled** (`entry_a_enabled = false`) |
+| B — Spring / Upthrust | `"spring"` / `"upthrust"` | Wick beyond boundary closes back inside; deferred entry | **Enabled 2026-07-18**, with Volume Confirmation (quiet wick + loud BOS) and COT Hard-Block (TradingView `LibraryCOT`) filters — see below |
+| C — BOS + RSI Divergence | `"bos_div"` | Same as A + RSI divergence at retest (30–70); priority over A | **GBPUSD only** as of 2026-07-18 (`is_gbpusd` gate) — was net-negative on USDJPY/US500/US30/EURNZD/EURUSD in backtest, strongly positive on GBPUSD |
+| D — Mid BOS + Retest | `"mid_bos"` | 15M structural BOS within ±35% of range mid → retest | Active, unchanged. Blocked: GBPUSD/XAGUSD/USOIL/BTCUSD |
+| E — Box Break | `"box_break"` | NY session close beyond pre-session box boundary | Active, unchanged |
+
+**Entry B filters (added 2026-07-18, backtested and approved — see `project_trading_bot.md` memory "Wyckoff/Livermore v6 backtest" section for full detail):**
+- **Volume Confirmation**: requires below-average volume (`< 0.8x` 20-period SMA) on the Spring/Upthrust detection wick, and above-average volume (`> 1.2x`) on the BOS confirmation bar. OANDA forex "volume" is tick-count, not true financial volume — a real activity proxy, not literal order-flow.
+- **COT Hard-Block**: blocks a Spring (long) if TradingView's native COT read for that instrument is bearish (Larry Williams percentile ≤40), blocks an Upthrust (short) if bullish (≥60). Neutral COT never blocks. Uses TradingView's official `LibraryCOT` (`import TradingView/LibraryCOT/6`), same CFTC codes as `cot_fetch.py`. USDJPY direction is inverted (JPY is the COT currency but sits in the quote position); EURNZD combines both legs (blocks if either EUR or NZD disagrees).
+- Deliberately **not** applied to Spring/Upthrust: the HTF trend filter and the cause-and-effect TP2 cap that exist in the experimental `pine_script_paper_v6.pine` fork — those were evaluated but not ported, scope was Volume + COT only.
 
 ### OANDA Order Types (forex entries only)
 
