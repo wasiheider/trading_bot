@@ -633,8 +633,13 @@ no_position  = strategy.opentrades == 0
 _bos_short_base = short_retracing and short_rr_ok and not na(short_sl) and bear_entry_bar < bear_bos_bar and no_position and not range_broken and atr_ok
 _bos_long_base  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_entry_bar < bull_bos_bar and no_position and not range_broken and atr_ok
 
-short_signal_c = _bos_short_base and bear_div and rsi_c_ok and not (is_usoil or is_xagusd)
-long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and not (is_usoil or is_xagusd)
+// Restricted to GBPUSD only -- backtest 2026-07-18 showed Entry C net-negative
+// (PF well under 1, credible sample sizes) on USDJPY/US500/US30/EURNZD/EURUSD,
+// while GBPUSD alone was strongly positive (n=12, PF 2.63, +$2,717). Removing
+// the other instruments' C trades (108 trades, combined -$2,383) improved the
+// whole strategy's aggregate win rate and PF, not just Entry C's own numbers.
+short_signal_c = _bos_short_base and bear_div and rsi_c_ok and is_gbpusd
+long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and is_gbpusd
 short_signal   = _bos_short_base and not short_signal_c and entry_a_enabled
 long_signal    = _bos_long_base  and not long_signal_c  and entry_a_enabled
 
