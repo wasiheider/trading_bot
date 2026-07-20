@@ -690,7 +690,7 @@ function patchOpenTradeRows() {
 }
 
 function updateAllTimeStats(trades) {
-  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN' && t.result !== 'UNKNOWN');
+  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN' && t.result !== 'UNKNOWN' && t.result !== 'FAILED');
   const wins   = closed.filter(t => (t.result||'').includes('TP')).length;
   const losses = closed.length - wins;
   const wr     = closed.length ? Math.round((wins / closed.length) * 100) : 0;
@@ -846,7 +846,7 @@ function inferSession(trade) {
 function renderSessionBreakdown(trades) {
   const el = document.getElementById('session-breakdown-body');
   if (!el) return;
-  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN' && t.result !== 'UNKNOWN');
+  const closed = (trades || []).filter(t => t.result && t.result !== 'OPEN' && t.result !== 'UNKNOWN' && t.result !== 'FAILED');
   if (!closed.length) {
     el.innerHTML = '<div class="empty" style="padding:12px"><div style="font-size:11px;color:var(--t3)">No closed trades yet</div></div>';
     return;
