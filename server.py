@@ -638,6 +638,31 @@ def admin_cot_update():
     return jsonify({"status": "saved", "count": len(payload["instruments"])}), 200
 
 
+# ── Earnings Calendar Endpoint ─────────────────────────────
+# Served from Postgres (earnings_cache table). Unlike COT, neither Alpha
+# Vantage nor Wikipedia have shown any datacenter-IP blocking on Railway,
+# so this COULD be fetched live -- served from cache anyway to keep dashboard
+# loads fast (Alpha Vantage's bulk call takes ~20s) and Alpha Vantage calls
+# well under its 25/day free-tier limit. earnings_fetch.py runs daily and
+# POSTs the refreshed payload to /admin/earnings-update below.
+
+@app.route("/earnings", methods=["GET"])
+def earnings():
+    return jsonify(db.get_earnings_cache()), 200
+
+
+@app.route("/admin/earnings-update", methods=["POST"])
+def admin_earnings_update():
+    token = request.json.get("token") if request.is_json else None
+    if token != PAPER_WEBHOOK_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
+    payload = request.json.get("payload")
+    if not isinstance(payload, dict) or "earnings" not in payload:
+        return jsonify({"error": "invalid payload"}), 400
+    db.save_earnings_cache(payload)
+    return jsonify({"status": "saved", "count": len(payload["earnings"])}), 200
+
+
 # ── Dashboard ──────────────────────────────────────────────
 
 @app.route("/dashboard", methods=["GET"])

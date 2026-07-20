@@ -93,10 +93,17 @@ def init_db():
             payload     TEXT NOT NULL DEFAULT '{"updated": "", "instruments": []}',
             updated_at  TIMESTAMP DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS earnings_cache (
+            id          INTEGER PRIMARY KEY DEFAULT 1,
+            payload     TEXT NOT NULL DEFAULT '{"updated": "", "earnings": []}',
+            updated_at  TIMESTAMP DEFAULT NOW()
+        );
     """)
     # Ensure bot_state always has exactly one row
     cur.execute("INSERT INTO bot_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
     cur.execute("INSERT INTO cot_cache (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+    cur.execute("INSERT INTO earnings_cache (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
     conn.commit()
     cur.close()
     conn.close()
@@ -465,6 +472,32 @@ def save_cot_cache(payload: dict):
     cur = conn.cursor()
     cur.execute(
         "UPDATE cot_cache SET payload = %s, updated_at = NOW() WHERE id = 1",
+        (json.dumps(payload),),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+# ── Earnings cache ─────────────────────────────────────────
+# Fetched live from Railway (neither Alpha Vantage nor Wikipedia have shown
+# any datacenter-IP blocking, unlike CFTC above) -- see earnings_fetch.py.
+
+def get_earnings_cache() -> dict:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT payload FROM earnings_cache WHERE id = 1")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return json.loads(row[0]) if row else {"updated": "", "earnings": []}
+
+
+def save_earnings_cache(payload: dict):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE earnings_cache SET payload = %s, updated_at = NOW() WHERE id = 1",
         (json.dumps(payload),),
     )
     conn.commit()
