@@ -218,6 +218,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | `/calendar` | GET | ForexFactory calendar (1-hour cache) |
 | `/webhook/paper` | POST | TradingView signal receiver — entries + lifecycle events |
 | `/admin/reset` | POST | Full state reset — requires `PAPER_WEBHOOK_TOKEN` |
+| `/admin/resolve-trade` | POST | Manually resolve a single trade stuck at `OPEN`/`UNKNOWN` — `{token, trade_id, result?, pnl?}`, requires `PAPER_WEBHOOK_TOKEN`. Added 2026-07-20 after a hard OANDA order failure left a trade permanently stuck (see Known Gaps) |
 | `/latest-signal` | GET | Latest entry signal per instrument (12 non-micro instruments), polled by the FTMO MT5 EA — see below |
 
 ---
@@ -331,3 +332,4 @@ All Telegram messages are prefixed with `🩷👑🤖👑🩷` — intentional (
 
 - **Entry D in `model_stats`** — `/state` maps `"mid_bos"` → model D now, but dashboard HTML analytics `setupToModel` may still need updating
 - **`logger.py`** — legacy SQLite file, not wired in; candidate for removal or full PostgreSQL migration
+- **No automatic cleanup for stuck forex trades** — `close_stale_non_forex_opens()`/`delete_stale_non_forex_opens()` in `db.py` are both explicitly scoped to non-forex only. A forex trade stuck at `OPEN` (whether from an unfilled GFD limit that never expires, or — fixed 2026-07-20 for this one specific trigger — a hard OANDA order-placement failure, which now logs `"FAILED"` instead) has no automatic timeout and will permanently block `db.has_open_trade()` for that instrument until manually cleared via `POST /admin/resolve-trade`. The GFD-limit-expiry trigger is still open; only the order-failure trigger is fixed.
