@@ -250,7 +250,13 @@ def handle_paper_signal(data):
             "range_low":      range_low,
             "lot_size":       risk["lot_size"],
             "setup":          setup,
-            "result":         "OPEN",
+            # A hard OANDA order failure (both limit and market fallback threw)
+            # must never be logged as OPEN -- no real position exists, and an
+            # OPEN row with no oanda_trade_id blocks db.has_open_trade() from
+            # ever allowing a new signal on this instrument again, with no
+            # existing cleanup job for forex (close_stale_non_forex_opens /
+            # delete_stale_non_forex_opens are both scoped to non-forex only).
+            "result":         "FAILED" if oanda_error else "OPEN",
             "pnl":            0,
             "oanda_trade_id": oanda_trade_id,
         })
@@ -728,6 +734,24 @@ def admin_reset():
         return jsonify({"error": "unauthorized"}), 401
     reset_paper_full()
     return jsonify({"status": "reset", "balance": paper_state["account_balance"]}), 200
+
+
+@app.route("/admin/resolve-trade", methods=["POST"])
+def admin_resolve_trade():
+    """Manually resolve a single trade stuck at OPEN/UNKNOWN (e.g. a hard OANDA
+    order failure logged before it, or any future case with no auto-cleanup)."""
+    token = request.json.get("token") if request.is_json else None
+    if token != PAPER_WEBHOOK_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
+    trade_id = request.json.get("trade_id")
+    if not isinstance(trade_id, int):
+        return jsonify({"error": "trade_id (int) required"}), 400
+    result = request.json.get("result", "FAILED")
+    pnl = request.json.get("pnl", 0)
+    updated = db.force_resolve_trade(trade_id, result, pnl)
+    if not updated:
+        return jsonify({"error": f"no trade with id={trade_id}"}), 404
+    return jsonify({"status": "resolved", "trade_id": trade_id, "result": result}), 200
 
 
 # ── Health ─────────────────────────────────────────────────

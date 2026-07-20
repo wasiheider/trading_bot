@@ -160,6 +160,28 @@ def update_trade(instrument: str, direction: str, result: str, pnl: float):
     conn.close()
 
 
+def force_resolve_trade(trade_id: int, result: str = "FAILED", pnl: float = 0) -> bool:
+    """
+    Manually resolve a single trade by ID to a terminal, non-blocking result.
+    For clearing a trade stuck at OPEN with no oanda_trade_id (e.g. a hard
+    order-placement failure logged before the 2026-07-20 fix) -- there is no
+    automatic cleanup for forex OPEN trades (close_stale_non_forex_opens /
+    delete_stale_non_forex_opens are both scoped to non-forex only).
+    Returns True if a row was updated, False if no matching row existed.
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE trades SET result = %s, pnl = %s
+        WHERE id = %s
+    """, (result, pnl or 0, trade_id))
+    updated = cur.rowcount > 0
+    conn.commit()
+    cur.close()
+    conn.close()
+    return updated
+
+
 def get_oanda_trade_id(instrument: str, direction: str):
     conn = get_conn()
     cur = conn.cursor()
