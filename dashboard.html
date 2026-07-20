@@ -456,7 +456,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="psec-hdr"><span class="psec-icon">🗓️</span><span class="psec-title">Earnings Calendar</span><span class="psec-sub">S&amp;P 500 + Nasdaq-100 Constituents Only</span></div>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span class="ct" style="margin:0">Upcoming Earnings — Next 21 Days</span>
+      <span class="ct" style="margin:0">Upcoming Earnings — Next 7 Days</span>
       <span style="font-size:10px;color:var(--t3)" id="earnings-updated">Loading...</span>
     </div>
     <table class="tbl">
@@ -1317,7 +1317,7 @@ async function fetchEarnings() {
 function renderEarnings(items) {
   const body = document.getElementById('earnings-body');
   const today = new Date(); today.setHours(0,0,0,0);
-  const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + 21);
+  const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + 7);
 
   const upcoming = items.filter(e => {
     if (!e.report_date) return false;
@@ -1326,20 +1326,22 @@ function renderEarnings(items) {
   });
 
   if (!upcoming.length) {
-    body.innerHTML = '<tr><td colspan="5"><div class="empty" style="padding:16px"><div style="font-size:10px;color:var(--t3)">No earnings in the next 21 days</div></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="5"><div class="empty" style="padding:16px"><div style="font-size:10px;color:var(--t3)">No earnings in the next 7 days</div></div></td></tr>';
     return;
   }
 
   body.innerHTML = upcoming.map(e => {
     const timeLabel = e.report_time === 'pre-market' ? 'Pre-Mkt' : e.report_time === 'post-market' ? 'Post-Mkt' : '--';
     const timeColor = e.report_time === 'pre-market' ? 'var(--b)' : e.report_time === 'post-market' ? 'var(--pu)' : 'var(--t3)';
+    const isNasdaq100 = (e.indices || []).includes('Nasdaq100');
     const badges = (e.indices || []).map(ix =>
       `<span class="bd2 ${ix === 'S&P500' ? 'bb3' : 'bg2'}" style="font-size:9px">${ix === 'S&P500' ? 'SPX' : 'NDX'}</span>`
     ).join(' ');
-    return `<tr>
+    const rowStyle = isNasdaq100 ? ' style="background:var(--bd);font-weight:700"' : '';
+    return `<tr${rowStyle}>
       <td style="color:var(--t3);font-size:11px">${e.report_date}</td>
-      <td style="font-weight:700">${e.symbol}</td>
-      <td style="color:var(--t2);font-size:11px">${e.name || '--'}</td>
+      <td style="font-weight:800">${e.symbol}</td>
+      <td style="color:${isNasdaq100 ? 'var(--t1)' : 'var(--t2)'};font-size:11px">${e.name || '--'}</td>
       <td style="color:${timeColor};font-size:11px">${timeLabel}</td>
       <td>${badges}</td>
     </tr>`;
