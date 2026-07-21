@@ -159,10 +159,12 @@ Pending orders (not yet filled at signal time) show as "⏳ LIMIT ORDER PENDING"
 
 | Instrument | OANDA Execution | Telegram + Log only |
 |-----------|:--------------:|:-------------------:|
-| EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD | ✅ | — |
+| EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD, USDCAD | ✅ | — |
 | XAUUSD, XAGUSD, US100, US30, US500, USOIL, BTCUSD | — | ✅ |
 
 CFDs, metals, and indices are not on this OANDA demo account type. Do not add to `INSTRUMENT_MAP`.
+
+USDCAD added 2026-07-21 — Entry C (expanded from GBPUSD-only) + Entry D active on it; paper-bot only, deliberately not added to the FTMO EA's instrument list yet (see `MT5 EA` section below). AUDUSD and GBPJPY were tested the same day and explicitly excluded from every entry model (C/D/B) in the Pine script — never added anywhere in this table, `INSTRUMENT_MAP`, or `PAPER_INSTRUMENT_CONFIG`.
 
 ### Micro Futures Mirroring
 
