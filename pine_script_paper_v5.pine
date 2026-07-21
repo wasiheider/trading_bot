@@ -122,6 +122,7 @@ is_eurnzd     = str.contains(raw_ticker, "EURNZD") or syminfo.ticker == "EURNZD"
 is_nzdusd     = str.contains(raw_ticker, "NZDUSD") or syminfo.ticker == "NZDUSD"
 is_eurusd     = (str.contains(raw_ticker, "EURUSD") or syminfo.ticker == "EURUSD") and not is_eurnzd
 is_usdjpy     = str.contains(raw_ticker, "USDJPY") or syminfo.ticker == "USDJPY"
+is_usdcad     = str.contains(raw_ticker, "USDCAD") or syminfo.ticker == "USDCAD"
 pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
 _min_sl_price = pip_size * min_sl_pips  // minimum SL distance in price units
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
@@ -638,8 +639,13 @@ _bos_long_base  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_
 // while GBPUSD alone was strongly positive (n=12, PF 2.63, +$2,717). Removing
 // the other instruments' C trades (108 trades, combined -$2,383) improved the
 // whole strategy's aggregate win rate and PF, not just Entry C's own numbers.
-short_signal_c = _bos_short_base and bear_div and rsi_c_ok and is_gbpusd
-long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and is_gbpusd
+// Expanded 2026-07-21: GBPUSD (2026-07-18, PF 2.63 n=12) + USDCAD (added
+// despite a thin n=7/PF 1.22 sample on C alone -- user's explicit call
+// after discussion, paired with D's larger n=43-73/PF ~1.0-1.12 sample on
+// the same instrument. AUDUSD/GBPJPY tested and rejected same session
+// (C clearly negative on both, PF 0.20/0.32).
+short_signal_c = _bos_short_base and bear_div and rsi_c_ok and (is_gbpusd or is_usdcad)
+long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and (is_gbpusd or is_usdcad)
 short_signal   = _bos_short_base and not short_signal_c and entry_a_enabled
 long_signal    = _bos_long_base  and not long_signal_c  and entry_a_enabled
 
