@@ -638,8 +638,12 @@ _bos_long_base  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_
 // while GBPUSD alone was strongly positive (n=12, PF 2.63, +$2,717). Removing
 // the other instruments' C trades (108 trades, combined -$2,383) improved the
 // whole strategy's aggregate win rate and PF, not just Entry C's own numbers.
-short_signal_c = _bos_short_base and bear_div and rsi_c_ok and is_gbpusd
-long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and is_gbpusd
+// TEST 2026-07-21: temporarily un-restricted (reverted to the original
+// pre-2026-07-18 exclusion-list form) to backtest C on AUDUSD/GBPJPY/USDCAD.
+// Live v5 keeps the is_gbpusd-only restriction -- this is a separate branch,
+// not merged.
+short_signal_c = _bos_short_base and bear_div and rsi_c_ok and not (is_usoil or is_xagusd)
+long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and not (is_usoil or is_xagusd)
 short_signal   = _bos_short_base and not short_signal_c and entry_a_enabled
 long_signal    = _bos_long_base  and not long_signal_c  and entry_a_enabled
 
