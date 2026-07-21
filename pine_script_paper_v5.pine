@@ -123,6 +123,10 @@ is_nzdusd     = str.contains(raw_ticker, "NZDUSD") or syminfo.ticker == "NZDUSD"
 is_eurusd     = (str.contains(raw_ticker, "EURUSD") or syminfo.ticker == "EURUSD") and not is_eurnzd
 is_usdjpy     = str.contains(raw_ticker, "USDJPY") or syminfo.ticker == "USDJPY"
 is_usdcad     = str.contains(raw_ticker, "USDCAD") or syminfo.ticker == "USDCAD"
+// AUDUSD/GBPJPY: tested 2026-07-21, rejected on both C (PF 0.20/0.32) and
+// D (breakeven/negative) -- excluded from every entry model, not just C.
+is_audusd     = str.contains(raw_ticker, "AUDUSD") or syminfo.ticker == "AUDUSD"
+is_gbpjpy     = str.contains(raw_ticker, "GBPJPY") or syminfo.ticker == "GBPJPY"
 pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
 _min_sl_price = pip_size * min_sl_pips  // minimum SL distance in price units
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
@@ -725,7 +729,7 @@ d_short_lots     = _size(d_short_entry, d_short_sl)
 d_long_tp1_lots  = _tp1q(d_long_lots)
 d_short_tp1_lots = _tp1q(d_short_lots)
 
-_entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd or is_gbpusd)
+_entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd or is_gbpusd or is_audusd or is_gbpjpy)
 
 short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok
 long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok
@@ -783,7 +787,8 @@ _ut_bos_prev := _ut_bos_raw
 
 upthrust_signal = _ut_bos_event and not range_invalidated and no_position and atr_ok and
      _ut_rr_ok and not na(upthrust_sl_stored) and entry_b_enabled and
-     not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_short
+     not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_short and
+     not (is_audusd or is_gbpjpy)
 
 // --- Spring pending state ---
 var bool  spring_pending     = false
@@ -819,7 +824,8 @@ _sp_bos_prev := _sp_bos_raw
 
 spring_signal = _sp_bos_event and not range_invalidated and no_position and atr_ok and
      _sp_rr_ok and not na(spring_sl_stored) and entry_b_enabled and
-     not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_long
+     not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_long and
+     not (is_audusd or is_gbpjpy)
 
 // =============================================================================
 // ENTRY E — OVERNIGHT BOX FADE (NY KILL ZONE 7–9am ET)
