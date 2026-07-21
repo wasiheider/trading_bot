@@ -285,9 +285,9 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 - **Alert condition:** "Any alert() function call" — Once Per Bar Close
 - **Webhook URL:** `https://tradingbot-production-1e5a.up.railway.app/webhook/paper`
 - **Token input:** must match `PAPER_WEBHOOK_TOKEN` Railway env var
-- **Active charts (12):** EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD, XAUUSD, XAGUSD, US100, US30, US500, USOIL, BTCUSD
+- **Active charts (13):** EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD, XAUUSD, XAGUSD, US100, US30, US500, USOIL, BTCUSD, USDCAD (USDCAD alert added 2026-07-21 — paper bot only, not on the FTMO EA)
 
-When updating Pine Script: reload on all 12 charts and recreate alerts.
+When updating Pine Script: reload on all 13 charts and recreate alerts.
 
 ---
 
