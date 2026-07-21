@@ -57,6 +57,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 
@@ -125,9 +126,15 @@ def build_payload() -> dict:
         })
 
     results.sort(key=lambda r: (r["report_date"], r["symbol"]))
-    today = results[0]["report_date"] if results else ""
+    # BUG (found 2026-07-21): this used to be results[0]["report_date"] --
+    # the EARLIEST report date in the matched results, not the date this
+    # script actually ran. That's actively misleading: on a day with no
+    # calendar movement at the front of the list, "updated" could show
+    # yesterday's date even on a fully successful fresh run, making it
+    # impossible to tell a successful re-run apart from a stale/failed one
+    # by looking at this field alone. Use the real run date instead.
     return {
-        "updated": today,
+        "updated": datetime.now(timezone.utc).date().isoformat(),
         "universe_size": len(set(sp500) | set(nasdaq100)),
         "earnings": results,
     }
