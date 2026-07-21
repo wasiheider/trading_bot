@@ -18,6 +18,7 @@ INSTRUMENT_MAP = {
     "USDJPY": "USD_JPY",
     "EURNZD": "EUR_NZD",
     "NZDUSD": "NZD_USD",
+    "USDCAD": "USD_CAD",
 }
 
 # risk.py now outputs UNITS directly for forex (lot_size = units of base currency).

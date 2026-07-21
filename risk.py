@@ -104,6 +104,9 @@ PAPER_INSTRUMENT_CONFIG = {
     "NZDUSD": {"pip_value": 0.0001,    "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
     "USDJPY": {"pip_value": 0.0000625, "pip_size": 0.01,   "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
     "EURNZD": {"pip_value": 0.0000583, "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 20, "forex": True},
+    # USDCAD: USD is base (like USDJPY), pip_value = pip_size / rate, computed
+    # at the live OANDA rate (~1.4109) on 2026-07-21, added 2026-07-21.
+    "USDCAD": {"pip_value": 0.0000709, "pip_size": 0.0001, "default_sl_pips": 20, "min_sl_pips": 15, "forex": True},
     # Crypto
     "BTCUSD": {"pip_value": 1.00,  "pip_size": 1.0,    "default_sl_pips": 20},
 }
