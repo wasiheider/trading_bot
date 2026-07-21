@@ -893,7 +893,11 @@ if _e_session_end
     e_box_busted := e_top_touches >= 3 and e_bot_touches >= 3
 
 e_box_mid        = not na(e_box_high) and not na(e_box_low) ? (e_box_high + e_box_low) / 2.0 : na
-_e_instrument_ok = is_xauusd or is_xagusd or is_us500 or is_eurnzd or is_nzdusd or is_usoil
+// TEST 2026-07-21: added AUDUSD/GBPJPY/USDCAD to backtest Entry E on them --
+// not a live change, this is a separate untested branch. Entry E was never
+// built with these in mind (whitelist, not exclusion-list, see D), so this
+// is genuinely new ground, not a re-test of something already rejected.
+_e_instrument_ok = is_xauusd or is_xagusd or is_us500 or is_eurnzd or is_nzdusd or is_usoil or is_audusd or is_gbpjpy or is_usdcad
 _e_box_ready     = entry_e_enabled and _e_instrument_ok and not na(e_box_high) and not na(e_box_low) and e_box_valid and not e_box_busted
 
 // NY 7–9am: close beyond box boundary = breakout/breakdown
