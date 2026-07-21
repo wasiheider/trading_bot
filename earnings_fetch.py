@@ -132,9 +132,16 @@ def build_payload() -> dict:
     # calendar movement at the front of the list, "updated" could show
     # yesterday's date even on a fully successful fresh run, making it
     # impossible to tell a successful re-run apart from a stale/failed one
-    # by looking at this field alone. Use the real run date instead.
+    # by looking at this field alone. Fixed to use the real run date --
+    # but a date-only field still can't distinguish two runs on the SAME
+    # day (e.g. the daily routine + a manual re-run/retest), which is
+    # exactly the check that matters most right after standing this up.
+    # "fetched_at" adds full datetime precision for that; "updated" stays
+    # date-only since that's what the dashboard displays.
+    now = datetime.now(timezone.utc)
     return {
-        "updated": datetime.now(timezone.utc).date().isoformat(),
+        "updated": now.date().isoformat(),
+        "fetched_at": now.isoformat(),
         "universe_size": len(set(sp500) | set(nasdaq100)),
         "earnings": results,
     }
