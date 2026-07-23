@@ -7,7 +7,7 @@ import os
 import json
 import pytz
 
-from config import PAPER_WEBHOOK_TOKEN, PAPER_ACCOUNT_SIZE
+from config import PAPER_WEBHOOK_TOKEN, PAPER_ACCOUNT_SIZE, MID_BOS_LONG_MIN_MID_DIST_PCT
 from risk import (
     check_paper_risk,
     paper_state,
@@ -158,6 +158,19 @@ def handle_paper_signal(data):
     range_high  = data.get("range_high")
     range_low   = data.get("range_low")
     sl_pips     = _calc_sl_pips(instrument, price, sl) or data.get("sl_pips")
+
+    if setup == "mid_bos" and direction == "LONG" and range_high and range_low:
+        range_size = range_high - range_low
+        if range_size > 0:
+            mid_dist_pct = (price - (range_high + range_low) / 2) / range_size * 100
+            if mid_dist_pct < MID_BOS_LONG_MIN_MID_DIST_PCT:
+                reason = (
+                    f"weak mid confirmation ({mid_dist_pct:.1f}% vs "
+                    f"{MID_BOS_LONG_MIN_MID_DIST_PCT:.1f}% required)"
+                )
+                msg = f"{_MASCOT}\n🚫 <b>Paper Signal Blocked</b>\n<code>{instrument} {direction}</code>\nReason: {reason}"
+                send_telegram(msg)
+                return jsonify({"status": "blocked", "reason": reason}), 200
 
     risk = check_paper_risk(instrument, sl_pips)
     if not risk["allowed"]:
