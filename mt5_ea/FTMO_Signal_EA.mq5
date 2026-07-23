@@ -367,12 +367,27 @@ void TryEnter(string botSymbol, string block)
       // Pending order rejected -- most likely price already ran past the level
       // by the time this executed (signal detected -> poll delay -> request
       // round-trip). Same fallback oanda.py already uses for the paper bot:
-      // retry immediately as a market order with the same SL/TP.
+      // retry immediately as a market order.
+      //
+      // Re-anchor SL/TP to the CURRENT market price rather than reusing the
+      // original (now-stale) absolute levels -- if price ran far enough to
+      // reject the pending order, the original tp2 can end up on the wrong
+      // side of the new fill price, which MT5 rejects as [Invalid stops]
+      // (found live, 2026-07-23: US500 SellLimit rejected [Invalid price],
+      // market fallback then rejected [Invalid stops] using the stale tp2).
+      // Preserve the original risk distance and reward distance so position
+      // sizing (computed from slDistance) and R:R stay correct.
       Print("Pending order failed for ", botSymbol, ": ", trade.ResultRetcodeDescription(),
             " -- falling back to market order.");
+      double tpDistance   = MathAbs(tp2 - entryPrice);
+      double currentPrice = isLong
+         ? SymbolInfoDouble(brokerSymbol, SYMBOL_ASK)
+         : SymbolInfoDouble(brokerSymbol, SYMBOL_BID);
+      double marketSL = NormalizeDouble(isLong ? currentPrice - slDistance : currentPrice + slDistance, digits);
+      double marketTP = NormalizeDouble(isLong ? currentPrice + tpDistance : currentPrice - tpDistance, digits);
       ok = isLong
-         ? trade.Buy(lots, brokerSymbol, 0, stopLoss, tp2, comment)
-         : trade.Sell(lots, brokerSymbol, 0, stopLoss, tp2, comment);
+         ? trade.Buy(lots, brokerSymbol, 0, marketSL, marketTP, comment)
+         : trade.Sell(lots, brokerSymbol, 0, marketSL, marketTP, comment);
       if(!ok)
         {
          Print("Market order fallback also failed for ", botSymbol, ": ", trade.ResultRetcodeDescription());
