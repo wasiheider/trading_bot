@@ -435,7 +435,22 @@ double ComputeLotSize(string brokerSymbol, double slDistance)
    double volMin  = SymbolInfoDouble(brokerSymbol, SYMBOL_VOLUME_MIN);
    double volMax  = SymbolInfoDouble(brokerSymbol, SYMBOL_VOLUME_MAX);
    lots = MathFloor(lots / volStep) * volStep;
-   lots = MathMax(volMin, MathMin(volMax, lots));
+
+   // If the risk-sized lot is below the broker's minimum tradeable size,
+   // do NOT force it up to volMin -- that silently risks more than
+   // InpRiskPercent (found on XAGUSD, 2026-07-22: forced 0.01 min lot risked
+   // well more than the intended $25 on the $10K Phase 2 account). Skip the
+   // signal instead; a missed trade is preferable to an oversized one.
+   if(lots < volMin)
+     {
+      double minLotRisk = volMin * lossPerLot;
+      Print("Skipping ", brokerSymbol, ": broker minimum lot ", volMin,
+            " would risk $", DoubleToString(minLotRisk, 2), " vs $",
+            DoubleToString(riskMoney, 2), " budget -- signal skipped, not oversized.");
+      return 0;
+     }
+
+   lots = MathMin(volMax, lots);
    return NormalizeDouble(lots, 2);
   }
 
