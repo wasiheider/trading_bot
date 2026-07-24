@@ -325,7 +325,11 @@ void TryEnter(string botSymbol, string block)
       return;
      }
 
-   if(HasOpenExposure(brokerSymbol)) return; // one position/pending order per instrument
+   if(HasOpenExposure(brokerSymbol))
+     {
+      Print("Skipping ", botSymbol, " (", brokerSymbol, "): exposure already open -- one position/pending order per instrument.");
+      return;
+     }
 
    string direction = JsonStr(block, "direction");
    string setup      = JsonStr(block, "setup");
@@ -413,7 +417,10 @@ bool HasOpenExposure(string brokerSymbol)
       if(PositionSelectByTicket(ticket)
          && PositionGetInteger(POSITION_MAGIC) == InpMagicNumber
          && PositionGetString(POSITION_SYMBOL) == brokerSymbol)
+        {
+         Print("HasOpenExposure(", brokerSymbol, "): blocked by open POSITION ticket ", ticket);
          return true;
+        }
      }
    for(int i = 0; i < OrdersTotal(); i++)
      {
@@ -421,7 +428,11 @@ bool HasOpenExposure(string brokerSymbol)
       if(OrderSelect(ticket)
          && OrderGetInteger(ORDER_MAGIC) == InpMagicNumber
          && OrderGetString(ORDER_SYMBOL) == brokerSymbol)
+        {
+         Print("HasOpenExposure(", brokerSymbol, "): blocked by pending ORDER ticket ", ticket,
+               " type=", EnumToString((ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE)));
          return true;
+        }
      }
    return false;
   }
