@@ -104,6 +104,18 @@ cot_bullish_idx    = input.int(60,     "Entry B: COT Bullish Threshold (Larry Wi
 cot_bearish_idx    = input.int(40,     "Entry B: COT Bearish Threshold (Larry Williams %ile)", group="Entry B", minval=10, maxval=50)
 cot_history_len    = input.int(260,    "Entry B: COT Percentile Lookback (weekly readings, ~5yr)", group="Entry B", minval=20, maxval=1000)
 
+// TEST (branch entry-b-cot-extreme-test, 2026-07-24): the live hard-block above
+// is pure trend-confirmation at every reading -- idx=39 and idx=0 both just
+// block the long. Larry Williams' own COT Index is conventionally read the
+// opposite way at true multi-year extremes (crowded positioning -> squeeze
+// risk), so this adds a second, more extreme band that FLIPS which side gets
+// blocked instead of just widening the same block. Toggle off to reproduce
+// the exact live (2026-07-18-approved) behavior for an A/B comparison in the
+// same Strategy Tester session -- no need for two separate chart loads.
+use_cot_extreme_flip   = input.bool(true, "Entry B: COT Extreme-Zone Contrarian Flip (TEST)", group="Entry B")
+cot_extreme_bearish_idx = input.int(10, "Entry B: COT EXTREME Bearish Threshold (flip zone)", group="Entry B", minval=0, maxval=30)
+cot_extreme_bullish_idx = input.int(90, "Entry B: COT EXTREME Bullish Threshold (flip zone)", group="Entry B", minval=70, maxval=100)
+
 // =============================================================================
 // INSTRUMENT CONFIG
 // =============================================================================
@@ -237,14 +249,35 @@ cot_idx = is_eurusd ? _eur_pct : is_gbpusd ? _gbp_pct : is_usdjpy ? _jpy_pct :
 cot_supported = not na(cot_idx) or is_eurnzd
 
 // Direct instruments: standard mapping (base currency long = COT-currency long).
-_cot_blocks_long_direct  = not na(cot_idx) and cot_idx <= cot_bearish_idx
-_cot_blocks_short_direct = not na(cot_idx) and cot_idx >= cot_bullish_idx
+// Moderate band (extreme_bearish, bearish_idx] still blocks the long the same
+// as live v5 (trend-confirmation). NEW: at a true extreme (<= extreme_bearish
+// or >= extreme_bullish) the block FLIPS to the other side -- the crowded
+// side is where squeeze/reversal risk lives, so the trade that would catch
+// that reversal (long, in the oversold case) is no longer blocked, and the
+// trade that would get run over by it (short, pressing an already-extreme
+// short) is blocked instead.
+_cot_blocks_long_direct  = not na(cot_idx) and (use_cot_extreme_flip ?
+     ((cot_idx > cot_extreme_bearish_idx and cot_idx <= cot_bearish_idx) or cot_idx >= cot_extreme_bullish_idx) :
+     cot_idx <= cot_bearish_idx)
+_cot_blocks_short_direct = not na(cot_idx) and (use_cot_extreme_flip ?
+     ((cot_idx >= cot_bullish_idx and cot_idx < cot_extreme_bullish_idx) or cot_idx <= cot_extreme_bearish_idx) :
+     cot_idx >= cot_bullish_idx)
 
-// USDJPY: inverted (JPY is the COT currency, sitting in the quote position).
-_cot_blocks_long_jpy  = not na(cot_idx) and cot_idx >= cot_bullish_idx
-_cot_blocks_short_jpy = not na(cot_idx) and cot_idx <= cot_bearish_idx
+// USDJPY: inverted (JPY is the COT currency, sitting in the quote position) --
+// same zone logic, long/short swapped to match the existing inversion.
+_cot_blocks_long_jpy  = not na(cot_idx) and (use_cot_extreme_flip ?
+     ((cot_idx >= cot_bullish_idx and cot_idx < cot_extreme_bullish_idx) or cot_idx <= cot_extreme_bearish_idx) :
+     cot_idx >= cot_bullish_idx)
+_cot_blocks_short_jpy = not na(cot_idx) and (use_cot_extreme_flip ?
+     ((cot_idx > cot_extreme_bearish_idx and cot_idx <= cot_bearish_idx) or cot_idx >= cot_extreme_bullish_idx) :
+     cot_idx <= cot_bearish_idx)
 
-// EURNZD: combine both legs -- a long is blocked if EITHER leg disagrees.
+// EURNZD: deliberately OUT OF SCOPE for the extreme-flip test -- combining two
+// legs' extremes correctly (a genuine oversold-EUR bounce argues differently
+// than a genuine overbought-NZD pullback, for the same "long" direction) needs
+// its own careful derivation, not a quick mirror of the direct case. Keeps the
+// exact live moderate-threshold logic regardless of use_cot_extreme_flip, so
+// this test branch cannot silently change EURNZD behavior.
 _cot_blocks_long_eurnzd  = (not na(_eur_pct) and _eur_pct <= cot_bearish_idx) or
      (not na(_nzd_pct) and _nzd_pct >= cot_bullish_idx)
 _cot_blocks_short_eurnzd = (not na(_eur_pct) and _eur_pct >= cot_bullish_idx) or
@@ -1706,7 +1739,11 @@ if show_info
     table.cell(info, 0, 32, "E NY Window",                    text_color=color.gray)
     table.cell(info, 1, 32, _e_ny_txt,                        text_color=_e_ny_clr)
     _cot_txt = not use_cot_filter ? "OFF" : not cot_supported ? "N/A" : na(cot_idx) and not is_eurnzd ? "--" : is_eurnzd ? "EUR " + (na(_eur_pct) ? "--" : str.tostring(_eur_pct, "#")) + " / NZD " + (na(_nzd_pct) ? "--" : str.tostring(_nzd_pct, "#")) : str.tostring(cot_idx, "#.#")
-    _cot_clr = not use_cot_filter or not cot_supported ? color.gray : cot_blocks_long or cot_blocks_short ? color.red : color.green
+    // TEST branch: orange = extreme-flip zone actually engaged this bar (not just
+    // "blocked") -- lets the extreme band be visually confirmed on the chart,
+    // distinct from an ordinary moderate-zone block (red) or no block (green).
+    _cot_extreme_active = use_cot_filter and use_cot_extreme_flip and not is_eurnzd and not na(cot_idx) and (cot_idx <= cot_extreme_bearish_idx or cot_idx >= cot_extreme_bullish_idx)
+    _cot_clr = not use_cot_filter or not cot_supported ? color.gray : _cot_extreme_active ? color.orange : cot_blocks_long or cot_blocks_short ? color.red : color.green
     table.cell(info, 0, 33, "B — COT Bias",                   text_color=color.gray)
     table.cell(info, 1, 33, _cot_txt,                         text_color=_cot_clr)
     _vol_txt = not use_volume_filter ? "OFF" : str.tostring(volume / vol_avg, "#.##") + "x avg"
