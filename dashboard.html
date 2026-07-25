@@ -1322,7 +1322,10 @@ function renderEarnings(items) {
   const upcoming = items.filter(e => {
     if (!e.report_date) return false;
     const d = new Date(e.report_date + 'T00:00:00');
-    return d >= today && d <= windowEnd;
+    // Strictly future days only -- today's date has no market-hours awareness
+    // here, so once today's session is over there's no reason to keep
+    // showing it as "upcoming" until tomorrow's fetch rolls the cache.
+    return d > today && d <= windowEnd;
   });
 
   if (!upcoming.length) {
