@@ -451,24 +451,6 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </section>
 
-<!-- ══════════════════ SECTION 5: EARNINGS CALENDAR ══════════════════ -->
-<section class="psection">
-  <div class="psec-hdr"><span class="psec-icon">🗓️</span><span class="psec-title">Earnings Calendar</span><span class="psec-sub">S&amp;P 500 + Nasdaq-100 Constituents Only</span></div>
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span class="ct" style="margin:0">Upcoming Earnings — Next 7 Days</span>
-      <span style="font-size:10px;color:var(--t3)" id="earnings-updated">Loading...</span>
-    </div>
-    <table class="tbl">
-      <colgroup><col style="width:20%"><col style="width:18%"><col style="width:38%"><col style="width:12%"><col style="width:12%"></colgroup>
-      <thead><tr><th>Date</th><th>Ticker</th><th>Company</th><th>Time</th><th>Index</th></tr></thead>
-      <tbody id="earnings-body">
-        <tr><td colspan="5"><div class="empty" style="padding:16px"><div style="font-size:10px;color:var(--t3)">Fetching earnings calendar...</div></div></td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
 </div><!-- /page -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -1294,63 +1276,6 @@ function renderNews(articles) {
   }).join('');
 }
 
-// ── Earnings Calendar — fetched from /earnings (server-side cache,
-// refreshed daily by earnings_fetch.py; see server.py for why this is
-// cache-served rather than live-fetched-per-request) ───────────────────
-async function fetchEarnings() {
-  try {
-    const res = await fetch(RAILWAY_URL + '/earnings', {cache:'no-store'});
-    if (!res.ok) throw new Error('Earnings ' + res.status);
-    const data = await res.json();
-    const updated = data.updated || '';
-    document.getElementById('earnings-updated').textContent = updated
-      ? 'Updated ' + updated
-      : 'Awaiting first fetch';
-    renderEarnings(data.earnings || []);
-  } catch(e) {
-    console.warn('Earnings fetch failed:', e);
-    document.getElementById('earnings-updated').textContent = 'Fetch error';
-    document.getElementById('earnings-body').innerHTML = '<tr><td colspan="5"><div class="empty" style="padding:16px"><div style="font-size:10px;color:var(--r)">EARNINGS DATA UNAVAILABLE</div></div></td></tr>';
-  }
-}
-
-function renderEarnings(items) {
-  const body = document.getElementById('earnings-body');
-  const today = new Date(); today.setHours(0,0,0,0);
-  const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + 7);
-
-  const upcoming = items.filter(e => {
-    if (!e.report_date) return false;
-    const d = new Date(e.report_date + 'T00:00:00');
-    // Strictly future days only -- today's date has no market-hours awareness
-    // here, so once today's session is over there's no reason to keep
-    // showing it as "upcoming" until tomorrow's fetch rolls the cache.
-    return d > today && d <= windowEnd;
-  });
-
-  if (!upcoming.length) {
-    body.innerHTML = '<tr><td colspan="5"><div class="empty" style="padding:16px"><div style="font-size:10px;color:var(--t3)">No earnings in the next 7 days</div></div></td></tr>';
-    return;
-  }
-
-  body.innerHTML = upcoming.map(e => {
-    const timeLabel = e.report_time === 'pre-market' ? 'Pre-Mkt' : e.report_time === 'post-market' ? 'Post-Mkt' : '--';
-    const timeColor = e.report_time === 'pre-market' ? 'var(--b)' : e.report_time === 'post-market' ? 'var(--pu)' : 'var(--t3)';
-    const isNasdaq100 = (e.indices || []).includes('Nasdaq100');
-    const badges = (e.indices || []).map(ix =>
-      `<span class="bd2 ${ix === 'S&P500' ? 'bb3' : 'bg2'}" style="font-size:9px">${ix === 'S&P500' ? 'SPX' : 'NDX'}</span>`
-    ).join(' ');
-    const rowStyle = isNasdaq100 ? ' style="background:var(--bd);font-weight:700"' : '';
-    return `<tr${rowStyle}>
-      <td style="color:var(--t3);font-size:11px">${e.report_date}</td>
-      <td style="font-weight:800">${e.symbol}</td>
-      <td style="color:${isNasdaq100 ? 'var(--t1)' : 'var(--t2)'};font-size:11px">${e.name || '--'}</td>
-      <td style="color:${timeColor};font-size:11px">${timeLabel}</td>
-      <td>${badges}</td>
-    </tr>`;
-  }).join('');
-}
-
 // ── Boot ───────────────────────────────────────────────────
 initChart();
 fetchState();
@@ -1358,13 +1283,11 @@ fetchTrades();
 fetchCalendar();
 fetchCOT();
 fetchNews();
-fetchEarnings();
 setInterval(fetchState,   5000);
 setInterval(fetchTrades,  30000);
 setInterval(fetchCalendar, 3600000);
 setInterval(fetchCOT,      3600000);
 setInterval(fetchNews,     900000);
-setInterval(fetchEarnings, 3600000);
 </script>
 </body>
 </html>
