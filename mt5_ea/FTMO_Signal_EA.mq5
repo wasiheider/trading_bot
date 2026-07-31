@@ -2,8 +2,8 @@
 //| FTMO_Signal_EA.mq5                                                |
 //|                                                                    |
 //| Polls the trading_bot Railway server's GET /latest-signal for     |
-//| entry signals (12 non-micro instruments) and trades them on the   |
-//| FTMO MT5 account.                                                  |
+//| entry signals (13 non-micro instruments, same set as the paper    |
+//| bot) and trades them on the FTMO MT5 account.                     |
 //|                                                                    |
 //| Exit management is entirely local, driven by live broker price:   |
 //|   - At entry: SL = signal stop_loss, TP = signal tp2 (broker-side |
@@ -62,6 +62,7 @@ input string InpSymbolMap_GBPUSD = "GBPUSD.sim";
 input string InpSymbolMap_USDJPY = "USDJPY.sim";
 input string InpSymbolMap_EURNZD = "EURNZD.sim";
 input string InpSymbolMap_NZDUSD = "NZDUSD.sim";
+input string InpSymbolMap_USDCAD = "USDCAD.sim";
 input string InpSymbolMap_XAUUSD = "XAUUSD.sim";
 input string InpSymbolMap_XAGUSD = "XAGUSD.sim";
 input string InpSymbolMap_US100  = "US100.sim";
@@ -77,9 +78,9 @@ input double InpTrailGapR   = 0.5;
 
 CTrade trade;
 
-#define BOT_SYMBOL_COUNT 12
+#define BOT_SYMBOL_COUNT 13
 string BotSymbols[BOT_SYMBOL_COUNT] = {
-   "EURUSD", "GBPUSD", "USDJPY", "EURNZD", "NZDUSD",
+   "EURUSD", "GBPUSD", "USDJPY", "EURNZD", "NZDUSD", "USDCAD",
    "XAUUSD", "XAGUSD", "US100", "US30", "US500", "USOIL", "BTCUSD"
 };
 
@@ -91,6 +92,7 @@ string BrokerSymbolFor(string botSymbol)
    if(botSymbol == "USDJPY") return InpSymbolMap_USDJPY;
    if(botSymbol == "EURNZD") return InpSymbolMap_EURNZD;
    if(botSymbol == "NZDUSD") return InpSymbolMap_NZDUSD;
+   if(botSymbol == "USDCAD") return InpSymbolMap_USDCAD;
    if(botSymbol == "XAUUSD") return InpSymbolMap_XAUUSD;
    if(botSymbol == "XAGUSD") return InpSymbolMap_XAGUSD;
    if(botSymbol == "US100")  return InpSymbolMap_US100;

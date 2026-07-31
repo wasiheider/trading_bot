@@ -488,9 +488,9 @@ def trades():
 # Polled by the FTMO MT5 EA — entry signals only. Exit management (TP1/TP2/
 # trailing) is handled by the EA itself watching live price, not by polling
 # this endpoint, so no lifecycle events are exposed here. Micro futures are
-# intentionally excluded — they're just server-side mirrors of these same 12.
+# intentionally excluded — they're just server-side mirrors of these same 13.
 EA_INSTRUMENTS = [
-    "EURUSD", "GBPUSD", "USDJPY", "EURNZD", "NZDUSD",
+    "EURUSD", "GBPUSD", "USDJPY", "EURNZD", "NZDUSD", "USDCAD",
     "XAUUSD", "XAGUSD", "US100", "US30", "US500", "USOIL", "BTCUSD",
 ]
 SIGNAL_MAX_AGE_HOURS = 6

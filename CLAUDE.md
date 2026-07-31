@@ -164,7 +164,7 @@ Pending orders (not yet filled at signal time) show as "⏳ LIMIT ORDER PENDING"
 
 CFDs, metals, and indices are not on this OANDA demo account type. Do not add to `INSTRUMENT_MAP`.
 
-USDCAD added 2026-07-21 — Entry C (expanded from GBPUSD-only) + Entry D active on it; paper-bot only, deliberately not added to the FTMO EA's instrument list yet (see `MT5 EA` section below). AUDUSD and GBPJPY were tested the same day and explicitly excluded from every entry model (C/D/B) in the Pine script — never added anywhere in this table, `INSTRUMENT_MAP`, or `PAPER_INSTRUMENT_CONFIG`.
+USDCAD added 2026-07-21 — Entry C (expanded from GBPUSD-only) + Entry D active on it; paper-bot only at first, **added to the FTMO EA's instrument list 2026-07-31** (see `MT5 EA` section below) so the EA now trades the same 13 instruments as the paper bot. AUDUSD and GBPJPY were tested the same day and explicitly excluded from every entry model (C/D/B) in the Pine script — never added anywhere in this table, `INSTRUMENT_MAP`, or `PAPER_INSTRUMENT_CONFIG`.
 
 ### Micro Futures Mirroring
 
@@ -221,13 +221,13 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | `/webhook/paper` | POST | TradingView signal receiver — entries + lifecycle events |
 | `/admin/reset` | POST | Full state reset — requires `PAPER_WEBHOOK_TOKEN` |
 | `/admin/resolve-trade` | POST | Manually resolve a single trade stuck at `OPEN`/`UNKNOWN` — `{token, trade_id, result?, pnl?}`, requires `PAPER_WEBHOOK_TOKEN`. Added 2026-07-20 after a hard OANDA order failure left a trade permanently stuck (see Known Gaps) |
-| `/latest-signal` | GET | Latest entry signal per instrument (12 non-micro instruments), polled by the FTMO MT5 EA — see below |
+| `/latest-signal` | GET | Latest entry signal per instrument (13 non-micro instruments, same set as the paper bot), polled by the FTMO MT5 EA — see below |
 
 ---
 
 ## MT5 EA (FTMO account, added 2026-07-04)
 
-`mt5_ea/FTMO_Signal_EA.mq5` polls `GET /latest-signal` and trades the same 12 instruments on the FTMO MT5 account (separate from the OANDA-demo paper account above — no shared state, no shared risk limits). Full spec/history in `MT5_EA_handoff.md` at repo root.
+`mt5_ea/FTMO_Signal_EA.mq5` polls `GET /latest-signal` and trades the same 13 instruments as the paper bot on the FTMO MT5 account (separate from the OANDA-demo paper account above — no shared state, no shared risk limits). Full spec/history in `MT5_EA_handoff.md` at repo root.
 
 - **Entry-only polling.** The EA never polls for TP1/TP2/SL lifecycle events — exit management is 100% local, driven by the EA watching live broker price. This was a deliberate choice: Pine Script's lifecycle webhooks lag real price by up to 15 min (bar-close driven) and could be missed entirely if a poll cycle or the server has any hiccup, which is an acceptable risk for the paper account's PNL tracking but not for a real funded eval account.
 - **Broker-side safety net:** every order sets SL = signal's `stop_loss` and TP = signal's `tp2` at placement time. Even if the EA process crashes, the position still has a hard floor and ceiling enforced by the broker.
@@ -285,7 +285,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 - **Alert condition:** "Any alert() function call" — Once Per Bar Close
 - **Webhook URL:** `https://tradingbot-production-1e5a.up.railway.app/webhook/paper`
 - **Token input:** must match `PAPER_WEBHOOK_TOKEN` Railway env var
-- **Active charts (13):** EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD, XAUUSD, XAGUSD, US100, US30, US500, USOIL, BTCUSD, USDCAD (USDCAD alert added 2026-07-21 — paper bot only, not on the FTMO EA)
+- **Active charts (13):** EURUSD, GBPUSD, USDJPY, EURNZD, NZDUSD, XAUUSD, XAGUSD, US100, US30, US500, USOIL, BTCUSD, USDCAD (USDCAD alert added 2026-07-21; now on both the paper bot and the FTMO EA as of 2026-07-31)
 
 When updating Pine Script: reload on all 13 charts and recreate alerts.
 
