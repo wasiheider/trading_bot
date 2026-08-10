@@ -112,7 +112,7 @@ Push to `paper-trading` → Railway auto-deploys.
 ### Quality Gate (all 3 required)
 1. **Boundary touches ≥ 3** — combined H+L, wick-based
 2. **Mid crosses ≥ 3** — settled side by `close`; wicks trigger the count
-3. **30M swing pattern** — pivot_high → pivot_low → pivot_high → pivot_low, each leg ≥ 4 bars
+3. **1H swing pattern** — 3 legs alternating up/down (pivot_high → pivot_low → pivot_high, or the reverse), each leg ≥ 4 × 1H bars (`swing_down_bars`/`swing_up_bars`, `f_swing_quality()`). Variable is still named `m30_swing_ok` in code (leftover from an earlier design) despite pulling the 60-min timeframe.
 
 ### Entry Models
 
