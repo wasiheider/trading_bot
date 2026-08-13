@@ -42,4 +42,9 @@ MAX_WEEKLY_LOSS = 10000.0  # $10,000 weekly loss (10% of $100k)
 # to be taken. Market regime (currently choppy/downtrending) can shift this
 # relationship — revisit in a few months once there's a fresh batch of
 # mid_bos LONG trades to re-check against.
+#
+# Disabled 2026-08-13 (user call: market sentiment/regime has moved on from
+# the backtest window above) — threshold kept for reference / easy re-enable,
+# not deleted.
+MID_BOS_LONG_FILTER_ENABLED = False
 MID_BOS_LONG_MIN_MID_DIST_PCT = 5.0

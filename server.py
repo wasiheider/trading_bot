@@ -7,7 +7,7 @@ import os
 import json
 import pytz
 
-from config import PAPER_WEBHOOK_TOKEN, PAPER_ACCOUNT_SIZE, MID_BOS_LONG_MIN_MID_DIST_PCT
+from config import PAPER_WEBHOOK_TOKEN, PAPER_ACCOUNT_SIZE, MID_BOS_LONG_FILTER_ENABLED, MID_BOS_LONG_MIN_MID_DIST_PCT
 from risk import (
     check_paper_risk,
     paper_state,
@@ -159,7 +159,7 @@ def handle_paper_signal(data):
     range_low   = data.get("range_low")
     sl_pips     = _calc_sl_pips(instrument, price, sl) or data.get("sl_pips")
 
-    if setup == "mid_bos" and direction == "LONG" and range_high and range_low:
+    if MID_BOS_LONG_FILTER_ENABLED and setup == "mid_bos" and direction == "LONG" and range_high and range_low:
         range_size = range_high - range_low
         if range_size > 0:
             mid_dist_pct = (price - (range_high + range_low) / 2) / range_size * 100
