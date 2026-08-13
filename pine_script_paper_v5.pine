@@ -96,8 +96,18 @@ e_touch_pct_in  = input.float(0.10, "Touch proximity % of box boundary",        
 // during New York session (07:00-12:00 America/Chicago), vs. 67% WR / +$1,611.58
 // combined everywhere else. Scoped to XAUUSD only — US500/US100 are net
 // winners for Entry D in this same window and are left untouched.
+// Disabled 2026-08-13 (user call) — default flipped to false, toggle and
+// window kept for reference / easy re-enable, not deleted.
 // =============================================================================
-use_d_xau_ny_block = input.bool(true, "Entry D: Block XAUUSD during New York Session (07:00-12:00 CT)", group="Entry D")
+use_d_xau_ny_block = input.bool(false, "Entry D: Block XAUUSD during New York Session (07:00-12:00 CT)", group="Entry D")
+
+// =============================================================================
+// ENTRY D — near-mid structural filter, disabled 2026-08-13 (user call).
+// Originally required the BOS swing level to sit within ±35% of range height
+// from the range midpoint before counting as a "mid_bos" candidate at all.
+// Toggle + threshold kept for reference / easy re-enable, not deleted.
+// =============================================================================
+use_d_near_mid_filter = input.bool(false, "Entry D: Require near-mid swing (±35% of range height)", group="Entry D")
 
 // =============================================================================
 // ENTRY B FILTERS — volume confirmation + COT bias, backtested and approved
@@ -681,10 +691,10 @@ var int   _d_bos_short_bar    = -1
 _d_range_h = range_high - range_low
 
 // Near-mid filter: swing level must be within ±35% of range height from mid
-_d_ph_near_mid = not na(last_m15_ph) and not na(htf_mid) and not na(range_high) and not na(range_low) and
-     math.abs(last_m15_ph - htf_mid) < _d_range_h * 0.35
-_d_pl_near_mid = not na(last_m15_pl) and not na(htf_mid) and not na(range_high) and not na(range_low) and
-     math.abs(last_m15_pl - htf_mid) < _d_range_h * 0.35
+_d_ph_near_mid = not use_d_near_mid_filter or (not na(last_m15_ph) and not na(htf_mid) and not na(range_high) and not na(range_low) and
+     math.abs(last_m15_ph - htf_mid) < _d_range_h * 0.35)
+_d_pl_near_mid = not use_d_near_mid_filter or (not na(last_m15_pl) and not na(htf_mid) and not na(range_high) and not na(range_low) and
+     math.abs(last_m15_pl - htf_mid) < _d_range_h * 0.35)
 
 // Bull BOS: close breaks above a near-mid 15M swing high
 _d_bull_bos_evt = range_armed and not range_broken and not range_invalidated and

@@ -121,7 +121,7 @@ Push to `paper-trading` → Railway auto-deploys.
 | A — BOS + Rejection | `"bos"` or `""` | 15M BOS near boundary → retest → rejection candle | **Disabled** (`entry_a_enabled = false`) |
 | B — Spring / Upthrust | `"spring"` / `"upthrust"` | Wick beyond boundary closes back inside; deferred entry | **Enabled 2026-07-18**, with Volume Confirmation (quiet wick + loud BOS) and COT Hard-Block (TradingView `LibraryCOT`) filters — see below |
 | C — BOS + RSI Divergence | `"bos_div"` | Same as A + RSI divergence at retest (30–70); priority over A | **GBPUSD + USDCAD only** (`is_gbpusd or is_usdcad`, USDCAD added 2026-07-21) — was net-negative on USDJPY/US500/US30/EURNZD/EURUSD in backtest, strongly positive on GBPUSD |
-| D — Mid BOS + Retest | `"mid_bos"` | 15M structural BOS within ±35% of range mid → retest | Active. Blocked: XAGUSD, USOIL, BTCUSD, GBPUSD, AUDUSD, GBPJPY, plus XAUUSD during the NY session — see below |
+| D — Mid BOS + Retest | `"mid_bos"` | 15M structural BOS, near-mid filter disabled 2026-08-13 → retest | Active. Blocked: XAGUSD, USOIL, BTCUSD, GBPUSD, AUDUSD, GBPJPY. Near-mid filter and XAUUSD NY-session block both disabled 2026-08-13 — see below |
 | E — Box Break | `"box_break"` | NY session close beyond pre-session box boundary | Active, unchanged |
 
 **Entry B filters (added 2026-07-18, backtested and approved — see `project_trading_bot.md` memory "Wyckoff/Livermore v6 backtest" section for full detail):**
@@ -129,7 +129,9 @@ Push to `paper-trading` → Railway auto-deploys.
 - **COT Hard-Block**: blocks a Spring (long) if TradingView's native COT read for that instrument is bearish (Larry Williams percentile ≤40), blocks an Upthrust (short) if bullish (≥60). Neutral COT never blocks. Uses TradingView's official `LibraryCOT` (`import TradingView/LibraryCOT/6`), same CFTC codes as `cot_fetch.py`. USDJPY direction is inverted (JPY is the COT currency but sits in the quote position); EURNZD combines both legs (blocks if either EUR or NZD disagrees).
 - Deliberately **not** applied to Spring/Upthrust: the HTF trend filter and the cause-and-effect TP2 cap that exist in the experimental `pine_script_paper_v6.pine` fork — those were evaluated but not ported, scope was Volume + COT only.
 
-**Entry D — XAUUSD New York session block (added 2026-08-01, `use_d_xau_ny_block` input, default on):** blocks Entry D (both long and short) on XAUUSD only, during 07:00–12:00 America/Chicago (`_d_xau_ny_block`). Based on trade-log analysis of mid_bos on XAUUSD/MGC: **17% win rate / –$2,444.97 combined** inside that window vs. **67% win rate / +$1,611.58 combined** everywhere else. Scoped to XAUUSD specifically — US500/US100 were net winners for Entry D in the same window and were deliberately left untouched.
+**Entry D — near-mid structural filter (`use_d_near_mid_filter` input, default off — disabled 2026-08-13, user call):** when enabled, required the BOS swing level to sit within ±35% of range height from the range midpoint before counting as a "mid_bos" candidate at all. Toggle and 35% threshold kept in the script for reference / easy re-enable, not deleted.
+
+**Entry D — XAUUSD New York session block (added 2026-08-01, `use_d_xau_ny_block` input, default off — disabled 2026-08-13, user call):** when enabled, blocks Entry D (both long and short) on XAUUSD only, during 07:00–12:00 America/Chicago (`_d_xau_ny_block`). Based on trade-log analysis of mid_bos on XAUUSD/MGC: **17% win rate / –$2,444.97 combined** inside that window vs. **67% win rate / +$1,611.58 combined** everywhere else, scoped to XAUUSD specifically since US500/US100 were net winners for Entry D in the same window. Toggle kept for reference / easy re-enable, not deleted.
 
 ### Universal Entry Gates (apply to every model, long and short alike)
 
