@@ -149,8 +149,21 @@ is_gbpjpy     = str.contains(raw_ticker, "GBPJPY") or syminfo.ticker == "GBPJPY"
 pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
 _min_sl_price = pip_size * min_sl_pips  // minimum SL distance in price units
 price_format  = is_us100  ? "#.#" : is_xauusd ? "#.##" : "#.#####"
+
+// US500 restricted to NY AM only, added 2026-08-25 -- trade-log analysis showed
+// NY AM (8am-12pm CT) at 85.7% WR (6/7) vs. 28.6-50% every other session across
+// 31 total US500 trades. True for every non-US500 instrument (no effect on them);
+// only gates US500 itself. Threaded into Entry B, D, and E below -- the three
+// models that can fire signals for US500.
+_us500_ny_am_ok = not is_us500 or not na(time(timeframe.period, "0800-1200", "America/Chicago"))
+
+// Risk bump, added 2026-08-25 -- trade-log analysis: US100 70.8% WR (17/24) and
+// US500-in-NY-AM 85.7% WR (6/7) both cleared the bar for a deliberate size-up,
+// user's explicit call to double risk (0.5% -> 1.0%) on these two specific
+// setups while leaving every other instrument/session at the $500 baseline.
 risk_dollars  = 500.0
-risk_dollars_eff = risk_dollars
+_risk_bump_ok = is_us100 or (is_us500 and _us500_ny_am_ok)
+risk_dollars_eff = _risk_bump_ok ? risk_dollars * 2.0 : risk_dollars
 _nzdusd_rate  = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
 _quote_to_usd = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "NZD" ? _nzdusd_rate : 1.0
 
@@ -667,8 +680,11 @@ _bos_long_base  = long_retracing  and long_rr_ok  and not na(long_sl)  and bull_
 // after discussion, paired with D's larger n=43-73/PF ~1.0-1.12 sample on
 // the same instrument. AUDUSD/GBPJPY tested and rejected same session
 // (C clearly negative on both, PF 0.20/0.32).
-short_signal_c = _bos_short_base and bear_div and rsi_c_ok and (is_gbpusd or is_usdcad)
-long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and (is_gbpusd or is_usdcad)
+// GBPUSD removed 2026-08-25 -- disabled instrument-wide (see is_gbpusd
+// exclusion added to Entry B below; D and E already excluded it). USDCAD
+// is now Entry C's sole instrument.
+short_signal_c = _bos_short_base and bear_div and rsi_c_ok and (is_usdcad)
+long_signal_c  = _bos_long_base  and bull_div and rsi_c_ok and (is_usdcad)
 short_signal   = _bos_short_base and not short_signal_c and entry_a_enabled
 long_signal    = _bos_long_base  and not long_signal_c  and entry_a_enabled
 
@@ -755,8 +771,8 @@ _d_xau_ny_block = use_d_xau_ny_block and is_xauusd and _d_ny_session
 
 _entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd or is_gbpusd or is_audusd or is_gbpjpy) and not _d_xau_ny_block
 
-short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok
-long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok
+short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok and _us500_ny_am_ok
+long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok and _us500_ny_am_ok
 
 // =============================================================================
 // SPRING / UPTHRUST — PENDING ENTRY LOGIC
@@ -812,7 +828,7 @@ _ut_bos_prev := _ut_bos_raw
 upthrust_signal = _ut_bos_event and not range_invalidated and no_position and atr_ok and
      _ut_rr_ok and not na(upthrust_sl_stored) and entry_b_enabled and
      not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_short and
-     not (is_audusd or is_gbpjpy)
+     not (is_audusd or is_gbpjpy or is_gbpusd) and _us500_ny_am_ok
 
 // --- Spring pending state ---
 var bool  spring_pending     = false
@@ -849,7 +865,7 @@ _sp_bos_prev := _sp_bos_raw
 spring_signal = _sp_bos_event and not range_invalidated and no_position and atr_ok and
      _sp_rr_ok and not na(spring_sl_stored) and entry_b_enabled and
      not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_long and
-     not (is_audusd or is_gbpjpy)
+     not (is_audusd or is_gbpjpy or is_gbpusd) and _us500_ny_am_ok
 
 // =============================================================================
 // ENTRY E — OVERNIGHT BOX FADE (NY KILL ZONE 7–9am ET)
@@ -936,8 +952,13 @@ _ee_l_risk  = _ee_l_entry - _ee_l_sl
 _ee_l_tp1   = _ee_l_risk > 0 ? _ee_l_entry + _ee_l_risk : na
 _ee_l_rr_ok = _ee_l_risk > 0
 
-short_signal_e = _e_short_cond and _ee_s_rr_ok
-long_signal_e  = _e_long_cond  and _ee_l_rr_ok
+// XAGUSD/USOIL box_break shorts blocked 2026-08-25 -- trade-log analysis: 0/9
+// combined win rate (0/2 XAGUSD, 0/4 USOIL, 0/3 mirrored MCL) on box_break
+// shorts specifically, vs. 25-66.7% on box_break longs on the same instruments.
+// Long side and every other entry model's shorts on these instruments are
+// untouched -- only box_break shorts were actually tested bad in the data.
+short_signal_e = _e_short_cond and _ee_s_rr_ok and not (is_xagusd or is_usoil) and _us500_ny_am_ok
+long_signal_e  = _e_long_cond  and _ee_l_rr_ok and _us500_ny_am_ok
 
 // =============================================================================
 // STRATEGY EXECUTION
