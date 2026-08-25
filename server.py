@@ -49,6 +49,18 @@ MICRO_MIRROR_MAP = {
 }
 MICRO_MIRROR_TARGETS = set(MICRO_MIRROR_MAP.values())
 
+# Disabled 2026-08-25 (user call): trade-log analysis found mirrored micro
+# trades reuse the parent's exact PnL figure and both post to the same shared
+# paper_state account balance/daily/weekly PnL and win/loss counters -- every
+# mirrored signal was being double-booked into the account. Parent instruments
+# (US100/US500/US30/XAUUSD/USOIL) keep trading and tracking exactly as before;
+# this flag only stops the mirror-recursion into MNQ/MES/MYM/MGC/MCL. Historical
+# trade rows are left untouched -- this only affects going forward. Direct
+# webhooks for micro symbols are still ignored regardless of this flag (see
+# MICRO_MIRROR_TARGETS check in webhook_paper()), so re-enabling later is a
+# one-line flip, not a re-build.
+MICROS_ENABLED = False
+
 
 def _normalize_instrument(raw: str) -> str:
     s = raw.upper().replace("1!", "").replace("!", "")
@@ -277,7 +289,7 @@ def handle_paper_signal(data):
     send_telegram(msg)
 
     mirror_symbol = MICRO_MIRROR_MAP.get(instrument)
-    if mirror_symbol:
+    if MICROS_ENABLED and mirror_symbol:
         mirror_data = dict(data)
         mirror_data["symbol"] = mirror_symbol
         mirror_data["instrument"] = mirror_symbol
@@ -361,7 +373,7 @@ def handle_paper_lifecycle(data, event):
     send_telegram(msg)
 
     mirror_symbol = MICRO_MIRROR_MAP.get(instrument)
-    if mirror_symbol:
+    if MICROS_ENABLED and mirror_symbol:
         mirror_data = dict(data)
         mirror_data["symbol"] = mirror_symbol
         mirror_data["instrument"] = mirror_symbol
