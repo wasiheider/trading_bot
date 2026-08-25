@@ -345,7 +345,7 @@ void TryEnter(string botSymbol, string block)
    double slDistance = MathAbs(entryPrice - stopLoss);
    if(slDistance <= 0) { Print("Zero SL distance for ", botSymbol); return; }
 
-   double lots = ComputeLotSize(brokerSymbol, slDistance);
+   double lots = ComputeLotSize(botSymbol, brokerSymbol, slDistance);
    if(lots <= 0) { Print("Computed zero lot size for ", botSymbol); return; }
 
    int digits = (int)SymbolInfoInteger(brokerSymbol, SYMBOL_DIGITS);
@@ -445,10 +445,18 @@ bool HasOpenExposure(string brokerSymbol)
 //| forex, indices, metals, oil and crypto without per-instrument     |
 //| hardcoded pip values.                                             |
 //+------------------------------------------------------------------+
-double ComputeLotSize(string brokerSymbol, double slDistance)
+double ComputeLotSize(string botSymbol, string brokerSymbol, double slDistance)
   {
-   double balance   = AccountInfoDouble(ACCOUNT_BALANCE);
-   double riskMoney = balance * InpRiskPercent / 100.0;
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+
+   // Risk bump, added 2026-08-25 (user call, matching the paper bot's Pine
+   // Script change same day): US100 (all trades) and US500 both get 0.5%
+   // instead of the 0.25% baseline. No session check needed for US500 here --
+   // the Pine Script now only ever fires a US500 signal during NY AM
+   // (8am-12pm CT), so by the time a US500 signal reaches this EA via
+   // /latest-signal, it is already guaranteed to be an NY-AM signal.
+   double riskPct   = (botSymbol == "US100" || botSymbol == "US500") ? InpRiskPercent * 2.0 : InpRiskPercent;
+   double riskMoney = balance * riskPct / 100.0;
 
    double tickValue = SymbolInfoDouble(brokerSymbol, SYMBOL_TRADE_TICK_VALUE);
    double tickSize  = SymbolInfoDouble(brokerSymbol, SYMBOL_TRADE_TICK_SIZE);
