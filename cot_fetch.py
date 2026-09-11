@@ -72,7 +72,9 @@ import urllib.request
 SERVER_URL = "https://tradingbot-production-1e5a.up.railway.app"
 PAPER_WEBHOOK_TOKEN = os.environ["PAPER_WEBHOOK_TOKEN"]
 OANDA_API_TOKEN = os.environ["OANDA_API_TOKEN"]
-EIA_API_KEY = os.environ["EIA_API_KEY"]
+EIA_API_KEY = os.environ.get("EIA_API_KEY")  # optional -- _fetch_eia_crude_stocks()'s
+# caller already wraps it in try/except and degrades to None/None on failure; this was
+# a hard KeyError at import time that defeated that fallback before it could run.
 
 _COT_TFF = {
     "EUR": "099741", "GBP": "096742", "JPY": "097741", "NZD": "112741",
