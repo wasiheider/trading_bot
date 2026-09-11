@@ -89,6 +89,7 @@ rsi_c_upper   = input.float(70.0,  "RSI Upper Bound at Retest",                 
 
 entry_e_enabled = input.bool(true,  "Enable Entry E (Box Break — NY Kill Zone)",  group="Entry E")
 e_touch_pct_in  = input.float(0.10, "Touch proximity % of box boundary",          group="Entry E", minval=0.01, maxval=1.0, step=0.01)
+use_e_xag_usoil_short_block = input.bool(false, "Entry E: Block XAGUSD/USOIL Box Break Shorts", group="Entry E")
 
 // =============================================================================
 // ENTRY D — XAUUSD New York session block, added 2026-08-01.
@@ -957,7 +958,11 @@ _ee_l_rr_ok = _ee_l_risk > 0
 // shorts specifically, vs. 25-66.7% on box_break longs on the same instruments.
 // Long side and every other entry model's shorts on these instruments are
 // untouched -- only box_break shorts were actually tested bad in the data.
-short_signal_e = _e_short_cond and _ee_s_rr_ok and not (is_xagusd or is_usoil) and _us500_ny_am_ok
+// Disabled by default 2026-09-11 (user call, not a re-backtest) -- that
+// analysis was regime-dependent (commodities fighting an uptrend at the
+// time) and the user reads the current market as sideways. Toggle kept
+// rather than deleted, same pattern as Entry D's other regime-based gates.
+short_signal_e = _e_short_cond and _ee_s_rr_ok and not (use_e_xag_usoil_short_block and (is_xagusd or is_usoil)) and _us500_ny_am_ok
 long_signal_e  = _e_long_cond  and _ee_l_rr_ok and _us500_ny_am_ok
 
 // =============================================================================
