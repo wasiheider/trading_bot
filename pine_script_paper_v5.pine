@@ -290,6 +290,44 @@ cot_ok_long  = not use_cot_filter or not cot_supported or not cot_blocks_long
 cot_ok_short = not use_cot_filter or not cot_supported or not cot_blocks_short
 
 // =============================================================================
+// COMMERCIAL / RETAIL CONTRARIAN FILTER -- US500 & US30 only, added 2026-09-11.
+// Separate from the Leveraged Funds/Managed Money filter above (which is
+// trend-following, Entry B only). This one is classic contrarian COT theory:
+// Commercial (hedgers, "smart money") and Retail (Non-Reportable, "dumb
+// money") both at extremes AND pointing against the trade direction is a
+// warning sign, independent of what large speculators are doing. Backtested
+// against the full paper ledger (see project memory): scoped exactly to
+// US500/US30/their micro mirrors MES/MYM, this removed 45 trades that were
+// net losers as a group (-$1,145.09 combined) while leaving every other
+// instrument -- notably US100, the strategy's best performer -- untouched.
+// An earlier, broader test applying a similar filter to ALL instruments cut
+// total profit by ~36% (US100 specifically got blocked out of $2,999 of real
+// winners), so this stays deliberately scoped rather than universal.
+// Legacy report is the only CFTC format with a Commercial/Non-Reportable
+// split -- separate from the Financial/Disaggregated reports used above.
+use_us500_us30_comm_retail_block = input.bool(true, "US500/US30: Block on Commercial+Retail Contrarian Extreme", group="Commercial/Retail Filter (US500/US30)")
+
+_cr_es_comm_net     = f_cot_net("Legacy", "13874+", "Commercial Positions")
+_cr_es_retail_net   = f_cot_net("Legacy", "13874+", "Nonreportable Positions")
+_cr_us30_comm_net   = f_cot_net("Legacy", "12460+", "Commercial Positions")
+_cr_us30_retail_net = f_cot_net("Legacy", "12460+", "Nonreportable Positions")
+
+_cr_es_comm_pct     = not na(_cr_es_comm_net)     ? f_cot_pct(_cr_es_comm_net)     : na
+_cr_es_retail_pct   = not na(_cr_es_retail_net)   ? f_cot_pct(_cr_es_retail_net)   : na
+_cr_us30_comm_pct   = not na(_cr_us30_comm_net)   ? f_cot_pct(_cr_us30_comm_net)   : na
+_cr_us30_retail_pct = not na(_cr_us30_retail_net) ? f_cot_pct(_cr_us30_retail_net) : na
+
+_cr_comm_pct   = is_us500 ? _cr_es_comm_pct   : is_us30 ? _cr_us30_comm_pct   : na
+_cr_retail_pct = is_us500 ? _cr_es_retail_pct : is_us30 ? _cr_us30_retail_pct : na
+
+_cr_blocks_long  = not na(_cr_comm_pct) and not na(_cr_retail_pct) and _cr_comm_pct <= cot_bearish_idx and _cr_retail_pct >= cot_bullish_idx
+_cr_blocks_short = not na(_cr_comm_pct) and not na(_cr_retail_pct) and _cr_comm_pct >= cot_bullish_idx and _cr_retail_pct <= cot_bearish_idx
+
+// true = allowed. Pass-through (always true) for every instrument except US500/US30.
+_cr_long_ok  = not use_us500_us30_comm_retail_block or not (is_us500 or is_us30) or not _cr_blocks_long
+_cr_short_ok = not use_us500_us30_comm_retail_block or not (is_us500 or is_us30) or not _cr_blocks_short
+
+// =============================================================================
 // RSI + DIVERGENCE (Entry C)
 // =============================================================================
 rsi_val = ta.rsi(close, rsi_period)
@@ -772,8 +810,8 @@ _d_xau_ny_block = use_d_xau_ny_block and is_xauusd and _d_ny_session
 
 _entry_d_ok    = not (is_xagusd or is_usoil or is_btcusd or is_gbpusd or is_audusd or is_gbpjpy) and not _d_xau_ny_block
 
-short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok and _us500_ny_am_ok
-long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok and _us500_ny_am_ok
+short_signal_d = d_short_retest and d_short_rr_ok and no_position and atr_ok and not range_broken and _entry_d_ok and _us500_ny_am_ok and _cr_short_ok
+long_signal_d  = d_long_retest  and d_long_rr_ok  and no_position and atr_ok and not range_broken and _entry_d_ok and _us500_ny_am_ok and _cr_long_ok
 
 // =============================================================================
 // SPRING / UPTHRUST — PENDING ENTRY LOGIC
@@ -829,7 +867,7 @@ _ut_bos_prev := _ut_bos_raw
 upthrust_signal = _ut_bos_event and not range_invalidated and no_position and atr_ok and
      _ut_rr_ok and not na(upthrust_sl_stored) and entry_b_enabled and
      not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_short and
-     not (is_audusd or is_gbpjpy or is_gbpusd) and _us500_ny_am_ok
+     not (is_audusd or is_gbpjpy or is_gbpusd) and _us500_ny_am_ok and _cr_short_ok
 
 // --- Spring pending state ---
 var bool  spring_pending     = false
@@ -866,7 +904,7 @@ _sp_bos_prev := _sp_bos_raw
 spring_signal = _sp_bos_event and not range_invalidated and no_position and atr_ok and
      _sp_rr_ok and not na(spring_sl_stored) and entry_b_enabled and
      not long_signal and not short_signal and not long_signal_c and not short_signal_c and cot_ok_long and
-     not (is_audusd or is_gbpjpy or is_gbpusd) and _us500_ny_am_ok
+     not (is_audusd or is_gbpjpy or is_gbpusd) and _us500_ny_am_ok and _cr_long_ok
 
 // =============================================================================
 // ENTRY E — OVERNIGHT BOX FADE (NY KILL ZONE 7–9am ET)
@@ -962,8 +1000,8 @@ _ee_l_rr_ok = _ee_l_risk > 0
 // analysis was regime-dependent (commodities fighting an uptrend at the
 // time) and the user reads the current market as sideways. Toggle kept
 // rather than deleted, same pattern as Entry D's other regime-based gates.
-short_signal_e = _e_short_cond and _ee_s_rr_ok and not (use_e_xag_usoil_short_block and (is_xagusd or is_usoil)) and _us500_ny_am_ok
-long_signal_e  = _e_long_cond  and _ee_l_rr_ok and _us500_ny_am_ok
+short_signal_e = _e_short_cond and _ee_s_rr_ok and not (use_e_xag_usoil_short_block and (is_xagusd or is_usoil)) and _us500_ny_am_ok and _cr_short_ok
+long_signal_e  = _e_long_cond  and _ee_l_rr_ok and _us500_ny_am_ok and _cr_long_ok
 
 // =============================================================================
 // STRATEGY EXECUTION
