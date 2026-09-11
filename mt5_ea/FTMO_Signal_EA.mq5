@@ -45,6 +45,7 @@ input int    InpPollSeconds    = 30;
 input double InpRiskPercent    = 0.25;      // % of account balance risked per trade ($25 on a $10K account)
 input int    InpMagicNumber    = 20260704;
 input int    InpMaxSlippagePts = 20;
+input int    InpPendingExpiryMinutes = 30;  // pending LIMIT/STOP orders cancel if unfilled this long (was end-of-day; late fills on a stale price context were diverging badly from paper's modeled entry -- see 2026-09-11 analysis)
 
 // FTMO $10K eval account drawdown guardrail -- deliberately tighter than the
 // account's real limits ($500 daily / $1,000 overall) for this first live
@@ -71,9 +72,9 @@ input string InpSymbolMap_US500  = "US500.sim";
 input string InpSymbolMap_USOIL  = "USOIL.sim";
 input string InpSymbolMap_BTCUSD = "BTCUSD.sim";
 
-// Trailing rule, matches the paper strategy: 1.5R -> lock 1R, then trail 0.5R behind peak
+// Trailing rule, matches the paper strategy: SL stays at breakeven until peak
+// reaches 1.5R, only then locks to 1R and trails 0.5R behind peak from there.
 input double InpTrailArmR   = 1.5;
-input double InpTrailLockR  = 1.0;
 input double InpTrailGapR   = 0.5;
 
 CTrade trade;
@@ -353,7 +354,7 @@ void TryEnter(string botSymbol, string block)
    stopLoss   = NormalizeDouble(stopLoss, digits);
    tp2        = NormalizeDouble(tp2, digits);
 
-   datetime expiration = DayEndUTC();
+   datetime expiration = TimeCurrent() + InpPendingExpiryMinutes * 60;
    string comment = "ftmo_ea_" + setup;
    trade.SetExpertMagicNumber(InpMagicNumber);
    trade.SetDeviationInPoints(InpMaxSlippagePts);
@@ -361,12 +362,12 @@ void TryEnter(string botSymbol, string block)
    bool ok;
    if(setup == "box_break")
       ok = isLong
-         ? trade.BuyStop(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_DAY, expiration, comment)
-         : trade.SellStop(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_DAY, expiration, comment);
+         ? trade.BuyStop(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_SPECIFIED, expiration, comment)
+         : trade.SellStop(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_SPECIFIED, expiration, comment);
    else
       ok = isLong
-         ? trade.BuyLimit(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_DAY, expiration, comment)
-         : trade.SellLimit(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_DAY, expiration, comment);
+         ? trade.BuyLimit(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_SPECIFIED, expiration, comment)
+         : trade.SellLimit(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_SPECIFIED, expiration, comment);
 
    if(!ok)
      {
@@ -490,14 +491,6 @@ double ComputeLotSize(string botSymbol, string brokerSymbol, double slDistance)
    return NormalizeDouble(lots, 2);
   }
 
-datetime DayEndUTC()
-  {
-   MqlDateTime t;
-   TimeToStruct(TimeCurrent(), t);
-   t.hour = 23; t.min = 59; t.sec = 0;
-   return StructToTime(t);
-  }
-
 //+------------------------------------------------------------------+
 //| Local exit management: TP1 partial close + breakeven + trailing.  |
 //| Runs every OnTimer(); never depends on the server.                |
@@ -563,11 +556,18 @@ void ManageOpenPositions()
       if(R <= 0) continue;
       double profitR = isLong ? (peak - entry) / R : (entry - peak) / R;
 
+      // SL stays at breakeven (set at TP1, below) until peak actually reaches
+      // 1.5R -- do NOT lock to 1R just because profitR crossed 1.0R, since
+      // peak is initialized to the TP1 fill price itself, so profitR is
+      // already ~1.0R the moment this phase begins. Locking there put the SL
+      // right at the current market price the instant TP1 fired, so ordinary
+      // tick noise stopped the remaining 50% out at ~1R almost every time,
+      // before price ever got a chance to prove it could reach 1.5R -- unlike
+      // Pine's paper-side logic, which leaves it at breakeven through that
+      // whole 1.0R-1.5R window. Found + fixed 2026-09-11.
       double newSL = curSL;
       if(profitR >= InpTrailArmR)
          newSL = isLong ? peak - InpTrailGapR * R : peak + InpTrailGapR * R;
-      else if(profitR >= InpTrailLockR)
-         newSL = isLong ? entry + InpTrailLockR * R : entry - InpTrailLockR * R;
 
       newSL = NormalizeDouble(newSL, digits);
       bool improves = isLong ? (newSL > curSL) : (newSL < curSL);
