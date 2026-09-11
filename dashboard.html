@@ -1174,6 +1174,23 @@ function renderCOT(items) {
         </div>`;
     }
 
+    // Smart money (Commercial/hedgers) vs dumb money (Retail/Non-Reportable)
+    // contrarian divergence -- classic COT theory, distinct from the
+    // bias/alignment badges above (which are both large-speculator,
+    // trend-following measures). Both at extremes and pointing opposite
+    // directions is a real warning sign on its own, independent of what
+    // Lev Funds/Non-Commercial are doing -- corrected 2026-09-11, this was
+    // previously computed (comm_bias/retail_bias above) but never actually
+    // interpreted as a signal anywhere on the dashboard. Informational for
+    // all instruments; the live strategy only acts on it for US500/US30
+    // (backtest-validated scope, see pine_script_paper_v5.pine).
+    let commRetailWarnHtml = '';
+    if (item.comm_bias === 'Bearish' && item.retail_bias === 'Bullish') {
+      commRetailWarnHtml = `<div style="font-size:10px;color:#ef5350;margin-top:4px;font-weight:700;letter-spacing:.5px;border-left:2px solid #ef5350;padding-left:5px">⚠ SMART MONEY BEARISH vs RETAIL BULLISH</div>`;
+    } else if (item.comm_bias === 'Bullish' && item.retail_bias === 'Bearish') {
+      commRetailWarnHtml = `<div style="font-size:10px;color:#26a69a;margin-top:4px;font-weight:700;letter-spacing:.5px;border-left:2px solid #26a69a;padding-left:5px">⚠ SMART MONEY BULLISH vs RETAIL BEARISH</div>`;
+    }
+
     // Third, non-CFTC independent source — OANDA position book (forex),
     // Fear & Greed Index (BTC), or EIA crude stocks (Oil). Mutually exclusive per instrument.
     let thirdSourceHtml = '';
@@ -1216,7 +1233,7 @@ function renderCOT(items) {
           <div class="cidx-marker" style="left:60%"></div>
           <div class="cidx-marker" style="left:40%"></div>
         </div>
-        ${ntHtml}${mmHtml}${src2Html}${alignHtml}${commRetailHtml}${thirdSourceHtml}
+        ${ntHtml}${mmHtml}${src2Html}${alignHtml}${commRetailHtml}${commRetailWarnHtml}${thirdSourceHtml}
       </div>`;
   }).join('');
 }

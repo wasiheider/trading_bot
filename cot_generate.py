@@ -62,7 +62,10 @@ SECTION_MAP = {
 OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 OANDA_API_TOKEN = os.environ["OANDA_API_TOKEN"]
-EIA_API_KEY = os.environ["EIA_API_KEY"]
+EIA_API_KEY = os.environ.get("EIA_API_KEY")  # optional -- fetch_eia_crude_stocks()'s
+# caller (line ~795) already wraps it in try/except and degrades to None/None on
+# failure; this was a hard KeyError at import time that defeated that fallback.
+# Same fix as cot_fetch.py, 2026-09-11.
 
 # Bot COT symbol -> OANDA instrument, and whether the pair's "long" side
 # means long the *quote* currency (JPY) rather than the base (need to invert).
@@ -331,11 +334,33 @@ def analysis_text(sym, d):
         direction = "net long" if s2n[-1] > 0 else "net short"
         parts.append(f"NonComm crossed to {direction} last week -- notable shift in broader spec group.")
 
-    # Commercial/Retail divergence from the crowd (e.g. retail one-sided while commercials aren't)
+    # Commercial (smart money/hedgers) vs Retail (dumb money/crowd) contrarian
+    # check. Corrected 2026-09-11 -- this used to just note a disagreement
+    # neutrally ("worth noting who's on which side"); it now actually
+    # interprets it per classic COT theory. Commercial and Retail are
+    # contrarian indicators; Source 1/2 above (Lev Funds / NonComm) are
+    # trend-following, large-speculator measures -- a different axis
+    # entirely. Both cohorts at a genuine bias extreme and pointing opposite
+    # directions is a real signal on its own, and matters most when it
+    # contradicts the Source 1/2 read rather than agreeing with it.
     comm_b, retail_b = d.get("comm_bias", "?"), d.get("retail_bias", "?")
-    if comm_b != "?" and retail_b != "?" and comm_b != retail_b:
-        parts.append(f"Commercials ({comm_b}) and Retail ({retail_b}) disagree -- worth noting who's "
-                     f"on which side of this move.")
+    if comm_b == "Bearish" and retail_b == "Bullish":
+        warn = ("Smart money (Commercial) is Bearish while Retail (dumb money) is Bullish -- "
+                "classic contrarian distribution warning.")
+        if s1b == "Bullish":
+            warn += (f" This directly contradicts the {s1b} speculator-side read above -- "
+                      f"weigh it before treating that as a clean signal.")
+        parts.append(warn)
+    elif comm_b == "Bullish" and retail_b == "Bearish":
+        warn = ("Smart money (Commercial) is Bullish while Retail (dumb money) is Bearish -- "
+                "classic contrarian accumulation signal.")
+        if s1b == "Bearish":
+            warn += (f" This directly contradicts the {s1b} speculator-side read above -- "
+                      f"weigh it before treating that as a clean signal.")
+        parts.append(warn)
+    elif comm_b != "?" and retail_b != "?" and comm_b != retail_b:
+        parts.append(f"Commercials ({comm_b}) and Retail ({retail_b}) disagree, though not both at a "
+                     f"clean bullish/bearish extreme -- worth noting who's on which side of this move.")
 
     # Third-source vs. Source 1 divergence (institutional vs. independent retail/fundamental read)
     ts_bias = d.get("oanda_bias") or (
