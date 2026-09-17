@@ -13,6 +13,17 @@
 //|     trail (1.5R -> lock 1R, then trail 0.5R behind peak).         |
 //|   - No dependency on the server after the entry signal arrives.   |
 //|                                                                    |
+//| EXCEPTION -- box_break (Entry E) signals are single-target: Pine  |
+//| never sends a tp2 for them (s_tp2 := na, full close at tp1, no    |
+//| partial/trail split). Broker TP is set to tp1 directly and no     |
+//| local tp1-partial-close bookkeeping is registered for these       |
+//| trades -- the broker's own TP order handles the full exit.        |
+//| (Bug found live 2026-09-17: USOIL box_break short -- JsonNum()    |
+//| returns 0 for the absent "tp2" key, which the old code then used  |
+//| as a real price, producing an invalid negative TP on the market-  |
+//| order fallback and, more importantly, mismanaging every box_break |
+//| trade that *did* get placed as if it were a two-target trade.)    |
+//|                                                                    |
 //| If the pending (limit/stop) entry order is rejected -- typically  |
 //| because price already ran past the level between signal detection |
 //| and order placement (poll delay + request round-trip) -- falls    |
@@ -340,11 +351,17 @@ void TryEnter(string botSymbol, string block)
    double stopLoss   = JsonNum(block, "stop_loss");
    double tp1        = JsonNum(block, "tp1");
    double tp2        = JsonNum(block, "tp2");
-   if(entryPrice <= 0 || stopLoss <= 0) { Print("Bad signal data for ", botSymbol); return; }
+   if(entryPrice <= 0 || stopLoss <= 0 || tp1 <= 0) { Print("Bad signal data for ", botSymbol); return; }
 
    bool isLong = (direction == "LONG");
    double slDistance = MathAbs(entryPrice - stopLoss);
    if(slDistance <= 0) { Print("Zero SL distance for ", botSymbol); return; }
+
+   // box_break is single-target (Pine sends no tp2 for it, s_tp2 := na) --
+   // use tp1 as the real, only take-profit rather than the phantom 0
+   // JsonNum() returns for the missing "tp2" key.
+   bool isBoxBreak = (setup == "box_break");
+   double orderTP  = isBoxBreak ? tp1 : tp2;
 
    double lots = ComputeLotSize(botSymbol, brokerSymbol, slDistance);
    if(lots <= 0) { Print("Computed zero lot size for ", botSymbol); return; }
@@ -352,7 +369,7 @@ void TryEnter(string botSymbol, string block)
    int digits = (int)SymbolInfoInteger(brokerSymbol, SYMBOL_DIGITS);
    entryPrice = NormalizeDouble(entryPrice, digits);
    stopLoss   = NormalizeDouble(stopLoss, digits);
-   tp2        = NormalizeDouble(tp2, digits);
+   orderTP    = NormalizeDouble(orderTP, digits);
 
    datetime expiration = TimeCurrent() + InpPendingExpiryMinutes * 60;
    string comment = "ftmo_ea_" + setup;
@@ -360,14 +377,14 @@ void TryEnter(string botSymbol, string block)
    trade.SetDeviationInPoints(InpMaxSlippagePts);
 
    bool ok;
-   if(setup == "box_break")
+   if(isBoxBreak)
       ok = isLong
-         ? trade.BuyStop(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_SPECIFIED, expiration, comment)
-         : trade.SellStop(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_SPECIFIED, expiration, comment);
+         ? trade.BuyStop(lots, entryPrice, brokerSymbol, stopLoss, orderTP, ORDER_TIME_SPECIFIED, expiration, comment)
+         : trade.SellStop(lots, entryPrice, brokerSymbol, stopLoss, orderTP, ORDER_TIME_SPECIFIED, expiration, comment);
    else
       ok = isLong
-         ? trade.BuyLimit(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_SPECIFIED, expiration, comment)
-         : trade.SellLimit(lots, entryPrice, brokerSymbol, stopLoss, tp2, ORDER_TIME_SPECIFIED, expiration, comment);
+         ? trade.BuyLimit(lots, entryPrice, brokerSymbol, stopLoss, orderTP, ORDER_TIME_SPECIFIED, expiration, comment)
+         : trade.SellLimit(lots, entryPrice, brokerSymbol, stopLoss, orderTP, ORDER_TIME_SPECIFIED, expiration, comment);
 
    if(!ok)
      {
@@ -378,15 +395,15 @@ void TryEnter(string botSymbol, string block)
       //
       // Re-anchor SL/TP to the CURRENT market price rather than reusing the
       // original (now-stale) absolute levels -- if price ran far enough to
-      // reject the pending order, the original tp2 can end up on the wrong
-      // side of the new fill price, which MT5 rejects as [Invalid stops]
-      // (found live, 2026-07-23: US500 SellLimit rejected [Invalid price],
-      // market fallback then rejected [Invalid stops] using the stale tp2).
-      // Preserve the original risk distance and reward distance so position
-      // sizing (computed from slDistance) and R:R stay correct.
+      // reject the pending order, the original orderTP can end up on the
+      // wrong side of the new fill price, which MT5 rejects as [Invalid
+      // stops] (found live, 2026-07-23: US500 SellLimit rejected [Invalid
+      // price], market fallback then rejected [Invalid stops] using the
+      // stale tp2). Preserve the original risk distance and reward distance
+      // so position sizing (computed from slDistance) and R:R stay correct.
       Print("Pending order failed for ", botSymbol, ": ", trade.ResultRetcodeDescription(),
             " -- falling back to market order.");
-      double tpDistance   = MathAbs(tp2 - entryPrice);
+      double tpDistance   = MathAbs(orderTP - entryPrice);
       double currentPrice = isLong
          ? SymbolInfoDouble(brokerSymbol, SYMBOL_ASK)
          : SymbolInfoDouble(brokerSymbol, SYMBOL_BID);
@@ -403,7 +420,12 @@ void TryEnter(string botSymbol, string block)
      }
 
    ulong orderTicket = trade.ResultOrder();
-   GlobalVariableSet("ftmo_ea_tp1_" + (string)orderTicket, tp1);
+   if(!isBoxBreak)
+      GlobalVariableSet("ftmo_ea_tp1_" + (string)orderTicket, tp1);
+   // box_break: no tp1-partial GlobalVariable registered -- ManageOpenPositions()
+   // skips any ticket without one (see its GlobalVariableCheck(tp1Key) guard), so
+   // the broker's own TP order (= tp1, the single real target) handles the full
+   // close with zero local partial-close/breakeven/trail intervention.
    Print("Placed ", direction, " ", setup, " order for ", botSymbol, " (", brokerSymbol,
          ") @ ", entryPrice, " lots=", lots, " ticket=", orderTicket);
   }
