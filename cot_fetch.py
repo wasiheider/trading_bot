@@ -197,10 +197,18 @@ def _comm_retail_breakdown(leg_rows, invert):
     """Commercial (hedgers) vs Non-Reportable (retail) bias, from the same
     Tradingster Legacy rows already fetched for Source 2 -- CFTC Legacy
     report's classic three-way split, just extracting fields we weren't
-    using before."""
+    using before.
+
+    comm_idx/retail_idx and their _1wk counterparts added 2026-09-22 --
+    previously this only returned bias labels, not the underlying
+    percentile index, so the dashboard couldn't show a number (or feed
+    the Smart Money Score below) the way cot_generate.py's PDF already
+    could."""
     if len(leg_rows) < 4:
         return {"comm_net_now": None, "comm_net_1wk": None, "comm_bias": None,
-                "retail_net_now": None, "retail_net_1wk": None, "retail_bias": None}
+                "comm_idx": None, "comm_idx_1wk": None,
+                "retail_net_now": None, "retail_net_1wk": None, "retail_bias": None,
+                "retail_idx": None, "retail_idx_1wk": None}
 
     comm_nets = [
         int(r.get("Commercial_Positions_Long_All") or 0) - int(r.get("Commercial_Positions_Short_All") or 0)
@@ -218,8 +226,56 @@ def _comm_retail_breakdown(leg_rows, invert):
 
     return {
         "comm_net_now": comm_nets[-1], "comm_net_1wk": comm_nets[-2], "comm_bias": _bias(comm_idxs[-1]),
+        "comm_idx": comm_idxs[-1], "comm_idx_1wk": comm_idxs[-2],
         "retail_net_now": retail_nets[-1], "retail_net_1wk": retail_nets[-2], "retail_bias": _bias(retail_idxs[-1]),
+        "retail_idx": retail_idxs[-1], "retail_idx_1wk": retail_idxs[-2],
     }
+
+
+def _smart_money_score(item):
+    """Weighted composite of Commercial / Asset Manager / Leveraged Funds
+    (or Managed Money, for GOLD/SILVER/CRUDE) COT index vs. Retail's own
+    COT index -- mirrors cot_generate.py's smart_money_score() exactly
+    (same weights, same formula), added 2026-09-22 so the live dashboard
+    carries the same score as the weekly PDF, not just Leveraged Funds'
+    own bias. See cot_generate.py for the full weighting rationale.
+
+    Weights: Commercial 50%, Asset Manager 30%, Leveraged Funds 20% --
+    renormalized to Commercial ~71%/Leveraged Funds ~29% when Asset
+    Manager is unavailable (GOLD/SILVER/CRUDE, no Asset Manager category
+    in the Disaggregated report).
+    """
+    retail_i, retail_i1 = item.get("retail_idx"), item.get("retail_idx_1wk")
+    comm_i, comm_i1 = item.get("comm_idx"), item.get("comm_idx_1wk")
+    if retail_i is None or comm_i is None:
+        return None, None
+
+    am_i, am_i1 = item.get("am_idx"), item.get("am_idx_1wk")
+    lev_i, lev_i1 = item.get("cot_idx"), item.get("cot_idx_1wk")
+    has_am = am_i is not None
+
+    if has_am:
+        w_comm, w_am, w_lev = 0.50, 0.30, 0.20
+    else:
+        w_comm, w_am, w_lev = 0.50 / 0.70, 0.0, 0.20 / 0.70
+
+    def _score(ci, ai, li, ri):
+        if ri is None or ci is None or li is None:
+            return None
+        weighted = w_comm * ci + (w_am * ai if has_am and ai is not None else 0) + w_lev * li
+        return round(weighted - ri)
+
+    return _score(comm_i, am_i, lev_i, retail_i), _score(comm_i1, am_i1, lev_i1, retail_i1)
+
+
+def _score_label(score):
+    if score is None:
+        return None
+    if score >= 20:
+        return "Bullish (Fade Retail)"
+    if score <= -20:
+        return "Bearish (Fade Retail)"
+    return "Neutral / No Edge"
 
 
 def _fetch_oanda_position_book(pair):
@@ -405,9 +461,9 @@ def build_payload():
             "net_now": lev_nets[-1], "net_1wk": lev_nets[-2],
             "net_2wk": lev_nets[-3] if len(lev_nets) >= 3 else None,
             "weekly_delta": weekly_delta,
-            "cot_idx": idx, "bias": bias1,
+            "cot_idx": idx, "cot_idx_1wk": idxs[-2], "bias": bias1,
             "lev_signal": lev, "mm_signal": mm,
-            "am_idx": am_idx, "am_bias": am_bias, "am_signal": am_signal,
+            "am_idx": am_idx, "am_idx_1wk": am_idxs[-2], "am_bias": am_bias, "am_signal": am_signal,
             "am_net_now": am_nets[-1], "am_net_1wk": am_nets[-2],
             "near_term": _near_term(bias1, weekly_delta, lev),
             "src1_label": "Leveraged Funds (Inverted)" if invert else "Leveraged Funds",
@@ -417,6 +473,8 @@ def build_payload():
             "alignment": _alignment(bias1, leg_bias1),
         }
         item.update(_comm_retail_breakdown(leg_rows, invert))
+        item["score"], item["score_1wk"] = _smart_money_score(item)
+        item["score_label"] = _score_label(item["score"])
 
         if sym in oanda_pos:
             long_pct, short_pct = oanda_pos[sym]
@@ -477,7 +535,7 @@ def build_payload():
             "net_now": mm_nets[-1], "net_1wk": mm_nets[-2],
             "net_2wk": mm_nets[-3] if len(mm_nets) >= 3 else None,
             "weekly_delta": weekly_delta,
-            "cot_idx": idx, "bias": bias1,
+            "cot_idx": idx, "cot_idx_1wk": idxs[-2], "bias": bias1,
             "lev_signal": lev, "mm_signal": mm,
             "near_term": _near_term(bias1, weekly_delta, lev),
             "src1_label": "Mgd Money",
@@ -487,6 +545,8 @@ def build_payload():
             "alignment": _alignment(bias1, leg_bias1),
         }
         item.update(_comm_retail_breakdown(leg_rows, invert=False))
+        item["score"], item["score_1wk"] = _smart_money_score(item)
+        item["score_label"] = _score_label(item["score"])
 
         if sym == "CRUDE" and eia_now is not None:
             change = eia_now - eia_prev

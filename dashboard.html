@@ -1162,15 +1162,50 @@ function renderCOT(items) {
       alignHtml = `<div style="font-size:10px;color:#ff9800;margin-top:4px;font-weight:700;letter-spacing:.5px">⚡ DIVERGE — Mixed Signals</div>`;
     }
 
-    // Commercial (hedgers) vs Non-Reportable (retail) — CFTC Legacy 3-way split,
-    // same Tradingster data as Source 2, just extra fields.
-    let commRetailHtml = '';
-    if (item.comm_bias || item.retail_bias) {
+    // Commercial / Asset Manager / Retail cohorts row — upgraded 2026-09-22
+    // from a bias-only Commercial/Retail line to all 3 remaining cohorts
+    // (Leveraged Funds is already the card's headline bias/idx/bar above),
+    // each with its own COT index, not just a bias label. Same 4 cohorts
+    // the weekly PDF's Smart Money Score table shows.
+    let cohortsHtml = '';
+    if (item.comm_bias || item.am_bias || item.retail_bias) {
       const cc = b => b === 'Bullish' ? 'var(--g)' : b === 'Bearish' ? 'var(--r)' : 'var(--t2)';
-      commRetailHtml = `
-        <div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:14px;font-size:10px">
-          ${item.comm_bias ? `<div><span style="color:var(--t3)">Commercial </span><span style="color:${cc(item.comm_bias)};font-weight:700">${item.comm_bias}</span></div>` : ''}
-          ${item.retail_bias ? `<div><span style="color:var(--t3)">Retail </span><span style="color:${cc(item.retail_bias)};font-weight:700">${item.retail_bias}</span></div>` : ''}
+      const cohort = (label, bias, idx) => !bias ? '' : `
+        <div style="flex:1;min-width:0">
+          <div style="font-size:9px;color:var(--t3);letter-spacing:.5px;white-space:nowrap">${label}</div>
+          <div style="display:flex;align-items:baseline;gap:3px">
+            <span style="font-size:10px;font-weight:700;color:${cc(bias)}">${bias}</span>
+            ${idx != null ? `<span style="font-size:9px;color:var(--t3)">${idx}</span>` : ''}
+          </div>
+        </div>`;
+      cohortsHtml = `
+        <div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:8px">
+          ${cohort('COMMERCIAL', item.comm_bias, item.comm_idx)}
+          ${cohort('ASSET MGR', item.am_bias, item.am_idx)}
+          ${cohort('RETAIL', item.retail_bias, item.retail_idx)}
+        </div>`;
+    }
+
+    // Smart Money Score — weighted Commercial/Asset Manager/Leveraged Funds
+    // vs. Retail (added 2026-09-22, mirrors cot_generate.py's weekly PDF
+    // table exactly: Commercial 50%/Asset Manager 30%/Leveraged Funds 20%,
+    // renormalized when Asset Manager is unavailable). Prior-week score
+    // shown alongside current so this reads as building/fading/flipping,
+    // not just a snapshot.
+    let scoreHtml = '';
+    if (item.score != null) {
+      const sc = item.score >= 20 ? 'var(--g)' : item.score <= -20 ? 'var(--r)' : 'var(--t2)';
+      const priorTxt = item.score_1wk != null ? `${item.score_1wk >= 0 ? '+' : ''}${item.score_1wk}` : '?';
+      scoreHtml = `
+        <div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:10px;color:var(--t3);letter-spacing:.5px">SMART MONEY SCORE</div>
+            <div style="font-size:9px;color:var(--t3)">prior wk ${priorTxt}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:10px;font-weight:600;color:${sc}">${item.score_label || ''}</div>
+            <div style="font-size:14px;font-weight:700;color:${sc}">${item.score >= 0 ? '+' : ''}${item.score}</div>
+          </div>
         </div>`;
     }
 
@@ -1233,7 +1268,7 @@ function renderCOT(items) {
           <div class="cidx-marker" style="left:60%"></div>
           <div class="cidx-marker" style="left:40%"></div>
         </div>
-        ${ntHtml}${mmHtml}${src2Html}${alignHtml}${commRetailHtml}${commRetailWarnHtml}${thirdSourceHtml}
+        ${ntHtml}${mmHtml}${src2Html}${alignHtml}${cohortsHtml}${scoreHtml}${commRetailWarnHtml}${thirdSourceHtml}
       </div>`;
   }).join('');
 }
