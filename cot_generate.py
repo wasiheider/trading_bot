@@ -196,9 +196,13 @@ def alignment(b1, b2):
 
 def comm_retail_breakdown(leg_rows, is_inv):
     """Commercial (hedgers) vs Non-Reportable (retail) -- CFTC Legacy 3-way
-    split, from the same Tradingster rows already fetched for Source 2."""
+    split, from the same Tradingster rows already fetched for Source 2.
+    Also carries the prior-week index (idxs[-2], same percentile basis as
+    idxs[-1]) so smart_money_score() can show last week's score alongside
+    this week's -- added 2026-09-22."""
     if len(leg_rows) < 5:
-        return {"comm_idx": "?", "comm_bias": "?", "retail_idx": "?", "retail_bias": "?"}
+        return {"comm_idx": "?", "comm_bias": "?", "comm_idx_1wk": "?",
+                "retail_idx": "?", "retail_bias": "?", "retail_idx_1wk": "?"}
     comm_nets = [int(r["Commercial_Positions_Long_All"]) - int(r["Commercial_Positions_Short_All"]) for r in leg_rows]
     retail_nets = [int(r["Nonreportable_Positions_Long_All"]) - int(r["Nonreportable_Positions_Short_All"]) for r in leg_rows]
     comm_idxs = cot_index(comm_nets)
@@ -207,9 +211,90 @@ def comm_retail_breakdown(leg_rows, is_inv):
         comm_idxs = [100 - i for i in comm_idxs]
         retail_idxs = [100 - i for i in retail_idxs]
     return {
-        "comm_idx": comm_idxs[-1], "comm_bias": bias_label(comm_idxs[-1]),
-        "retail_idx": retail_idxs[-1], "retail_bias": bias_label(retail_idxs[-1]),
+        "comm_idx": comm_idxs[-1], "comm_bias": bias_label(comm_idxs[-1]), "comm_idx_1wk": comm_idxs[-2],
+        "retail_idx": retail_idxs[-1], "retail_bias": bias_label(retail_idxs[-1]), "retail_idx_1wk": retail_idxs[-2],
     }
+
+def smart_money_score(d):
+    """Weighted composite of Commercial / Asset Manager / Leveraged Funds
+    COT index vs. Retail's own COT index (added 2026-09-22, per user
+    request to rank the 4 cohorts by reliability vs. Retail specifically).
+
+    Classic COT theory ranks Commercial (hedgers/market makers) as the
+    most reliable "smart money" signal against Retail -- real business
+    exposure, historically right most often at extremes. Asset Manager
+    (real-money institutional) is a real but less consistent second.
+    Leveraged Funds (trend-following speculators) is weakest of the three
+    for a CONTRARIAN read specifically, since they can end up leaning the
+    same way as Retail at extremes -- still included, just at lower
+    weight, not because it's uninformative.
+
+    Weights: Commercial 50%, Asset Manager 30%, Leveraged Funds 20% --
+    renormalized to Commercial ~71%/Leveraged Funds ~29% for GOLD/SILVER/
+    CRUDE, which have no Asset Manager data.
+
+    score = weighted_avg(Commercial idx, Asset Manager idx, Leveraged
+    Funds idx) - Retail idx. Positive = smart money net more bullish than
+    Retail (fade Retail's bearishness); negative = net more bearish (fade
+    Retail's bullishness); near zero = smart money and Retail broadly
+    agree, no edge. Returns (score_now, score_1wk) -- same formula run on
+    each cohort's idxs[-1] and idxs[-2], since COT Index is a percentile
+    over the same fixed history for both, making the two directly
+    comparable -- so the report can show whether conviction is building,
+    fading, or flipping, not just where it sits right now.
+    """
+    retail_i, retail_i1 = d.get("retail_idx"), d.get("retail_idx_1wk")
+    comm_i,   comm_i1   = d.get("comm_idx"),   d.get("comm_idx_1wk")
+    if retail_i in (None, "?") or comm_i in (None, "?"):
+        return None, None
+
+    am_i, am_i1 = d.get("am_idx"), d.get("am_idx_1wk")
+    lev_i, lev_i1 = d.get("s1_idx"), d.get("s1_idx_1wk")
+    has_am = am_i not in (None, "?")
+
+    if has_am:
+        w_comm, w_am, w_lev = 0.50, 0.30, 0.20
+    else:
+        w_comm, w_am, w_lev = 0.50 / 0.70, 0.0, 0.20 / 0.70
+
+    def _score(ci, ai, li, ri):
+        if ri in (None, "?") or ci in (None, "?") or li in (None, "?"):
+            return None
+        weighted = w_comm * ci + (w_am * ai if has_am and ai not in (None, "?") else 0) + w_lev * li
+        return round(weighted - ri)
+
+    return _score(comm_i, am_i, lev_i, retail_i), _score(comm_i1, am_i1, lev_i1, retail_i1)
+
+def score_label(score):
+    if score is None:
+        return "?"
+    if score >= 20:
+        return "Bullish (Fade Retail)"
+    if score <= -20:
+        return "Bearish (Fade Retail)"
+    return "Neutral / No Edge"
+
+def score_trend_text(score_now, score_1wk):
+    """Short-term-direction read on the score itself -- is the smart-
+    money-vs-retail gap building, fading, stable, or flipping sides week
+    over week. Added 2026-09-22 per user request for a prior-week
+    reference point, not just the current level."""
+    if score_now is None:
+        return "Insufficient data for a score."
+    if score_1wk is None:
+        return f"Score {score_now:+d} -- no prior-week reference available."
+    delta = score_now - score_1wk
+    flipped = (score_now >= 20 and score_1wk <= -20) or (score_now <= -20 and score_1wk >= 20)
+    if flipped:
+        return (f"Score {score_now:+d}, prior week {score_1wk:+d} -- FLIPPED sides week over week, "
+                f"a real shift in who's positioned against Retail, not just a magnitude change.")
+    if abs(score_now) >= 20 and abs(delta) >= 10 and (score_now > 0) == (delta > 0):
+        return f"Score {score_now:+d}, prior week {score_1wk:+d} -- building; conviction strengthening."
+    if abs(score_now) >= 20 and abs(delta) >= 10 and (score_now > 0) != (delta > 0):
+        return f"Score {score_now:+d}, prior week {score_1wk:+d} -- fading from last week's read."
+    if abs(score_now) < 20 and abs(score_1wk) >= 20:
+        return f"Score {score_now:+d}, prior week {score_1wk:+d} -- edge collapsed to neutral from a real reading last week."
+    return f"Score {score_now:+d}, prior week {score_1wk:+d} -- {'stable' if abs(delta) < 10 else 'shifting'}."
 
 # ── Narratives ────────────────────────────────────────────────────────────────
 
@@ -615,31 +700,45 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     story.append(t2)
     story.append(Spacer(1, 8))
 
-    # ─ Commercial / Retail breakdown table (new 2026-07-10)
+    # ─ Smart Money Score table (replaces the old Commercial/Retail-only
+    # table, 2026-09-22) -- the 4 cohorts the user specifically wants to
+    # see side by side (Commercial, Asset Manager, Leveraged Funds,
+    # Retail), plus the weighted score and its prior-week reference point.
     story.append(Paragraph(
-        "Commercial (Hedgers) vs. Non-Reportable (Retail) -- CFTC Legacy 3-Way Split", sty["H2"]))
-    hdr3 = [ph(h) for h in ["SYM","COMMERCIAL INDEX","COMMERCIAL BIAS","RETAIL INDEX","RETAIL BIAS","COMMERCIAL vs. RETAIL"]]
-    # Column widths sized so "COMMERCIAL" (the longest single header token,
-    # ~17mm at 8pt bold) doesn't force a mid-word character break -- caught
-    # 2026-09-22 in a live PDF render, the old 20mm column (sized for the
-    # abbreviated "COMM IDX") broke it as "COMMERCIA-L".
-    cw3  = [14*mm,27*mm,27*mm,20*mm,20*mm,48*mm]
-    ts3  = list(BASE_TS)
-    rows3 = [hdr3]
+        "Smart Money Score -- Commercial / Asset Manager / Leveraged Funds vs. Retail", sty["H2"]))
+    story.append(Paragraph(
+        "Weights: Commercial 50% (most reliable smart money vs. Retail), Asset Manager 30%, Leveraged Funds 20% "
+        "(trend-following, weakest for a contrarian read) -- renormalized to Commercial ~71%/Leveraged Funds ~29% "
+        "for GOLD/SILVER/CRUDE (no Asset Manager data). Score = weighted cohort index minus Retail's own index; "
+        "positive fades Retail short, negative fades Retail long. Prior-week score shown for short-term direction "
+        "(building/fading/flipping), not just current level.", sty["META"]))
+    hdr5 = [ph(h) for h in ["SYM","COMMERCIAL","ASSET MANAGER","LEVERAGED FUNDS","RETAIL",
+                             "SCORE","PRIOR WK","SIGNAL"]]
+    cw5  = [12*mm,25*mm,25*mm,25*mm,20*mm,15*mm,15*mm,43*mm]
+    ts5  = list(BASE_TS)
+    rows5 = [hdr5]
     for i, sym in enumerate(ORDER):
         if sym not in result: continue
         d = result[sym]
-        comm_b, retail_b = d.get("comm_bias","?"), d.get("retail_bias","?")
-        agree = ("Agree" if comm_b == retail_b and comm_b != "?"
-                 else "Diverge" if comm_b != "?" and retail_b != "?" and comm_b != retail_b
-                 else "?")
-        rows3.append([ps_(sym), pd_(d.get("comm_idx","?")), pd_(comm_b),
-                     pd_(d.get("retail_idx","?")), pd_(retail_b), pl_(agree)])
-        ts3.append(("BACKGROUND",(2,i+1),(2,i+1), bc(comm_b)))
-        ts3.append(("BACKGROUND",(4,i+1),(4,i+1), bc(retail_b)))
-    t3 = Table(rows3, colWidths=cw3, repeatRows=1)
-    t3.setStyle(TableStyle(ts3))
-    story.append(t3)
+        comm_b, am_b, lev_b, retail_b = d.get("comm_bias","?"), d.get("am_bias","?"), d["s1_bias"], d.get("retail_bias","?")
+        comm_cell = f"{comm_b} ({d.get('comm_idx','?')})"
+        am_cell = f"{am_b} ({d.get('am_idx')})" if am_b != "?" else "N/A"
+        lev_cell = f"{lev_b} ({d['s1_idx']})"
+        retail_cell = f"{retail_b} ({d.get('retail_idx','?')})"
+        score, score_1wk = d.get("score"), d.get("score_1wk")
+        score_cell = f"{score:+d}" if score is not None else "?"
+        score_1wk_cell = f"{score_1wk:+d}" if score_1wk is not None else "?"
+        sig = score_label(score)
+        rows5.append([ps_(sym), pl_(comm_cell), pl_(am_cell), pl_(lev_cell), pl_(retail_cell),
+                     pd_(score_cell), pd_(score_1wk_cell), pl_(sig)])
+        ts5.append(("BACKGROUND",(1,i+1),(1,i+1), bc(comm_b)))
+        ts5.append(("BACKGROUND",(2,i+1),(2,i+1), bc(am_b) if am_b != "?" else C_NEUT))
+        ts5.append(("BACKGROUND",(3,i+1),(3,i+1), bc(lev_b)))
+        ts5.append(("BACKGROUND",(4,i+1),(4,i+1), bc(retail_b)))
+        ts5.append(("BACKGROUND",(7,i+1),(7,i+1), bc(sig)))
+    t5 = Table(rows5, colWidths=cw5, repeatRows=1)
+    t5.setStyle(TableStyle(ts5))
+    story.append(t5)
     story.append(Spacer(1, 8))
 
     # ─ Third-source independent check table (new 2026-07-10)
@@ -714,37 +813,70 @@ def build_pdf(result, today, next_date_str, latest_report_date):
         am_b = d.get("am_bias", "?")
         am_i = d.get("am_idx", "?")
         am_label = f"Asset Manager: <b>{am_b}</b>  IDX {am_i}" if am_b != "?" else "Asset Manager: N/A"
+        comm_b, comm_i = d.get("comm_bias", "?"), d.get("comm_idx", "?")
+        retail_b, retail_i = d.get("retail_bias", "?"), d.get("retail_idx", "?")
+        score, score_1wk = d.get("score"), d.get("score_1wk")
+        sig = score_label(score)
+        score_label_txt = (f"Score: <b>{score:+d}</b>  ({sig})" if score is not None else "Score: ?")
 
-        hrow = [[
+        # Row A -- the 4 cohorts, in weight order (Commercial highest,
+        # Retail last as the reference point everything else is measured
+        # against) -- restructured 2026-09-22 per user request to make
+        # Commercial and Retail first-class badges, same treatment Asset
+        # Manager and Leveraged Funds already get.
+        hrowA = [[
             Paragraph(sym, ParagraphStyle(f"s_{sym}", fontSize=12, fontName="Helvetica-Bold",
                                           textColor=colors.HexColor("#0f3460"))),
-            Paragraph(f"Leveraged Funds: <b>{s1b}</b>  IDX {s1i}",
-                      ParagraphStyle(f"b1_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
-                                     textColor=col(s1b))),
+            Paragraph(f"Commercial: <b>{comm_b}</b>  IDX {comm_i}",
+                      ParagraphStyle(f"cm_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
+                                     textColor=col(comm_b))),
             Paragraph(am_label,
                       ParagraphStyle(f"am_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
                                      textColor=col(am_b))),
-            Paragraph(f"Non-Commercial: <b>{s2b}</b>  IDX {s2i}",
-                      ParagraphStyle(f"b2_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
-                                     textColor=col(s2b))),
-            Paragraph(align,
-                      ParagraphStyle(f"al_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
-                                     textColor=acol(align))),
+            Paragraph(f"Leveraged Funds: <b>{s1b}</b>  IDX {s1i}",
+                      ParagraphStyle(f"b1_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
+                                     textColor=col(s1b))),
+            Paragraph(f"Retail: <b>{retail_b}</b>  IDX {retail_i}",
+                      ParagraphStyle(f"rt_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
+                                     textColor=col(retail_b))),
         ]]
-        ht = Table(hrow, colWidths=[16*mm, 42*mm, 42*mm, 42*mm, 38*mm])
-        ht.setStyle(TableStyle([
+        htA = Table(hrowA, colWidths=[16*mm, 41*mm, 41*mm, 41*mm, 41*mm])
+        htA.setStyle(TableStyle([
             ("BACKGROUND",(0,0),(-1,0), C_SYM),
             ("TOPPADDING",(0,0),(-1,0),3),("BOTTOMPADDING",(0,0),(-1,0),3),
             ("LEFTPADDING",(0,0),(-1,0),5),("VALIGN",(0,0),(-1,0),"MIDDLE"),
-            ("LINEBELOW",(0,0),(-1,0),0.6,C_GRID),
-            ("BACKGROUND",(1,0),(1,0), bc(s1b)),
-            ("BACKGROUND",(2,0),(2,0), bc(am_b)),
-            ("BACKGROUND",(3,0),(3,0), bc(s2b)),
-            ("BACKGROUND",(4,0),(4,0), ac(align)),
+            ("BACKGROUND",(1,0),(1,0), bc(comm_b)),
+            ("BACKGROUND",(2,0),(2,0), bc(am_b) if am_b != "?" else C_NEUT),
+            ("BACKGROUND",(3,0),(3,0), bc(s1b)),
+            ("BACKGROUND",(4,0),(4,0), bc(retail_b)),
         ]))
-        story.append(ht)
+        story.append(htA)
+
+        # Row B -- Alignment (Leveraged Funds vs. Non-Commercial confirm/
+        # diverge, a trend-reliability check) and the weighted Score (a
+        # contrarian-vs-Retail check) -- two different questions, kept
+        # visually distinct from Row A's raw cohort readings.
+        hrowB = [[
+            Paragraph("", ParagraphStyle(f"blank_{sym}", fontSize=1)),
+            Paragraph(f"Alignment: <b>{align}</b>",
+                      ParagraphStyle(f"al_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
+                                     textColor=acol(align))),
+            Paragraph(score_label_txt,
+                      ParagraphStyle(f"sc_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
+                                     textColor=col(sig))),
+        ]]
+        htB = Table(hrowB, colWidths=[16*mm, 82*mm, 82*mm])
+        htB.setStyle(TableStyle([
+            ("TOPPADDING",(0,0),(-1,0),2),("BOTTOMPADDING",(0,0),(-1,0),3),
+            ("LEFTPADDING",(0,0),(-1,0),5),("VALIGN",(0,0),(-1,0),"MIDDLE"),
+            ("LINEBELOW",(0,0),(-1,0),0.6,C_GRID),
+            ("BACKGROUND",(1,0),(1,0), ac(align)),
+            ("BACKGROUND",(2,0),(2,0), bc(sig)),
+        ]))
+        story.append(htB)
         story.append(Paragraph("<b>4-Week Trend:</b>  " + trend_text(sym, d), sty["BODY"]))
         story.append(Paragraph("<b>Analysis:</b>  " + analysis_text(sym, d), sty["BODY"]))
+        story.append(Paragraph("<b>Smart Money Score:</b>  " + score_trend_text(score, score_1wk), sty["BODY"]))
         ts_text = third_source_text(sym, d)
         if ts_text:
             story.append(Paragraph("<b>Third-Source Check:</b>  " + ts_text, sty["BODY"]))
@@ -920,10 +1052,12 @@ def main():
             "dates":   dates5,
             "nets5":   nets5,
             "s1_idx":  idxs[-1],
+            "s1_idx_1wk": idxs[-2],
             "s1_bias": bias_label(idxs[-1]),
             "lev_sig": lev_sig(deltas),
             "am_nets5": am_nets5,
             "am_idx":  am_idxs[-1],
+            "am_idx_1wk": am_idxs[-2],
             "am_bias": bias_label(am_idxs[-1]),
             "am_sig":  lev_sig(am_deltas),
         }
@@ -945,6 +1079,7 @@ def main():
             "dates":   dates5,
             "nets5":   nets5,
             "s1_idx":  idxs[-1],
+            "s1_idx_1wk": idxs[-2],
             "s1_bias": bias_label(idxs[-1]),
             "lev_sig": lev_sig(deltas),
             # No Asset Manager category in the Disaggregated report -- am_*
@@ -959,6 +1094,7 @@ def main():
         if len(lr) < 5:
             result[sym].update({"s2_nets5":["?"]*5,"s2_idx":"?","s2_bias":"?","alignment":"?"})
             result[sym].update(comm_retail_breakdown(lr, is_inv))
+            result[sym]["score"], result[sym]["score_1wk"] = smart_money_score(result[sym])
             continue
 
         all_nets = [int(r["Noncommercial_Positions_Long_All"]) - int(r["Noncommercial_Positions_Short_All"])
@@ -971,6 +1107,7 @@ def main():
         result[sym]["s2_bias"]  = bias_label(idxs[-1])
         result[sym]["alignment"]= alignment(result[sym]["s1_bias"], result[sym]["s2_bias"])
         result[sym].update(comm_retail_breakdown(lr, is_inv))
+        result[sym]["score"], result[sym]["score_1wk"] = smart_money_score(result[sym])
 
     # ── Third-source checks ───────────────────────────────────────────────────
     for sym, (long_pct, short_pct) in oanda_pos.items():
