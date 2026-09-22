@@ -817,7 +817,9 @@ def build_pdf(result, today, next_date_str, latest_report_date):
         retail_b, retail_i = d.get("retail_bias", "?"), d.get("retail_idx", "?")
         score, score_1wk = d.get("score"), d.get("score_1wk")
         sig = score_label(score)
-        score_label_txt = (f"Score: <b>{score:+d}</b>  ({sig})" if score is not None else "Score: ?")
+        score_1wk_txt = f"{score_1wk:+d}" if score_1wk is not None else "?"
+        score_label_txt = (f"Score: <b>{score:+d}</b>  ({sig})  |  Prior Wk: {score_1wk_txt}"
+                            if score is not None else "Score: ?")
 
         # Row A -- the 4 cohorts, in weight order (Commercial highest,
         # Retail last as the reference point everything else is measured
