@@ -183,17 +183,6 @@ def lev_sig(deltas):
         return "pressing"
     return "--"
 
-def mm_sig(changes):
-    if len(changes) < 4:
-        return "--"
-    w = changes[-4:]
-    avg, s = _mean(w), _std(w) or 1
-    if w[-1] < avg - s * 0.75:
-        return "closing"
-    if w[-1] > avg + s * 0.75:
-        return "adding"
-    return "--"
-
 def bias_label(idx):
     return "Bullish" if idx >= 60 else "Bearish" if idx <= 40 else "Neutral"
 
@@ -235,32 +224,48 @@ def trend_text(sym, d):
 
     parts = []
     if flipped:
-        parts.append(f"S1 flipped from {_net_str(n0)} (4 wks ago) to {_net_str(n4)} now. "
+        parts.append(f"Leveraged Funds flipped from {_net_str(n0)} (4 wks ago) to {_net_str(n4)} now. "
                      f"COT Index {d['s1_idx']} ({d['s1_bias']}).")
     else:
-        parts.append(f"S1 net {n0:+,} -> {n4:+,} ({chg:+,} over 4 wks). "
+        parts.append(f"Leveraged Funds net {n0:+,} -> {n4:+,} ({chg:+,} over 4 wks). "
                      f"COT Index {d['s1_idx']} ({d['s1_bias']}).")
 
-    lev_desc = {"flip-UP": "Lev Fund delta turned positive (short-covering or new longs).",
-                "flip-DN": "Lev Fund delta turned negative (new shorts or long liquidation).",
-                "covering": "Lev Funds covering above-average pace.",
-                "pressing": "Lev Funds pressing at above-average pace."}
+    lev_desc = {"flip-UP": "Leveraged Funds delta turned positive (short-covering or new longs).",
+                "flip-DN": "Leveraged Funds delta turned negative (new shorts or long liquidation).",
+                "covering": "Leveraged Funds covering above-average pace.",
+                "pressing": "Leveraged Funds pressing at above-average pace."}
     if d["lev_sig"] in lev_desc:
         parts.append(lev_desc[d["lev_sig"]])
 
-    mm_desc = {"adding": "Asset Managers adding to longs.", "closing": "Asset Managers closing longs."}
-    if d["mm_sig"] in mm_desc:
-        parts.append(mm_desc[d["mm_sig"]])
+    # Asset Manager -- own net position/index/bias, tracked the same way as
+    # Leveraged Funds (own 5-week series + COT index), not folded into
+    # Source 2 and not reduced to a long-side-only adding/closing signal.
+    am5 = d.get("am_nets5")
+    if am5:
+        am0, am4 = am5[0], am5[-1]
+        am_flipped = (am0 > 0) != (am4 > 0)
+        if am_flipped:
+            parts.append(f"Asset Manager flipped from {_net_str(am0)} (4 wks ago) to {_net_str(am4)} now. "
+                         f"COT Index {d['am_idx']} ({d['am_bias']}).")
+        else:
+            parts.append(f"Asset Manager net {am0:+,} -> {am4:+,} ({am4 - am0:+,} over 4 wks). "
+                         f"COT Index {d['am_idx']} ({d['am_bias']}).")
+        am_desc = {"flip-UP": "Asset Manager delta turned positive (short-covering or new longs).",
+                   "flip-DN": "Asset Manager delta turned negative (new shorts or long liquidation).",
+                   "covering": "Asset Manager covering above-average pace.",
+                   "pressing": "Asset Manager pressing at above-average pace."}
+        if d.get("am_sig") in am_desc:
+            parts.append(am_desc[d["am_sig"]])
 
     if has2:
         s2_chg = s2n[-1] - s2n[0]
         s2_flipped = (s2n[0] > 0) != (s2n[-1] > 0)
         if s2_flipped:
-            parts.append(f"S2 NonComm flipped from {_net_str(s2n[0])} to {_net_str(s2n[-1])}. "
-                         f"COT Index {d['s2_idx']} ({d['s2_bias']}).")
+            parts.append(f"Non-Commercial (Tradingster, Leveraged Funds + Asset Manager combined) flipped from "
+                         f"{_net_str(s2n[0])} to {_net_str(s2n[-1])}. COT Index {d['s2_idx']} ({d['s2_bias']}).")
         else:
-            parts.append(f"S2 NonComm net {s2n[0]:+,} -> {s2n[-1]:+,} ({s2_chg:+,}). "
-                         f"COT Index {d['s2_idx']} ({d['s2_bias']}).")
+            parts.append(f"Non-Commercial (Tradingster, Leveraged Funds + Asset Manager combined) net "
+                         f"{s2n[0]:+,} -> {s2n[-1]:+,} ({s2_chg:+,}). COT Index {d['s2_idx']} ({d['s2_bias']}).")
 
     if d.get("comm_bias", "?") != "?":
         parts.append(f"Commercial (hedgers) IDX {d['comm_idx']} ({d['comm_bias']}), "
@@ -315,31 +320,31 @@ def analysis_text(sym, d):
                      f"exhaustion or reversal risk elevated.")
 
     if isinstance(s2i, int) and has2 and s2i <= 5:
-        parts.append(f"NonComm IDX={s2i} also at bearish extreme -- broad spec group maximally short.")
+        parts.append(f"Non-Commercial IDX={s2i} also at bearish extreme -- broad spec group maximally short.")
     elif isinstance(s2i, int) and has2 and s2i >= 95:
-        parts.append(f"NonComm IDX={s2i} also at bullish extreme -- broad spec group maximally long.")
+        parts.append(f"Non-Commercial IDX={s2i} also at bullish extreme -- broad spec group maximally long.")
 
     flip_ctx = {
-        "flip-UP": ("Lev Funds crossed from net short to net long -- significant momentum shift."
+        "flip-UP": ("Leveraged Funds crossed from net short to net long -- significant momentum shift."
                     if len(nets) >= 2 and nets[-2] < 0 and nets[-1] > 0
-                    else "Lev Fund weekly delta crossed positive -- covering or fresh long entry."),
-        "flip-DN": ("Lev Funds crossed from net long to net short -- significant momentum shift."
+                    else "Leveraged Funds weekly delta crossed positive -- covering or fresh long entry."),
+        "flip-DN": ("Leveraged Funds crossed from net long to net short -- significant momentum shift."
                     if len(nets) >= 2 and nets[-2] > 0 and nets[-1] < 0
-                    else "Lev Fund weekly delta crossed negative -- new shorts or long liquidation."),
+                    else "Leveraged Funds weekly delta crossed negative -- new shorts or long liquidation."),
     }
     if lev in flip_ctx:
         parts.append(flip_ctx[lev])
 
     if has2 and len(s2n) >= 2 and (s2n[-2] > 0) != (s2n[-1] > 0):
         direction = "net long" if s2n[-1] > 0 else "net short"
-        parts.append(f"NonComm crossed to {direction} last week -- notable shift in broader spec group.")
+        parts.append(f"Non-Commercial crossed to {direction} last week -- notable shift in broader spec group.")
 
     # Commercial (smart money/hedgers) vs Retail (dumb money/crowd) contrarian
     # check. Corrected 2026-09-11 -- this used to just note a disagreement
     # neutrally ("worth noting who's on which side"); it now actually
     # interprets it per classic COT theory. Commercial and Retail are
-    # contrarian indicators; Source 1/2 above (Lev Funds / NonComm) are
-    # trend-following, large-speculator measures -- a different axis
+    # contrarian indicators; Source 1/2 above (Leveraged Funds / Non-Commercial)
+    # are trend-following, large-speculator measures -- a different axis
     # entirely. Both cohorts at a genuine bias extreme and pointing opposite
     # directions is a real signal on its own, and matters most when it
     # contradicts the Source 1/2 read rather than agreeing with it.
@@ -405,14 +410,14 @@ def this_week_text(sym, d):
 
     if align == "DIVERGE":
         if s1b == "Bearish" and extreme and s1i <= 5:
-            return (f"Bearish S1 at IDX={s1i} near extreme. Sources diverge -- "
+            return (f"Bearish Leveraged Funds at IDX={s1i} near extreme. Sources diverge -- "
                     f"avoid conviction shorts; contrarian risk elevated.")
         if s1b == "Bullish" and extreme and s1i >= 95:
-            return (f"Bullish S1 at IDX={s1i} near extreme. Sources diverge -- "
-                    f"avoid chasing longs; confirmation needed from S2.")
+            return (f"Bullish Leveraged Funds at IDX={s1i} near extreme. Sources diverge -- "
+                    f"avoid chasing longs; confirmation needed from Non-Commercial.")
         if s1b != "Neutral":
             return (f"{s1b} lean from CFTC (IDX {s1i}) but Tradingster diverges ({s2b}). "
-                    f"Trade S1 direction with reduced size until NonComm confirms.")
+                    f"Trade Leveraged Funds direction with reduced size until Non-Commercial confirms.")
         return "Sources diverge around neutral. No clear edge -- wait for convergence."
 
     return "Neutral. No COT edge this week. Use price structure alone for entries."
@@ -420,14 +425,14 @@ def this_week_text(sym, d):
 
 def next_week_text(sym, d, next_date_str):
     align, s1b = d.get("alignment","?"), d["s1_bias"]
-    s1i, lev, mm = d["s1_idx"], d["lev_sig"], d["mm_sig"]
+    s1i, lev, am = d["s1_idx"], d["lev_sig"], d.get("am_sig")
     extreme = isinstance(s1i, int) and (s1i <= 5 or s1i >= 95)
     nxt = next_date_str  # e.g. "Jun 30"
 
     if align == "CONFIRMED":
         if s1b == "Bullish":
             base = f"Bullish continuation expected through {nxt}."
-            if mm == "adding":
+            if am in ("covering", "flip-UP"):
                 base += " Asset Manager accumulation supports medium-term upside."
             return base
         if s1b == "Bearish":
@@ -435,13 +440,13 @@ def next_week_text(sym, d, next_date_str):
             if extreme:
                 base += (f" IDX={s1i} -- watch next CFTC release for short-covering "
                          f"acceleration which would signal a potential squeeze.")
-            if mm == "closing":
+            if am in ("pressing", "flip-DN"):
                 base += " Asset Manager selling confirms distribution."
             return base
         return f"Neutral through {nxt}. Watch for a source to break out of neutral zone."
 
     if align == "DIVERGE":
-        watch = ("S2 NonComm follow S1 into " + s1b if s1b != "Neutral"
+        watch = ("Non-Commercial follow Leveraged Funds into " + s1b if s1b != "Neutral"
                  else "sources converge directionally")
         base = (f"Key watch for {nxt}: will {watch}? "
                 f"Next CFTC release will clarify.")
@@ -526,11 +531,15 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     story.append(Paragraph(
         f"Data: Week Ending {report_str}  |  Analysis: {today_str}", sty["META"]))
     story.append(Paragraph(
-        "<b>Source 1:</b> CFTC TFF -- Leveraged Funds (hedge funds/CTAs) and Asset Managers; "
+        "<b>Source 1 -- Leveraged Funds:</b> CFTC TFF's speculative cohort (hedge funds/CTAs); "
         "Disaggregated Managed Money for GOLD/SILVER/CRUDE.  "
-        "<b>Source 2:</b> Tradingster Legacy Non-Commercial (broader spec group = Lev Fund + Asset Mgr combined).  "
-        "<b>Commercial/Retail:</b> CFTC Legacy report's classic 3-way split (hedgers vs. large specs vs. small/retail "
-        "traders), same underlying Tradingster data as Source 2.  "
+        "<b>Asset Manager:</b> CFTC TFF's real-money institutional cohort (pension funds, insurers, mutual funds), "
+        "tracked as its own series with its own net position/COT index/bias, same treatment as Leveraged Funds -- "
+        "not available for GOLD/SILVER/CRUDE (the Disaggregated report has no Asset Manager category).  "
+        "<b>Source 2 -- Non-Commercial:</b> Tradingster Legacy Non-Commercial (broader spec group = "
+        "Leveraged Funds + Asset Manager combined).  "
+        "<b>Commercial/Retail:</b> CFTC Legacy report's classic 3-way split (Commercial hedgers vs. large "
+        "speculators vs. small/retail traders), same underlying Tradingster data as Source 2.  "
         "<b>Third Source:</b> a genuinely independent, non-CFTC check where a free one exists -- OANDA position "
         "book (forex), Crypto Fear &amp; Greed Index (BTC), EIA weekly crude stocks (Oil). No free independent source "
         "exists for indices or Gold/Silver.  "
@@ -539,29 +548,57 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     story.append(HRFlowable(width=W, thickness=1.5, color=colors.HexColor("#1a1a2e")))
     story.append(Spacer(1, 4))
 
-    # ─ Source 1 table
-    story.append(Paragraph("Source 1 -- CFTC Lev Fund / Managed Money  (net contracts)", sty["H2"]))
+    # ─ Source 1 table -- Leveraged Funds
+    story.append(Paragraph("Source 1 -- CFTC Leveraged Funds / Managed Money  (net contracts)", sty["H2"]))
     ref = result[ORDER[0]]
     col_dates = ref["dates"]  # e.g. ["05-19","05-26","06-02","06-09","06-16"]
-    hdr = [ph(h) for h in ["SYM"] + col_dates + ["IDX","BIAS","LEV SIG","AM SIG"]]
-    cw  = [12*mm,20*mm,20*mm,20*mm,20*mm,20*mm,11*mm,18*mm,20*mm,19*mm]
+    hdr = [ph(h) for h in ["SYM"] + col_dates + ["COT INDEX","BIAS","LEVERAGED FUNDS SIGNAL"]]
+    cw  = [12*mm,20*mm,20*mm,20*mm,20*mm,20*mm,14*mm,20*mm,34*mm]
     ts1 = list(BASE_TS)
     rows1 = [hdr]
     for i, sym in enumerate(ORDER):
         if sym not in result: continue
         d = result[sym]
         rows1.append([ps_(sym)] + [pd_(n) for n in d["nets5"]] +
-                     [pd_(d["s1_idx"]), pd_(d["s1_bias"]), pd_(d["lev_sig"]), pd_(d["mm_sig"])])
+                     [pd_(d["s1_idx"]), pd_(d["s1_bias"]), pd_(d["lev_sig"])])
         ts1.append(("BACKGROUND",(7,i+1),(7,i+1), bc(d["s1_bias"])))
     t1 = Table(rows1, colWidths=cw, repeatRows=1)
     t1.setStyle(TableStyle(ts1))
     story.append(t1)
     story.append(Spacer(1, 6))
 
-    # ─ Source 2 table
+    # ─ Asset Manager table (new 2026-09-22) -- tracked as its own source,
+    # same treatment as Leveraged Funds, not folded into Source 2. TFF
+    # symbols only; GOLD/SILVER/CRUDE have no Asset Manager category in the
+    # Disaggregated report.
     story.append(Paragraph(
-        "Source 2 -- Tradingster Non-Commercial  (Lev Fund + Asset Mgr combined)", sty["H2"]))
-    hdr2 = [ph(h) for h in ["SYM"] + col_dates + ["IDX","BIAS","ALIGNMENT"]]
+        "Asset Manager -- CFTC TFF Real-Money Institutional: Pension Funds, Insurers, Mutual Funds  (net contracts)",
+        sty["H2"]))
+    am_syms = [s for s in ORDER if s in result and result[s].get("am_nets5")]
+    if am_syms:
+        hdr_am = [ph(h) for h in ["SYM"] + col_dates + ["COT INDEX","BIAS","ASSET MANAGER SIGNAL"]]
+        cw_am  = [12*mm,20*mm,20*mm,20*mm,20*mm,20*mm,14*mm,20*mm,34*mm]
+        ts_am  = list(BASE_TS)
+        rows_am = [hdr_am]
+        for i, sym in enumerate(am_syms):
+            d = result[sym]
+            rows_am.append([ps_(sym)] + [pd_(n) for n in d["am_nets5"]] +
+                           [pd_(d["am_idx"]), pd_(d["am_bias"]), pd_(d["am_sig"])])
+            ts_am.append(("BACKGROUND",(7,i+1),(7,i+1), bc(d["am_bias"])))
+        t_am = Table(rows_am, colWidths=cw_am, repeatRows=1)
+        t_am.setStyle(TableStyle(ts_am))
+        story.append(t_am)
+        story.append(Paragraph(
+            "Not available for GOLD/SILVER/CRUDE -- the Disaggregated report has no Asset Manager category "
+            "(its cohorts are Producer/Merchant, Swap Dealer, and Managed Money instead).", sty["META"]))
+    else:
+        story.append(Paragraph("No Asset Manager data available this run.", sty["META"]))
+    story.append(Spacer(1, 8))
+
+    # ─ Source 2 table -- Non-Commercial (combined)
+    story.append(Paragraph(
+        "Source 2 -- Tradingster Non-Commercial  (Leveraged Funds + Asset Manager Combined)", sty["H2"]))
+    hdr2 = [ph(h) for h in ["SYM"] + col_dates + ["COT INDEX","BIAS","ALIGNMENT"]]
     cw2  = [12*mm,22*mm,22*mm,22*mm,22*mm,22*mm,11*mm,18*mm,29*mm]
     ts2  = list(BASE_TS)
     rows2 = [hdr2]
@@ -581,8 +618,12 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     # ─ Commercial / Retail breakdown table (new 2026-07-10)
     story.append(Paragraph(
         "Commercial (Hedgers) vs. Non-Reportable (Retail) -- CFTC Legacy 3-Way Split", sty["H2"]))
-    hdr3 = [ph(h) for h in ["SYM","COMM IDX","COMM BIAS","RETAIL IDX","RETAIL BIAS","COMM vs RETAIL"]]
-    cw3  = [16*mm,20*mm,25*mm,20*mm,25*mm,50*mm]
+    hdr3 = [ph(h) for h in ["SYM","COMMERCIAL INDEX","COMMERCIAL BIAS","RETAIL INDEX","RETAIL BIAS","COMMERCIAL vs. RETAIL"]]
+    # Column widths sized so "COMMERCIAL" (the longest single header token,
+    # ~17mm at 8pt bold) doesn't force a mid-word character break -- caught
+    # 2026-09-22 in a live PDF render, the old 20mm column (sized for the
+    # abbreviated "COMM IDX") broke it as "COMMERCIA-L".
+    cw3  = [14*mm,27*mm,27*mm,20*mm,20*mm,48*mm]
     ts3  = list(BASE_TS)
     rows3 = [hdr3]
     for i, sym in enumerate(ORDER):
@@ -670,28 +711,36 @@ def build_pdf(result, today, next_date_str, latest_report_date):
                     colors.HexColor("#b22222") if "DIV"  in str(aln) else
                     colors.HexColor("#7a5c00"))
 
+        am_b = d.get("am_bias", "?")
+        am_i = d.get("am_idx", "?")
+        am_label = f"Asset Manager: <b>{am_b}</b>  IDX {am_i}" if am_b != "?" else "Asset Manager: N/A"
+
         hrow = [[
             Paragraph(sym, ParagraphStyle(f"s_{sym}", fontSize=12, fontName="Helvetica-Bold",
                                           textColor=colors.HexColor("#0f3460"))),
-            Paragraph(f"S1: <b>{s1b}</b>  IDX {s1i}",
+            Paragraph(f"Leveraged Funds: <b>{s1b}</b>  IDX {s1i}",
                       ParagraphStyle(f"b1_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
                                      textColor=col(s1b))),
-            Paragraph(f"S2: <b>{s2b}</b>  IDX {s2i}",
+            Paragraph(am_label,
+                      ParagraphStyle(f"am_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
+                                     textColor=col(am_b))),
+            Paragraph(f"Non-Commercial: <b>{s2b}</b>  IDX {s2i}",
                       ParagraphStyle(f"b2_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
                                      textColor=col(s2b))),
             Paragraph(align,
                       ParagraphStyle(f"al_{sym}", fontSize=8.5, fontName="Helvetica-Bold",
                                      textColor=acol(align))),
         ]]
-        ht = Table(hrow, colWidths=[18*mm, 52*mm, 52*mm, 58*mm])
+        ht = Table(hrow, colWidths=[16*mm, 42*mm, 42*mm, 42*mm, 38*mm])
         ht.setStyle(TableStyle([
             ("BACKGROUND",(0,0),(-1,0), C_SYM),
             ("TOPPADDING",(0,0),(-1,0),3),("BOTTOMPADDING",(0,0),(-1,0),3),
             ("LEFTPADDING",(0,0),(-1,0),5),("VALIGN",(0,0),(-1,0),"MIDDLE"),
             ("LINEBELOW",(0,0),(-1,0),0.6,C_GRID),
             ("BACKGROUND",(1,0),(1,0), bc(s1b)),
-            ("BACKGROUND",(2,0),(2,0), bc(s2b)),
-            ("BACKGROUND",(3,0),(3,0), ac(align)),
+            ("BACKGROUND",(2,0),(2,0), bc(am_b)),
+            ("BACKGROUND",(3,0),(3,0), bc(s2b)),
+            ("BACKGROUND",(4,0),(4,0), ac(align)),
         ]))
         story.append(ht)
         story.append(Paragraph("<b>4-Week Trend:</b>  " + trend_text(sym, d), sty["BODY"]))
@@ -713,9 +762,15 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     nw_label = next_date_str
     story.append(Paragraph(f"Bias Summary -- {tw_label} -> {nw_label}", sty["H2"]))
 
-    shdr = [ph(h) for h in ["SYM","S1 IDX","S2 IDX","ALIGNMENT",
+    shdr = [ph(h) for h in ["SYM","LEVERAGED FUNDS INDEX","NON-COMMERCIAL INDEX","ALIGNMENT",
                              f"THIS WEEK ({tw_label})", f"NEXT WEEK ({nw_label})"]]
-    scw  = [14*mm,14*mm,14*mm,24*mm,54*mm,60*mm]
+    # Widened from the old 14mm (sized for "S1 IDX"/"S2 IDX") so "LEVERAGED"
+    # and "COMMERCIAL" (~15-17mm at 8pt bold) each fit on one line instead of
+    # breaking mid-word -- same class of bug as the Commercial/Retail table
+    # above, caught in the same live render. THIS WEEK/NEXT WEEK shrink to
+    # make room; both already wrap across multiple lines, so this only grows
+    # row height slightly, doesn't truncate anything.
+    scw  = [12*mm,25*mm,31*mm,20*mm,44*mm,48*mm]
     sts  = list(BASE_TS)
     srows = [shdr]
     for i, sym in enumerate(ORDER):
@@ -845,7 +900,21 @@ def main():
         deltas = [int(r["change_in_lev_money_long"]) - int(r["change_in_lev_money_short"]) for r in rows]
         if is_inv: deltas = [-d for d in deltas]
 
-        am_ch = [] if is_inv else [int(r.get("change_in_asset_mgr_long", 0)) for r in rows]
+        # Asset Manager -- CFTC TFF's real-money institutional cohort (pension
+        # funds, insurers, mutual funds), tracked as its own series the same
+        # way Leveraged Funds is (own net position, own 5-week trend, own COT
+        # index/bias/signal) -- not folded into Source 2 and not reduced to a
+        # long-side-only adding/closing signal. TFF-only field, no "_all"
+        # suffix (confirmed against a live API row 2026-09-22); not available
+        # for GOLD/SILVER/CRUDE, whose Disaggregated report has no Asset
+        # Manager category (Producer/Merchant, Swap Dealer, Managed Money
+        # instead).
+        am_nets  = [int(r["asset_mgr_positions_long"]) - int(r["asset_mgr_positions_short"]) for r in rows]
+        am_idxs  = cot_index(am_nets)
+        if is_inv: am_idxs = [100 - i for i in am_idxs]
+        am_nets5 = [int(r["asset_mgr_positions_long"]) - int(r["asset_mgr_positions_short"]) for r in l5]
+        am_deltas = [int(r["change_in_asset_mgr_long"]) - int(r["change_in_asset_mgr_short"]) for r in rows]
+        if is_inv: am_deltas = [-d for d in am_deltas]
 
         result[sym] = {
             "dates":   dates5,
@@ -853,7 +922,10 @@ def main():
             "s1_idx":  idxs[-1],
             "s1_bias": bias_label(idxs[-1]),
             "lev_sig": lev_sig(deltas),
-            "mm_sig":  mm_sig(am_ch) if am_ch else "--",
+            "am_nets5": am_nets5,
+            "am_idx":  am_idxs[-1],
+            "am_bias": bias_label(am_idxs[-1]),
+            "am_sig":  lev_sig(am_deltas),
         }
 
     for sym, code in DISAGG_CODES.items():
@@ -875,7 +947,8 @@ def main():
             "s1_idx":  idxs[-1],
             "s1_bias": bias_label(idxs[-1]),
             "lev_sig": lev_sig(deltas),
-            "mm_sig":  "--",
+            # No Asset Manager category in the Disaggregated report -- am_*
+            # keys deliberately absent; trend_text/build_pdf check via .get().
         }
 
     # ── Process Source 2 (Tradingster) + Commercial/Retail ───────────────────
@@ -925,8 +998,17 @@ def main():
         key=lambda r: r["report_date_as_yyyy_mm_dd"])
     full_latest = ref_rows[-1]["report_date_as_yyyy_mm_dd"][:10]  # "2026-06-16"
 
-    today     = datetime.now()
-    next_date = today + timedelta(days=7)
+    today = datetime.now()
+    # Bug fix, 2026-09-22: this used to be `today + 7 days`, i.e. 7 days from
+    # the script's RUN date. CFTC data cutoffs are always a Tuesday, and the
+    # script can run on any weekday, so that silently computed the wrong
+    # "next Tuesday" whenever run date != the data's own Tuesday -- e.g. run
+    # on Monday Sep 21 against data as of Tue Sep 15 produced "next" = Sep 28
+    # (two Tuesdays out) instead of the actual next cutoff, Sep 22 (this
+    # Tuesday, releasing Fri Sep 25). Correct basis is the COT DATA's own
+    # report date (always a Tuesday) + 7 days, not the run date.
+    latest_dt = datetime.strptime(full_latest, "%Y-%m-%d")
+    next_date = latest_dt + timedelta(days=7)
     next_date_str = next_date.strftime("%b %d").replace(" 0", " ")
 
     # ── Build PDF ─────────────────────────────────────────────────────────────

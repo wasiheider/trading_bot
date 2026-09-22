@@ -62,6 +62,17 @@ third check needs a non-CFTC data source:
 Field names/shape match server.py's /cot route exactly (dashboard.html's
 consumer needs zero changes to existing fields): {"updated": "YYYY-MM-DD",
 "instruments": [...]}. New optional fields are additive.
+
+Asset Manager as its own source (added 2026-09-22): CFTC TFF's real-money
+institutional cohort (pension funds, insurers, mutual funds) -- previously
+only surfaced indirectly, as a long-side-only adding/closing signal
+(mm_signal, kept unchanged for dashboard.html backward-compat) baked into
+Source 2's combined Lev Fund + Asset Mgr number. Now also tracked as its
+own full series -- am_idx/am_bias/am_signal/am_net_now/am_net_1wk -- the
+same treatment Leveraged Funds gets, computed from asset_mgr_positions_
+long/short (raw net position, not just the long-side change). TFF-only;
+GOLD/SILVER/CRUDE use the Disaggregated report, which has no Asset Manager
+category.
 """
 import concurrent.futures
 import json
@@ -345,6 +356,29 @@ def build_payload():
         am_changes = [int(r.get("change_in_asset_mgr_long") or 0) for r in rows]
         mm = None if invert else _mm_signal(am_changes)
 
+        # Asset Manager (added 2026-09-22) -- own net position/COT index/bias,
+        # tracked the same way as Leveraged Funds, not folded into Source 2
+        # and not reduced to the long-side-only mm_signal above (which is
+        # kept unchanged for dashboard.html's existing "AM adding/closing"
+        # card -- these are new, additive fields, not a replacement).
+        # TFF-only, no "_all" suffix (confirmed against a live API row).
+        am_nets = [
+            int(r.get("asset_mgr_positions_long") or 0) - int(r.get("asset_mgr_positions_short") or 0)
+            for r in rows
+        ]
+        am_idxs = _cot_index(am_nets)
+        if invert:
+            am_idxs = [100 - i for i in am_idxs]
+        am_idx = am_idxs[-1]
+        am_bias = _bias(am_idx)
+        am_deltas = [
+            int(r.get("change_in_asset_mgr_long") or 0) - int(r.get("change_in_asset_mgr_short") or 0)
+            for r in rows
+        ]
+        if invert:
+            am_deltas = [-d for d in am_deltas]
+        am_signal = _lev_signal(am_deltas)
+
         latest_date = rows[-1].get("report_date_as_yyyy_mm_dd", "")[:10]
 
         leg_idx = leg_bias1 = leg_lev = leg_net_now = leg_net_1wk = None
@@ -373,8 +407,10 @@ def build_payload():
             "weekly_delta": weekly_delta,
             "cot_idx": idx, "bias": bias1,
             "lev_signal": lev, "mm_signal": mm,
+            "am_idx": am_idx, "am_bias": am_bias, "am_signal": am_signal,
+            "am_net_now": am_nets[-1], "am_net_1wk": am_nets[-2],
             "near_term": _near_term(bias1, weekly_delta, lev),
-            "src1_label": "LevF (inv)" if invert else "Lev Funds",
+            "src1_label": "Leveraged Funds (Inverted)" if invert else "Leveraged Funds",
             "leg_idx": leg_idx, "leg_bias": leg_bias1,
             "leg_lev": leg_lev,
             "leg_net_now": leg_net_now, "leg_net_1wk": leg_net_1wk,
