@@ -31,7 +31,18 @@
 //   SL = opposite range wall, single target at 1:1 RR, full close (E exits).
 //   One break per side per range.
 //
-// Risk: 0.5% ($500 on the $100K paper account) on every position.
+// Mid Continuation (added 2026-09-28, user spec):
+//   Price comes down from the top zone, a 4H candle trades to/through 50% of
+//   the range but CLOSES back above it (candle 1, arms the setup), only while
+//   the top has fewer than 2 completed 4H taps. The NEXT 4H candle must pierce
+//   and close above candle 1's high -> LONG at candle 2's close. Mirror image
+//   from the bottom -> SHORT. Any 4H close through the mid kills the setup
+//   until price revisits that boundary zone.
+//   SL = beyond the lower wick of candles 1-2. TP1 1:1 (50%), TP2 1:2, SL
+//   stays put after TP1. Risk 0.25% (smaller range play).
+//
+// Risk: 0.5% ($500 on the $100K paper account) on every position, except
+// Mid Continuation at 0.25% ($250).
 //
 // Chart       : Load on 4H (signals are suppressed on any other timeframe)
 // Webhook     : https://tradingbot-production-1e5a.up.railway.app/webhook/paper
@@ -67,6 +78,11 @@ tp2_rr        = input.float(3.0,  "TP2 R:R (closes remaining 50%)",             
 exclude_disabled = input.bool(true, "Skip GBPUSD / AUDUSD / GBPJPY (disabled instruments)", group="Filters")
 bb_enabled       = input.bool(true, "Enable Box Break (4H close beyond Daily range)",      group="Filters")
 
+mc_enabled       = input.bool(true,  "Enable Mid Continuation",                              group="Mid Continuation")
+mc_max_taps      = input.int(2,      "Allowed while boundary 4H taps are below",             group="Mid Continuation", minval=1, maxval=10)
+mc_tp1_rr        = input.float(1.0,  "TP1 R:R (closes 50%)",                                 group="Mid Continuation", minval=0.5, step=0.1)
+mc_tp2_rr        = input.float(2.0,  "TP2 R:R (closes remaining 50%)",                       group="Mid Continuation", minval=0.5, step=0.1)
+
 show_range      = input.bool(true, "Show range levels",   group="Display")
 show_signals    = input.bool(true, "Show entry signals",  group="Display")
 show_trade_lvls = input.bool(true, "Show SL/TP on trade", group="Display")
@@ -94,6 +110,7 @@ instrument_ok = not exclude_disabled or not (is_gbpusd or is_audusd or is_gbpjpy
 tf_ok         = timeframe.period == "240"
 
 risk_dollars_eff = 500.0  // 0.5% of the $100K paper account, every instrument
+risk_dollars_mc  = 250.0  // 0.25% for Mid Continuation
 _nzdusd_rate     = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
 _quote_to_usd    = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "NZD" ? _nzdusd_rate : 1.0
 
@@ -161,6 +178,20 @@ if in_bot_zone
     bot_extreme := bot_active ? math.min(bot_extreme, low) : low
     bot_active  := true
 
+// 4H taps per boundary: each separate 4H visit into the zone counts once.
+// last_zone = which boundary price most recently came from (Mid Continuation).
+var int    top_taps  = 0
+var int    bot_taps  = 0
+var string last_zone = "none"
+if in_top_zone and not in_top_zone[1]
+    top_taps += 1
+if in_bot_zone and not in_bot_zone[1]
+    bot_taps += 1
+if in_top_zone
+    last_zone := "top"
+if in_bot_zone
+    last_zone := "bottom"
+
 // =============================================================================
 // BOS DETECTION
 //   Bear: 4H close crosses below the latest confirmed 4H swing low, which sits
@@ -190,14 +221,14 @@ long_risk  = not na(long_sl) ? long_entry - long_sl : na
 long_tp1   = not na(long_risk) ? long_entry + long_risk * tp1_rr : na
 long_tp2   = not na(long_risk) ? long_entry + long_risk * tp2_rr : na
 
-_size(entry_p, sl_p) =>
+_size(entry_p, sl_p, risk_usd) =>
     sl_dist = not na(sl_p) ? math.max(math.abs(entry_p - sl_p), syminfo.mintick) : syminfo.mintick
-    math.max(0.01, math.round(risk_dollars_eff / (sl_dist * syminfo.pointvalue * _quote_to_usd), 2))
+    math.max(0.01, math.round(risk_usd / (sl_dist * syminfo.pointvalue * _quote_to_usd), 2))
 
 _tp1q(sz) => math.max(0.01, math.round(sz * 0.50, 2))
 
-short_lots     = _size(short_entry, short_sl)
-long_lots      = _size(long_entry,  long_sl)
+short_lots     = _size(short_entry, short_sl, risk_dollars_eff)
+long_lots      = _size(long_entry,  long_sl,  risk_dollars_eff)
 short_tp1_lots = _tp1q(short_lots)
 long_tp1_lots  = _tp1q(long_lots)
 
@@ -228,6 +259,41 @@ bb_short_tp1   = not na(bb_short_risk) and bb_short_risk > 0 ? bb_short_entry - 
 _bb_ok = bb_enabled and _base_ok and not short_signal and not long_signal
 long_signal_bb  = _bb_ok and not bb_long_done  and close > range_high and close[1] <= range_high and not na(bb_long_tp1)
 short_signal_bb = _bb_ok and not bb_short_done and close < range_low  and close[1] >= range_low  and not na(bb_short_tp1)
+
+// =============================================================================
+// MID CONTINUATION — failed close through 50% (candle 1), confirmed by the
+// next 4H candle piercing and closing beyond candle 1 (candle 2 = entry)
+// =============================================================================
+// Candle 1 of the previous bar, stored at the end of that bar's evaluation.
+var float mc_l_c1_high = na
+var float mc_l_c1_low  = na
+var int   mc_l_c1_bar  = -1
+var float mc_s_c1_high = na
+var float mc_s_c1_low  = na
+var int   mc_s_c1_bar  = -1
+
+mc_long_confirm  = mc_l_c1_bar == bar_index - 1 and close > mc_l_c1_high
+mc_short_confirm = mc_s_c1_bar == bar_index - 1 and close < mc_s_c1_low
+
+mc_long_entry  = close
+mc_long_sl     = mc_long_confirm ? math.min(math.min(mc_l_c1_low, low) - atr_now * sl_atr_buf, mc_long_entry - _min_sl_price) : na
+mc_long_risk   = not na(mc_long_sl) ? mc_long_entry - mc_long_sl : na
+mc_long_tp1    = not na(mc_long_risk) ? mc_long_entry + mc_long_risk * mc_tp1_rr : na
+mc_long_tp2    = not na(mc_long_risk) ? mc_long_entry + mc_long_risk * mc_tp2_rr : na
+
+mc_short_entry = close
+mc_short_sl    = mc_short_confirm ? math.max(math.max(mc_s_c1_high, high) + atr_now * sl_atr_buf, mc_short_entry + _min_sl_price) : na
+mc_short_risk  = not na(mc_short_sl) ? mc_short_sl - mc_short_entry : na
+mc_short_tp1   = not na(mc_short_risk) ? mc_short_entry - mc_short_risk * mc_tp1_rr : na
+mc_short_tp2   = not na(mc_short_risk) ? mc_short_entry - mc_short_risk * mc_tp2_rr : na
+
+_mc_ok = mc_enabled and _base_ok and not short_signal and not long_signal and not long_signal_bb and not short_signal_bb
+long_signal_mc  = _mc_ok and mc_long_confirm  and not na(mc_long_risk)  and mc_long_risk  > 0
+short_signal_mc = _mc_ok and mc_short_confirm and not na(mc_short_risk) and mc_short_risk > 0 and not long_signal_mc
+
+// Candle 1 (setup) on THIS bar — checked for confirmation on the next bar.
+mc_long_setup  = mc_enabled and range_valid and last_zone == "top"    and top_taps < mc_max_taps and low  <= range_mid and close > range_mid
+mc_short_setup = mc_enabled and range_valid and last_zone == "bottom" and bot_taps < mc_max_taps and high >= range_mid and close < range_mid
 
 // =============================================================================
 // STRATEGY EXECUTION
@@ -287,7 +353,7 @@ _bb_msg(dir, lots, entry, sl, tp1) =>
          ',"token":"paper_wasirizvi_wyckoffstrategy"}'
 
 if long_signal_bb
-    _bb_lots = _size(bb_long_entry, bb_long_sl)
+    _bb_lots = _size(bb_long_entry, bb_long_sl, risk_dollars_eff)
     strategy.entry("LONG_BB", strategy.long, qty=_bb_lots, comment="LONG_BB " + str.tostring(_bb_lots) + "L")
     strategy.exit("LONG_BB_TP1", from_entry="LONG_BB", limit=bb_long_tp1, stop=bb_long_sl, comment="TP1 1:1")
     s_entry := bb_long_entry
@@ -299,7 +365,7 @@ if long_signal_bb
     _entry_alert_msg     := _bb_msg("LONG", _bb_lots, bb_long_entry, bb_long_sl, bb_long_tp1)
 
 if short_signal_bb
-    _bb_lots = _size(bb_short_entry, bb_short_sl)
+    _bb_lots = _size(bb_short_entry, bb_short_sl, risk_dollars_eff)
     strategy.entry("SHORT_BB", strategy.short, qty=_bb_lots, comment="SHORT_BB " + str.tostring(_bb_lots) + "L")
     strategy.exit("SHORT_BB_TP1", from_entry="SHORT_BB", limit=bb_short_tp1, stop=bb_short_sl, comment="TP1 1:1")
     s_entry := bb_short_entry
@@ -309,6 +375,61 @@ if short_signal_bb
     bb_short_done := true
     _entry_alert_pending := true
     _entry_alert_msg     := _bb_msg("SHORT", _bb_lots, bb_short_entry, bb_short_sl, bb_short_tp1)
+
+_mc_msg(dir, lots, entry, sl, tp1, tp2) =>
+    '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+         '","direction":"' + dir + '","setup":"mid_cont","timeframe":"240"' +
+         ',"lot_size":'    + str.tostring(lots) +
+         ',"entry_price":' + str.tostring(entry, price_format) +
+         ',"stop_loss":'   + str.tostring(sl,    price_format) +
+         ',"tp1":'         + str.tostring(tp1,   price_format) +
+         ',"tp2":'         + str.tostring(tp2,   price_format) +
+         ',"rr_to_tp1":'   + str.tostring(mc_tp1_rr) +
+         ',"range_high":'  + str.tostring(range_high, price_format) +
+         ',"range_low":'   + str.tostring(range_low,  price_format) +
+         ',"token":"paper_wasirizvi_wyckoffstrategy"}'
+
+if long_signal_mc
+    _mc_lots = _size(mc_long_entry, mc_long_sl, risk_dollars_mc)
+    strategy.entry("LONG_MC", strategy.long, qty=_mc_lots, comment="LONG_MC " + str.tostring(_mc_lots) + "L")
+    strategy.exit("LONG_MC_TP1", from_entry="LONG_MC", qty=_tp1q(_mc_lots), limit=mc_long_tp1, stop=mc_long_sl, comment="TP1 1:" + str.tostring(mc_tp1_rr))
+    strategy.exit("LONG_MC_TP2", from_entry="LONG_MC", limit=mc_long_tp2, stop=mc_long_sl, comment="TP2 1:" + str.tostring(mc_tp2_rr))
+    s_entry := mc_long_entry
+    s_sl    := mc_long_sl
+    s_tp1   := mc_long_tp1
+    s_tp2   := mc_long_tp2
+    _entry_alert_pending := true
+    _entry_alert_msg     := _mc_msg("LONG", _mc_lots, mc_long_entry, mc_long_sl, mc_long_tp1, mc_long_tp2)
+
+if short_signal_mc
+    _mc_lots = _size(mc_short_entry, mc_short_sl, risk_dollars_mc)
+    strategy.entry("SHORT_MC", strategy.short, qty=_mc_lots, comment="SHORT_MC " + str.tostring(_mc_lots) + "L")
+    strategy.exit("SHORT_MC_TP1", from_entry="SHORT_MC", qty=_tp1q(_mc_lots), limit=mc_short_tp1, stop=mc_short_sl, comment="TP1 1:" + str.tostring(mc_tp1_rr))
+    strategy.exit("SHORT_MC_TP2", from_entry="SHORT_MC", limit=mc_short_tp2, stop=mc_short_sl, comment="TP2 1:" + str.tostring(mc_tp2_rr))
+    s_entry := mc_short_entry
+    s_sl    := mc_short_sl
+    s_tp1   := mc_short_tp1
+    s_tp2   := mc_short_tp2
+    _entry_alert_pending := true
+    _entry_alert_msg     := _mc_msg("SHORT", _mc_lots, mc_short_entry, mc_short_sl, mc_short_tp1, mc_short_tp2)
+
+// Mid Continuation state. Store this bar as candle 1 if it armed (and no
+// entry fired on it); one trade per visit to a boundary; a 4H close through
+// the mid means the continuation failed until the boundary is revisited.
+mc_l_c1_bar := -1
+mc_s_c1_bar := -1
+if mc_long_setup and not long_signal_mc and not short_signal_mc
+    mc_l_c1_high := high
+    mc_l_c1_low  := low
+    mc_l_c1_bar  := bar_index
+if mc_short_setup and not long_signal_mc and not short_signal_mc
+    mc_s_c1_high := high
+    mc_s_c1_low  := low
+    mc_s_c1_bar  := bar_index
+if long_signal_mc or (last_zone == "top" and range_valid and close < range_mid)
+    last_zone := "none"
+if short_signal_mc or (last_zone == "bottom" and range_valid and close > range_mid)
+    last_zone := "none"
 
 // Zone state resets: after a signal on that side, when price closes back
 // through the mid without a BOS, or when the range resets.
@@ -329,6 +450,9 @@ if range_broken
     bot_extreme  := na
     bb_long_done  := false
     bb_short_done := false
+    top_taps      := 0
+    bot_taps      := 0
+    last_zone     := "none"
 
 // =============================================================================
 // LIFECYCLE ALERTS
@@ -340,7 +464,7 @@ _n              = strategy.closedtrades - 1
 last_pnl        = _n >= 0 ? strategy.closedtrades.profit(_n) : 0.0
 last_exit_price = _n >= 0 ? strategy.closedtrades.exit_price(_n) : close
 
-if short_signal or long_signal or long_signal_bb or short_signal_bb
+if short_signal or long_signal or long_signal_bb or short_signal_bb or long_signal_mc or short_signal_mc
     tp1_hit := false
 
 tp1_short_hit = prev_pos < 0 and strategy.position_size < 0 and strategy.position_size > prev_pos and not tp1_hit
@@ -413,6 +537,14 @@ if show_signals and short_signal_bb
 if show_signals and long_signal_bb
     label.new(bar_index, low,  "BOX BREAK ↑ | TP 1:1", color=color.new(color.fuchsia, 30), textcolor=color.white, style=label.style_label_up,   size=size.small)
 
+plotshape(show_signals and short_signal_mc, "SHORT_MC", shape.triangledown, location.abovebar, color.yellow, size=size.small)
+plotshape(show_signals and long_signal_mc,  "LONG_MC",  shape.triangleup,   location.belowbar, color.yellow, size=size.small)
+
+if show_signals and short_signal_mc
+    label.new(bar_index, high, "MID CONT ↓ | TP1 1:1 TP2 1:2 | 0.25%", color=color.new(color.yellow, 30), textcolor=color.black, style=label.style_label_down, size=size.small)
+if show_signals and long_signal_mc
+    label.new(bar_index, low,  "MID CONT ↑ | TP1 1:1 TP2 1:2 | 0.25%", color=color.new(color.yellow, 30), textcolor=color.black, style=label.style_label_up, size=size.small)
+
 in_trade = strategy.position_size != 0
 plot(show_trade_lvls and in_trade ? s_entry : na, "Entry", color=color.white,               style=plot.style_linebr)
 plot(show_trade_lvls and in_trade ? s_sl    : na, "SL",    color=color.red,                 style=plot.style_linebr, linewidth=2)
@@ -429,7 +561,7 @@ if show_signals and (sl_short_hit or sl_long_hit)
 // =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 70), border_width=1)
+var table info = table.new(position.top_right, 2, 11, bgcolor=color.new(color.black, 70), border_width=1)
 if show_info and barstate.islast
     table.cell(info, 0, 0, "PAPER v7",  text_color=color.white)
     table.cell(info, 1, 0, "Daily Range | 4H BOS Reversal", text_color=color.yellow)
@@ -450,7 +582,9 @@ if show_info and barstate.islast
     table.cell(info, 0, 7, "Exits",      text_color=color.gray)
     table.cell(info, 1, 7, "REV: SL wick, TP1 1:" + str.tostring(tp1_rr) + " (50%), TP2 1:" + str.tostring(tp2_rr) + " | BB: SL opp. wall, TP 1:1" + (bb_enabled ? "" : " (OFF)"), text_color=color.gray)
     table.cell(info, 0, 8, "Risk",       text_color=color.gray)
-    table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#"), text_color=color.gray)
+    table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#") + " | Mid Cont $" + str.tostring(risk_dollars_mc, "#"), text_color=color.gray)
+    table.cell(info, 0, 10, "4H Taps",   text_color=color.gray)
+    table.cell(info, 1, 10, "Top " + str.tostring(top_taps) + " / Bottom " + str.tostring(bot_taps) + " | from: " + last_zone, text_color=color.gray)
     table.cell(info, 0, 9, "Position",   text_color=color.gray)
     table.cell(info, 1, 9, in_trade ? (strategy.position_size > 0 ? "LONG" : "SHORT") + (tp1_hit ? " (TP1 hit)" : "") : "FLAT",
          text_color=in_trade ? color.yellow : color.gray)

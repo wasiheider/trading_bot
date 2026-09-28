@@ -27,6 +27,7 @@ PICKMYTRADE_ACCOUNT_ID = os.getenv("PICKMYTRADE_ACCOUNT_ID", "")
 
 # ── Risk ──────────────────────────────────────────────────
 RISK_PER_TRADE = 0.005   # 0.5% per trade ($500 on $100k)
+MID_CONT_RISK_PER_TRADE = 0.0025   # 0.25% for v7 Mid Continuation (smaller range play)
 
 # ── Risk Limits (breach = signals still fire, OANDA skipped) ──
 MAX_DAILY_LOSS  = 4000.0  # $4,000 daily loss (4% of $100k)

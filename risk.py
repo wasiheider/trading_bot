@@ -112,14 +112,14 @@ PAPER_INSTRUMENT_CONFIG = {
 }
 
 
-def check_paper_risk(instrument: str, sl_pips: int = None) -> dict:
+def check_paper_risk(instrument: str, sl_pips: int = None, risk_pct: float = RISK_PER_TRADE) -> dict:
     cfg = PAPER_INSTRUMENT_CONFIG.get(instrument.upper())
     if not cfg:
         return {"allowed": False, "reason": f"Unknown instrument: {instrument}"}
 
     sl = sl_pips or cfg["default_sl_pips"]
     sl_for_sizing = max(sl, cfg.get("min_sl_pips", 0))
-    risk_dollars = paper_state["account_balance"] * RISK_PER_TRADE
+    risk_dollars = paper_state["account_balance"] * risk_pct
     raw = risk_dollars / (sl_for_sizing * cfg["pip_value"])
 
     if cfg.get("forex"):

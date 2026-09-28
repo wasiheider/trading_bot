@@ -880,10 +880,11 @@ function renderSessionBreakdown(trades) {
     if (s === 'mid_bos') return 'D — Mid Retest';
     if (s === 'box_fade' || s === 'box_break') return 'E — Box Break';
     if (s === 'range_rev') return 'F — 4H Reversal';
+    if (s === 'mid_cont') return 'G — Mid Continuation';
     return 'A — BOS';
   }
   const mBuckets = bucket(closed, t => setupToModel(t.setup));
-  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div', 'D — Mid Retest', 'E — Box Break', 'F — 4H Reversal'];
+  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div', 'D — Mid Retest', 'E — Box Break', 'F — 4H Reversal', 'G — Mid Continuation'];
 
   const totalTrades = closed.length;
   const totalWins   = closed.filter(t => (t.result||'').includes('TP')).length;

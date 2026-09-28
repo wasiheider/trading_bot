@@ -7,7 +7,7 @@ import os
 import json
 import pytz
 
-from config import PAPER_WEBHOOK_TOKEN, PAPER_ACCOUNT_SIZE, MID_BOS_LONG_FILTER_ENABLED, MID_BOS_LONG_MIN_MID_DIST_PCT
+from config import PAPER_WEBHOOK_TOKEN, PAPER_ACCOUNT_SIZE, MID_BOS_LONG_FILTER_ENABLED, MID_BOS_LONG_MIN_MID_DIST_PCT, RISK_PER_TRADE, MID_CONT_RISK_PER_TRADE
 from risk import (
     check_paper_risk,
     paper_state,
@@ -184,7 +184,8 @@ def handle_paper_signal(data):
                 send_telegram(msg)
                 return jsonify({"status": "blocked", "reason": reason}), 200
 
-    risk = check_paper_risk(instrument, sl_pips)
+    risk_pct = MID_CONT_RISK_PER_TRADE if setup == "mid_cont" else RISK_PER_TRADE
+    risk = check_paper_risk(instrument, sl_pips, risk_pct)
     if not risk["allowed"]:
         msg = f"{_MASCOT}\n🚫 <b>Paper Signal Blocked</b>\n<code>{instrument} {direction}</code>\nReason: {risk['reason']}"
         send_telegram(msg)
@@ -228,7 +229,7 @@ def handle_paper_signal(data):
     rr_line  = f"\nR:R: <code>{rr}</code>" if rr else ""
     bos_line = f"\nBOS: <code>{bos_level}</code>" if bos_level else ""
     tf_label = "4H" if str(timeframe) == "240" else f"{timeframe}M"
-    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS", "box_break": " · BOX BREAK", "range_rev": " · RANGE REVERSAL"}.get(setup, "")
+    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS", "box_break": " · BOX BREAK", "range_rev": " · RANGE REVERSAL", "mid_cont": " · MID CONTINUATION"}.get(setup, "")
 
     if limit_hit:
         exec_line = f"\n⚠️ <b>NOT EXECUTED — {limit_reason}</b>"
@@ -438,6 +439,7 @@ def state():
         if s == "mid_bos":              return "D"
         if s == "box_break":            return "E"
         if s == "range_rev":            return "F"
+        if s == "mid_cont":             return "G"
         return "A"
 
     model_stats = {
@@ -447,6 +449,7 @@ def state():
         "D": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
         "E": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
         "F": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
+        "G": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
     }
     try:
         for t in db.load_trades():

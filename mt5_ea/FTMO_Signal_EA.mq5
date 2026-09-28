@@ -369,7 +369,7 @@ void TryEnter(string botSymbol, string block)
    bool isBoxBreak = (setup == "box_break");
    double orderTP  = isBoxBreak ? tp1 : tp2;
 
-   double lots = ComputeLotSize(botSymbol, brokerSymbol, slDistance);
+   double lots = ComputeLotSize(botSymbol, brokerSymbol, slDistance, setup);
    if(lots <= 0) { Print("Computed zero lot size for ", botSymbol); return; }
 
    int digits = (int)SymbolInfoInteger(brokerSymbol, SYMBOL_DIGITS);
@@ -474,13 +474,14 @@ bool HasOpenExposure(string brokerSymbol)
 //| forex, indices, metals, oil and crypto without per-instrument     |
 //| hardcoded pip values.                                             |
 //+------------------------------------------------------------------+
-double ComputeLotSize(string botSymbol, string brokerSymbol, double slDistance)
+double ComputeLotSize(string botSymbol, string brokerSymbol, double slDistance, string setup)
   {
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
 
    // Flat risk on every symbol since v7 (2026-09-28, user call) -- the
-   // 2026-08-25 US100/US500 2x bump is removed.
-   double riskPct   = InpRiskPercent;
+   // 2026-08-25 US100/US500 2x bump is removed. Mid Continuation is a
+   // smaller range play and risks half (0.25% at the 0.5% default).
+   double riskPct   = (setup == "mid_cont") ? InpRiskPercent * 0.5 : InpRiskPercent;
    double riskMoney = balance * riskPct / 100.0;
 
    double tickValue = SymbolInfoDouble(brokerSymbol, SYMBOL_TRADE_TICK_VALUE);
