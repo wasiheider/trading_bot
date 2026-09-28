@@ -114,6 +114,7 @@ Push to `paper-trading` → Railway auto-deploys.
 - **Risk:** flat 0.5% on every instrument except Mid Continuation at 0.25% (paper: `RISK_PER_TRADE` / `MID_CONT_RISK_PER_TRADE` in `config.py`, applied per setup in `handle_paper_signal`; FTMO EA `InpRiskPercent` 0.5, halved for `mid_cont`; US100/US500 2x bump removed). GBPUSD/AUDUSD/GBPJPY still skipped (input toggle).
 - v5-only filters (COT hard-block, volume, US500 NY-AM, Commercial/Retail block, session windows) are **not** in v7.
 - FTMO EA: `InpBreakevenAtTP1` / `InpTrailEnabled` both default false to match.
+- **Server enforces 4H-only:** `handle_paper_signal` rejects any entry whose `timeframe` isn't `"240"` (`V7_TIMEFRAME` in `server.py`) with a "Paper Signal Blocked" Telegram — catches leftover v5 15M alerts. TP/SL lifecycle events are not affected.
 
 ## Strategy — v5 (retired 2026-09-28, kept for reference)
 

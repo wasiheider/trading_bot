@@ -63,6 +63,9 @@ MICRO_MIRROR_TARGETS = set(MICRO_MIRROR_MAP.values())
 MICROS_ENABLED = False
 
 
+V7_TIMEFRAME = "240"  # only 4H entry signals are accepted
+
+
 def _normalize_instrument(raw: str) -> str:
     s = raw.upper().replace("1!", "").replace("!", "")
     if ":" in s:
@@ -171,6 +174,15 @@ def handle_paper_signal(data):
     range_high  = data.get("range_high")
     range_low   = data.get("range_low")
     sl_pips     = _calc_sl_pips(instrument, price, sl) or data.get("sl_pips")
+
+    # v7 is 4H-only (2026-09-28): reject entries from any other timeframe, e.g.
+    # a leftover v5 15M alert still firing in TradingView. Lifecycle events
+    # (TP/SL for already-open trades) go through handle_paper_lifecycle and
+    # are unaffected.
+    if str(timeframe) != V7_TIMEFRAME:
+        reason = f"non-4H entry (timeframe {timeframe}) — v7 is 4H-only; delete this chart's old alert"
+        send_telegram(f"{_MASCOT}\n🚫 <b>Paper Signal Blocked</b>\n<code>{instrument} {direction}</code> [{setup or '?'}]\nReason: {reason}")
+        return jsonify({"status": "blocked", "reason": reason}), 200
 
     if MID_BOS_LONG_FILTER_ENABLED and setup == "mid_bos" and direction == "LONG" and range_high and range_low:
         range_size = range_high - range_low
