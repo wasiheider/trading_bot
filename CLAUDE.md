@@ -96,6 +96,7 @@ Push to `paper-trading` → Railway auto-deploys.
 | `pine_script_paper_v5.pine` | Retired 2026-09-28 — kept for rollback |
 | `pine_script_paper_v4.pine` | Retired — kept for reference only |
 | `dashboard.html` | Single-file live dashboard served at `/dashboard` |
+| `scorecard.py` | v7 per-setup scorecard (since 2026-09-28) — shared by `GET /scorecard`, the dashboard's v7 Scorecard card, and the Friday Telegram scorecard |
 | `generate_architecture_pdf.py` | Generates `Trading_Bot_Architecture.pdf` — run locally |
 | `CLAUDE.md` | This file — auto-loaded by Claude Code |
 | `README.md` | Public project documentation |
@@ -240,6 +241,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | `/dashboard` | GET | Serves `dashboard.html` |
 | `/state` | GET | Balance, PNL, open trades, per-model stats (A/B/C/D) |
 | `/trades` | GET | Full trade ledger from PostgreSQL |
+| `/scorecard` | GET | v7 stats per setup (range_rev, 4H box_break, mid_cont) since 2026-09-28 + this week: W/L, win %, avg R, PF, P&L |
 | `/report` | GET | Daily monitor — sends Telegram summary; called by GitHub Actions cron at 7am CT |
 | `/news` | GET | Yahoo Finance RSS (15-min cache) |
 | `/calendar` | GET | ForexFactory calendar (1-hour cache) |
@@ -295,6 +297,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | Daily PNL reset | Midnight CT (scheduler) | ✅ Fully automated |
 | Weekly PNL reset | Monday midnight CT | ✅ Fully automated |
 | Weekly summary | Friday 3:50pm CT (scheduler) | ✅ Fully automated |
+| v7 scorecard (Telegram) | Friday 4:00pm CT (scheduler, `main.py`) | ✅ Fully automated |
 | Daily monitor report | 7am CT (GitHub Actions cron) | ✅ Fully automated |
 | Database persistence | Every trade / state change | ✅ Fully automated |
 | Code deployment | git push to paper-trading | ✅ Fully automated |

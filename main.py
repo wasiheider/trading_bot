@@ -86,6 +86,20 @@ def weekly_summary():
     log("Weekly summary sent")
 
 
+# ── v7 Scorecard (Friday 4:00 PM CT) ──────────────────────
+
+def v7_scorecard():
+    if ct_now().weekday() != 4:
+        return
+    import scorecard
+    try:
+        sc = scorecard.compute(db.load_trades(), ct_now())
+        send_telegram(scorecard.telegram_message(sc))
+        log("v7 scorecard sent")
+    except Exception as e:
+        log(f"v7 scorecard failed: {e}")
+
+
 # ── Heartbeat ──────────────────────────────────────────────
 
 def heartbeat():
@@ -109,10 +123,11 @@ def purge_stale_non_forex_opens():
 def run_scheduler():
     schedule.every().day.at("05:00").do(midnight_reset)
     schedule.every().day.at("20:50").do(weekly_summary)
+    schedule.every().day.at("21:00").do(v7_scorecard)
     schedule.every().hour.do(heartbeat)
     schedule.every(6).hours.do(purge_stale_non_forex_opens)
 
-    log("Scheduler started — midnight reset 00:00 CT | weekly summary Fri 15:50 CT | heartbeat hourly | stale-open purge every 6h")
+    log("Scheduler started — midnight reset 00:00 CT | weekly summary Fri 15:50 CT | v7 scorecard Fri 16:00 CT | heartbeat hourly | stale-open purge every 6h")
 
     while True:
         schedule.run_pending()

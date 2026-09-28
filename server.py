@@ -21,6 +21,7 @@ from risk import (
 from notifier import send_telegram
 import oanda
 import pickmytrade
+import scorecard
 
 _MASCOT = "🩷👑🤖👑🩷"
 
@@ -499,6 +500,11 @@ def state():
 @app.route("/trades", methods=["GET"])
 def trades():
     return jsonify({"paper": db.load_trades()}), 200
+
+
+@app.route("/scorecard", methods=["GET"])
+def scorecard_view():
+    return jsonify(scorecard.compute(db.load_trades(), ct_now())), 200
 
 
 # ── Latest Signal Endpoint (MT5 EA polling) ─────────────────

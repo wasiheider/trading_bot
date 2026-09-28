@@ -342,6 +342,14 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       </div>
 
       <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span class="ct" style="margin:0">v7 Scorecard</span>
+          <span style="font-size:10px;color:var(--t3)" id="v7-since">since 2026-09-28</span>
+        </div>
+        <div id="v7-scorecard"><div class="empty" style="padding:16px"><div style="font-size:10px;color:var(--t3)">Loading…</div></div></div>
+      </div>
+
+      <div class="card">
         <div class="ct">Strategy v7 Architecture</div>
         <div class="row"><span class="rl">Chart</span><span class="rv" style="color:var(--b)">4H only · live 2026-09-28 · v5 (15M) retired</span></div>
         <div class="row"><span class="rl">Range High/Low</span><span class="rv" style="color:var(--b)">Daily pivot-anchored (5 bars each side, closed daily bars only) · locked until break</span></div>
@@ -665,7 +673,41 @@ async function fetchTrades() {
     renderTradeHistory(allTrades);
     renderSessionBreakdown(allTrades);
     updateAllTimeStats(allTrades);
+    fetchScorecard();
   } catch(e) { console.warn('Trades fetch failed:', e); }
+}
+
+// ── v7 scorecard (per-setup stats since v7 went live) ─────
+async function fetchScorecard() {
+  try {
+    const res = await fetch(RAILWAY_URL + '/scorecard', {cache:'no-store'});
+    if (!res.ok) return;
+    renderScorecard(await res.json());
+  } catch(e) { console.warn('Scorecard fetch failed:', e); }
+}
+
+function renderScorecard(sc) {
+  const el = document.getElementById('v7-scorecard');
+  if (!el) return;
+  document.getElementById('v7-since').textContent = `since ${sc.since} · day ${sc.days_live}`;
+  const wrColor = wr => wr >= 55 ? 'var(--g)' : wr >= 45 ? 'var(--a)' : 'var(--r)';
+  const pnlColor = v => v >= 0 ? 'var(--g)' : 'var(--r)';
+  const fmtR = r => (r >= 0 ? '+' : '') + r.toFixed(2) + 'R';
+  const row = (label, s, bold) => `<tr${bold ? ' style="border-top:1px solid var(--bo2)"' : ''}>
+    <td style="font-weight:${bold ? 800 : 700};font-size:12px">${label}${s.open ? ` <span style="font-size:10px;color:var(--t3)">${s.open} open</span>` : ''}</td>
+    <td style="text-align:center;font-size:12px;color:var(--t2)">${s.wins}W / ${s.losses}L</td>
+    <td style="text-align:center;font-weight:800;font-size:12px;color:${s.trades ? wrColor(s.win_rate) : 'var(--t3)'}">${s.trades ? s.win_rate + '%' : '--'}</td>
+    <td style="text-align:center;font-size:12px;color:${pnlColor(s.avg_r)}">${s.trades ? fmtR(s.avg_r) : '--'}</td>
+    <td style="text-align:center;font-size:12px;color:var(--t2)">${s.profit_factor ?? '--'}</td>
+    <td style="text-align:right;font-weight:700;font-size:12px;color:${pnlColor(s.pnl)}">${fmt$(s.pnl)}</td>
+  </tr>`;
+  const wk = sc.week.total;
+  el.innerHTML = `<table class="tbl">
+    <thead><tr><th>Setup</th><th style="text-align:center">W/L</th><th style="text-align:center">Win%</th><th style="text-align:center">Avg R</th><th style="text-align:center">PF</th><th style="text-align:right">P&L</th></tr></thead>
+    <tbody>${sc.setups.map(s => row(s.label, s)).join('')}</tbody>
+    <tfoot>${row('TOTAL', sc.total, true)}</tfoot>
+  </table>
+  <div style="font-size:10px;color:var(--t3);margin-top:8px">This week: <span style="color:var(--t2)">${wk.wins}W / ${wk.losses}L</span> · <span style="color:${pnlColor(wk.pnl)}">${fmt$(wk.pnl)} (${fmtR(wk.total_r)})</span> · R = P&amp;L ÷ planned risk ($500, Mid Cont $250) · Telegram scorecard Fridays 4pm CT</div>`;
 }
 
 // ── Patch open-trade rows with live unrealized PNL ─────────
