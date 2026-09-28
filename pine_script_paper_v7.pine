@@ -1,0 +1,456 @@
+// =============================================================================
+// PAPER TRADING — WYCKOFF RANGE REVERSAL v7
+// Daily Pivot Range | 4H BOS Reversal at the Boundaries | 4H Entry
+// =============================================================================
+// Replaces every v5 entry model (A/B/C/D/E) with ONE setup, per user spec
+// 2026-09-28. v5 is kept untouched in pine_script_paper_v5.pine for rollback.
+//
+// Range:
+//   Range High / Low = confirmed Daily pivot high / low (non-repainting: taken
+//   from the last CLOSED daily bar). Levels lock once both sides exist and only
+//   reset when price closes beyond a boundary by max_break_pct of range size.
+//
+// Setup (both sides, mirror images):
+//   TOP    : price trades into the top zone (wick within zone_pct of range high,
+//            or above it) -> the highest high since entering the zone is the
+//            reversal wick -> 4H close breaks BELOW the most recent confirmed 4H
+//            swing low (bearish BOS, swing low must sit in the upper half of
+//            the range) -> SHORT at the BOS bar's close.
+//   BOTTOM : price trades into the bottom zone -> lowest low since entering is
+//            the reversal wick -> 4H close breaks ABOVE the most recent 4H swing
+//            high (bullish BOS, swing high in the lower half) -> LONG at close.
+//
+// Exits:
+//   SL  = just beyond the reversal wick (wick extreme + ATR(14) * sl_atr_buf)
+//   TP1 = 1:2 RR -> close 50%
+//   TP2 = 1:3 RR -> close remaining 50%
+//   SL stays at the reversal wick after TP1 (no breakeven move, no trailing).
+//
+// Box Break (v5 Entry E, moved onto the Daily range 2026-09-28):
+//   4H close above range high -> LONG | 4H close below range low -> SHORT.
+//   SL = opposite range wall, single target at 1:1 RR, full close (E exits).
+//   One break per side per range.
+//
+// Risk: 0.5% ($500 on the $100K paper account) on every position.
+//
+// Chart       : Load on 4H (signals are suppressed on any other timeframe)
+// Webhook     : https://tradingbot-production-1e5a.up.railway.app/webhook/paper
+// Token       : paper_wasirizvi_wyckoffstrategy
+// =============================================================================
+
+//@version=6
+strategy(
+     title             = "Paper Wyckoff v7 — Daily Range / 4H BOS Reversal",
+     shorttitle        = "PAPER-v7",
+     overlay           = true,
+     pyramiding        = 0,
+     default_qty_type  = strategy.fixed,
+     default_qty_value = 0.01,
+     currency          = currency.USD,
+     commission_type   = strategy.commission.cash_per_contract,
+     commission_value  = 0.0
+ )
+
+// =============================================================================
+// INPUTS
+// =============================================================================
+pivot_len     = input.int(5,      "Daily Pivot Length for Range (bars each side)",   group="Range", minval=2,   maxval=20)
+zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
+max_break_pct = input.float(30.0, "Reset range if price closes beyond by % of range", group="Range", minval=5.0, step=5.0)
+
+bos_pivot_len = input.int(3,      "4H Swing Pivot Length for BOS",                    group="Entry", minval=2,   maxval=10)
+sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
+min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
+tp1_rr        = input.float(2.0,  "TP1 R:R (closes 50%)",                             group="Entry", minval=0.5, step=0.1)
+tp2_rr        = input.float(3.0,  "TP2 R:R (closes remaining 50%)",                   group="Entry", minval=1.0, step=0.1)
+
+exclude_disabled = input.bool(true, "Skip GBPUSD / AUDUSD / GBPJPY (disabled instruments)", group="Filters")
+bb_enabled       = input.bool(true, "Enable Box Break (4H close beyond Daily range)",      group="Filters")
+
+show_range      = input.bool(true, "Show range levels",   group="Display")
+show_signals    = input.bool(true, "Show entry signals",  group="Display")
+show_trade_lvls = input.bool(true, "Show SL/TP on trade", group="Display")
+show_info       = input.bool(true, "Show info table",     group="Display")
+
+// =============================================================================
+// INSTRUMENT CONFIG
+// =============================================================================
+raw_ticker  = syminfo.tickerid
+symbol_name = str.replace(str.replace(syminfo.ticker, "1!", ""), "!", "")
+
+is_xauusd = str.contains(raw_ticker, "XAU") or str.contains(raw_ticker, "GC")
+is_usoil  = str.contains(raw_ticker, "OIL") or str.contains(raw_ticker, "WTI") or str.contains(raw_ticker, "CL")
+is_us100  = str.contains(raw_ticker, "US100") or str.contains(raw_ticker, "NAS") or str.contains(raw_ticker, "NQ")
+is_us500  = str.contains(raw_ticker, "US500") or str.contains(raw_ticker, "SPX") or str.contains(raw_ticker, "ES")
+is_gbpusd = str.contains(raw_ticker, "GBPUSD") or syminfo.ticker == "GBPUSD"
+is_audusd = str.contains(raw_ticker, "AUDUSD") or syminfo.ticker == "AUDUSD"
+is_gbpjpy = str.contains(raw_ticker, "GBPJPY") or syminfo.ticker == "GBPJPY"
+
+pip_size      = is_xauusd ? 0.01 : is_usoil ? 0.01 : is_us100 ? 1.0 : syminfo.mintick * 10
+_min_sl_price = pip_size * min_sl_pips
+price_format  = is_us100 ? "#.#" : is_xauusd ? "#.##" : "#.#####"
+
+instrument_ok = not exclude_disabled or not (is_gbpusd or is_audusd or is_gbpjpy)
+tf_ok         = timeframe.period == "240"
+
+risk_dollars_eff = 500.0  // 0.5% of the $100K paper account, every instrument
+_nzdusd_rate     = request.security("OANDA:NZDUSD", timeframe.period, close, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
+_quote_to_usd    = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency == "NZD" ? _nzdusd_rate : 1.0
+
+atr_now = ta.atr(14)
+
+// =============================================================================
+// DAILY PIVOT-ANCHORED RANGE
+// expr[1] + lookahead_on = value from the last CLOSED daily bar, so the range
+// never repaints intraday.
+// =============================================================================
+_d_ph = request.security(syminfo.tickerid, "D", ta.pivothigh(high, pivot_len, pivot_len)[1], lookahead=barmerge.lookahead_on)
+_d_pl = request.security(syminfo.tickerid, "D", ta.pivotlow(low,  pivot_len, pivot_len)[1],  lookahead=barmerge.lookahead_on)
+
+var float range_high   = na
+var float range_low    = na
+var bool  range_locked = false
+
+if not range_locked
+    if not na(_d_ph)
+        range_high := na(range_high) ? _d_ph : math.max(range_high, _d_ph)
+    if not na(_d_pl)
+        range_low  := na(range_low)  ? _d_pl : math.min(range_low,  _d_pl)
+    if not na(range_high) and not na(range_low) and range_high > range_low
+        range_locked := true
+
+range_valid = range_locked and not na(range_high) and not na(range_low) and range_high > range_low
+range_size  = range_valid ? range_high - range_low : na
+range_mid   = range_valid ? (range_high + range_low) / 2 : na
+zone_size   = range_valid ? range_size * (zone_pct / 100.0) : na
+
+range_broken = range_valid and
+     (close > range_high + range_size * (max_break_pct / 100.0) or
+      close < range_low  - range_size * (max_break_pct / 100.0))
+
+// =============================================================================
+// 4H SWING STRUCTURE
+// =============================================================================
+_ph4 = ta.pivothigh(high, bos_pivot_len, bos_pivot_len)
+_pl4 = ta.pivotlow(low,   bos_pivot_len, bos_pivot_len)
+
+var float last_ph = na
+var float last_pl = na
+if not na(_ph4)
+    last_ph := _ph4
+if not na(_pl4)
+    last_pl := _pl4
+
+// =============================================================================
+// ZONE STATE — reversal wick tracking
+// A side goes active when price wicks into its zone and stays active until a
+// signal fires, price closes back through the mid, or the range resets.
+// =============================================================================
+in_top_zone = range_valid and high >= range_high - zone_size
+in_bot_zone = range_valid and low  <= range_low  + zone_size
+
+var bool  top_active  = false
+var float top_extreme = na    // reversal wick high (SL anchor for shorts)
+var bool  bot_active  = false
+var float bot_extreme = na    // reversal wick low  (SL anchor for longs)
+
+if in_top_zone
+    top_extreme := top_active ? math.max(top_extreme, high) : high
+    top_active  := true
+if in_bot_zone
+    bot_extreme := bot_active ? math.min(bot_extreme, low) : low
+    bot_active  := true
+
+// =============================================================================
+// BOS DETECTION
+//   Bear: 4H close crosses below the latest confirmed 4H swing low, which sits
+//         in the upper half of the range, while the top side is active.
+//   Bull: 4H close crosses above the latest confirmed 4H swing high, which sits
+//         in the lower half of the range, while the bottom side is active.
+// =============================================================================
+no_position = strategy.opentrades == 0
+
+bear_bos = top_active and not na(last_pl) and last_pl > range_mid and
+     close < last_pl and close[1] >= last_pl
+bull_bos = bot_active and not na(last_ph) and last_ph < range_mid and
+     close > last_ph and close[1] <= last_ph
+
+// =============================================================================
+// SL / TP
+// =============================================================================
+short_entry = close
+short_sl    = not na(top_extreme) ? math.max(top_extreme + atr_now * sl_atr_buf, short_entry + _min_sl_price) : na
+short_risk  = not na(short_sl) ? short_sl - short_entry : na
+short_tp1   = not na(short_risk) ? short_entry - short_risk * tp1_rr : na
+short_tp2   = not na(short_risk) ? short_entry - short_risk * tp2_rr : na
+
+long_entry = close
+long_sl    = not na(bot_extreme) ? math.min(bot_extreme - atr_now * sl_atr_buf, long_entry - _min_sl_price) : na
+long_risk  = not na(long_sl) ? long_entry - long_sl : na
+long_tp1   = not na(long_risk) ? long_entry + long_risk * tp1_rr : na
+long_tp2   = not na(long_risk) ? long_entry + long_risk * tp2_rr : na
+
+_size(entry_p, sl_p) =>
+    sl_dist = not na(sl_p) ? math.max(math.abs(entry_p - sl_p), syminfo.mintick) : syminfo.mintick
+    math.max(0.01, math.round(risk_dollars_eff / (sl_dist * syminfo.pointvalue * _quote_to_usd), 2))
+
+_tp1q(sz) => math.max(0.01, math.round(sz * 0.50, 2))
+
+short_lots     = _size(short_entry, short_sl)
+long_lots      = _size(long_entry,  long_sl)
+short_tp1_lots = _tp1q(short_lots)
+long_tp1_lots  = _tp1q(long_lots)
+
+// =============================================================================
+// FINAL SIGNALS
+// =============================================================================
+_base_ok = tf_ok and instrument_ok and no_position and range_valid and not range_broken
+
+short_signal = bear_bos and _base_ok and not na(short_risk) and short_risk > 0
+long_signal  = bull_bos and _base_ok and not na(long_risk)  and long_risk  > 0 and not short_signal
+
+// =============================================================================
+// BOX BREAK — 4H close beyond the Daily range, E exits (SL opposite wall, 1:1)
+// =============================================================================
+var bool bb_long_done  = false
+var bool bb_short_done = false
+
+bb_long_entry  = close
+bb_long_sl     = range_low
+bb_long_risk   = range_valid ? bb_long_entry - bb_long_sl : na
+bb_long_tp1    = not na(bb_long_risk) and bb_long_risk > 0 ? bb_long_entry + bb_long_risk : na
+
+bb_short_entry = close
+bb_short_sl    = range_high
+bb_short_risk  = range_valid ? bb_short_sl - bb_short_entry : na
+bb_short_tp1   = not na(bb_short_risk) and bb_short_risk > 0 ? bb_short_entry - bb_short_risk : na
+
+_bb_ok = bb_enabled and _base_ok and not short_signal and not long_signal
+long_signal_bb  = _bb_ok and not bb_long_done  and close > range_high and close[1] <= range_high and not na(bb_long_tp1)
+short_signal_bb = _bb_ok and not bb_short_done and close < range_low  and close[1] >= range_low  and not na(bb_short_tp1)
+
+// =============================================================================
+// STRATEGY EXECUTION
+// =============================================================================
+var bool   _entry_alert_pending = false
+var string _entry_alert_msg     = ""
+var float  s_entry = na
+var float  s_sl    = na
+var float  s_tp1   = na
+var float  s_tp2   = na
+
+_entry_msg(dir, lots, entry, sl, tp1, tp2, bos) =>
+    '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+         '","direction":"' + dir + '","setup":"range_rev","timeframe":"240"' +
+         ',"lot_size":'    + str.tostring(lots) +
+         ',"entry_price":' + str.tostring(entry, price_format) +
+         ',"stop_loss":'   + str.tostring(sl,    price_format) +
+         ',"tp1":'         + str.tostring(tp1,   price_format) +
+         ',"tp2":'         + str.tostring(tp2,   price_format) +
+         ',"rr_to_tp1":'   + str.tostring(tp1_rr) +
+         ',"bos_level":'   + str.tostring(bos,        price_format) +
+         ',"range_high":'  + str.tostring(range_high, price_format) +
+         ',"range_low":'   + str.tostring(range_low,  price_format) +
+         ',"token":"paper_wasirizvi_wyckoffstrategy"}'
+
+if short_signal
+    strategy.entry("SHORT", strategy.short, qty=short_lots, comment="SHORT " + str.tostring(short_lots) + "L")
+    strategy.exit("SHORT_TP1", from_entry="SHORT", qty=short_tp1_lots, limit=short_tp1, stop=short_sl, comment="TP1 1:" + str.tostring(tp1_rr))
+    strategy.exit("SHORT_TP2", from_entry="SHORT", limit=short_tp2, stop=short_sl, comment="TP2 1:" + str.tostring(tp2_rr))
+    s_entry := short_entry
+    s_sl    := short_sl
+    s_tp1   := short_tp1
+    s_tp2   := short_tp2
+    _entry_alert_pending := true
+    _entry_alert_msg     := _entry_msg("SHORT", short_lots, short_entry, short_sl, short_tp1, short_tp2, last_pl)
+
+if long_signal
+    strategy.entry("LONG", strategy.long, qty=long_lots, comment="LONG " + str.tostring(long_lots) + "L")
+    strategy.exit("LONG_TP1", from_entry="LONG", qty=long_tp1_lots, limit=long_tp1, stop=long_sl, comment="TP1 1:" + str.tostring(tp1_rr))
+    strategy.exit("LONG_TP2", from_entry="LONG", limit=long_tp2, stop=long_sl, comment="TP2 1:" + str.tostring(tp2_rr))
+    s_entry := long_entry
+    s_sl    := long_sl
+    s_tp1   := long_tp1
+    s_tp2   := long_tp2
+    _entry_alert_pending := true
+    _entry_alert_msg     := _entry_msg("LONG", long_lots, long_entry, long_sl, long_tp1, long_tp2, last_ph)
+
+_bb_msg(dir, lots, entry, sl, tp1) =>
+    '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
+         '","direction":"' + dir + '","setup":"box_break","timeframe":"240"' +
+         ',"lot_size":'    + str.tostring(lots) +
+         ',"entry_price":' + str.tostring(entry, price_format) +
+         ',"stop_loss":'   + str.tostring(sl,    price_format) +
+         ',"tp1":'         + str.tostring(tp1,   price_format) +
+         ',"box_high":'    + str.tostring(range_high, price_format) +
+         ',"box_low":'     + str.tostring(range_low,  price_format) +
+         ',"token":"paper_wasirizvi_wyckoffstrategy"}'
+
+if long_signal_bb
+    _bb_lots = _size(bb_long_entry, bb_long_sl)
+    strategy.entry("LONG_BB", strategy.long, qty=_bb_lots, comment="LONG_BB " + str.tostring(_bb_lots) + "L")
+    strategy.exit("LONG_BB_TP1", from_entry="LONG_BB", limit=bb_long_tp1, stop=bb_long_sl, comment="TP1 1:1")
+    s_entry := bb_long_entry
+    s_sl    := bb_long_sl
+    s_tp1   := bb_long_tp1
+    s_tp2   := na
+    bb_long_done := true
+    _entry_alert_pending := true
+    _entry_alert_msg     := _bb_msg("LONG", _bb_lots, bb_long_entry, bb_long_sl, bb_long_tp1)
+
+if short_signal_bb
+    _bb_lots = _size(bb_short_entry, bb_short_sl)
+    strategy.entry("SHORT_BB", strategy.short, qty=_bb_lots, comment="SHORT_BB " + str.tostring(_bb_lots) + "L")
+    strategy.exit("SHORT_BB_TP1", from_entry="SHORT_BB", limit=bb_short_tp1, stop=bb_short_sl, comment="TP1 1:1")
+    s_entry := bb_short_entry
+    s_sl    := bb_short_sl
+    s_tp1   := bb_short_tp1
+    s_tp2   := na
+    bb_short_done := true
+    _entry_alert_pending := true
+    _entry_alert_msg     := _bb_msg("SHORT", _bb_lots, bb_short_entry, bb_short_sl, bb_short_tp1)
+
+// Zone state resets: after a signal on that side, when price closes back
+// through the mid without a BOS, or when the range resets.
+if short_signal or (range_valid and close < range_mid)
+    top_active  := false
+    top_extreme := na
+if long_signal or (range_valid and close > range_mid)
+    bot_active  := false
+    bot_extreme := na
+
+if range_broken
+    range_high   := na
+    range_low    := na
+    range_locked := false
+    top_active   := false
+    top_extreme  := na
+    bot_active   := false
+    bot_extreme  := na
+    bb_long_done  := false
+    bb_short_done := false
+
+// =============================================================================
+// LIFECYCLE ALERTS
+// =============================================================================
+var float prev_pos = 0.0
+var bool  tp1_hit  = false
+
+_n              = strategy.closedtrades - 1
+last_pnl        = _n >= 0 ? strategy.closedtrades.profit(_n) : 0.0
+last_exit_price = _n >= 0 ? strategy.closedtrades.exit_price(_n) : close
+
+if short_signal or long_signal or long_signal_bb or short_signal_bb
+    tp1_hit := false
+
+tp1_short_hit = prev_pos < 0 and strategy.position_size < 0 and strategy.position_size > prev_pos and not tp1_hit
+tp1_long_hit  = prev_pos > 0 and strategy.position_size > 0 and strategy.position_size < prev_pos and not tp1_hit
+if tp1_short_hit or tp1_long_hit
+    tp1_hit := true
+
+_closed_now     = prev_pos != 0 and strategy.position_size == 0 and _n >= 0
+tp2_close_short = _closed_now and prev_pos < 0 and strategy.closedtrades.exit_price(_n) <  strategy.closedtrades.entry_price(_n)
+tp2_close_long  = _closed_now and prev_pos > 0 and strategy.closedtrades.exit_price(_n) >  strategy.closedtrades.entry_price(_n)
+sl_short_hit    = _closed_now and prev_pos < 0 and strategy.closedtrades.exit_price(_n) >= strategy.closedtrades.entry_price(_n)
+sl_long_hit     = _closed_now and prev_pos > 0 and strategy.closedtrades.exit_price(_n) <= strategy.closedtrades.entry_price(_n)
+
+_lc(evt, dir) =>
+    alert('{"event":"' + evt + '","account":"PAPER","symbol":"' + symbol_name +
+             '","direction":"' + dir +
+             '","price":'  + str.tostring(last_exit_price, price_format) +
+             ',"pnl":'     + str.tostring(last_pnl) +
+             ',"token":"paper_wasirizvi_wyckoffstrategy"}', alert.freq_once_per_bar_close)
+
+if tp1_short_hit
+    _lc("tp1_hit", "SHORT")
+if tp1_long_hit
+    _lc("tp1_hit", "LONG")
+if tp2_close_short
+    _lc("tp2_hit", "SHORT")
+if tp2_close_long
+    _lc("tp2_hit", "LONG")
+if sl_short_hit
+    _lc("sl_hit", "SHORT")
+if sl_long_hit
+    _lc("sl_hit", "LONG")
+
+// Entry alert goes out after any lifecycle alert from the same bar, so the
+// server closes the old trade before it sees the new one.
+if _entry_alert_pending
+    alert(_entry_alert_msg, alert.freq_once_per_bar_close)
+if barstate.isconfirmed
+    _entry_alert_pending := false
+
+prev_pos := strategy.position_size
+
+// =============================================================================
+// VISUALS
+// =============================================================================
+plot(show_range and range_valid ? range_high : na, "Daily Range High", color=color.red,                linewidth=2, style=plot.style_linebr)
+plot(show_range and range_valid ? range_mid  : na, "Range Mid",        color=color.gray,               linewidth=1, style=plot.style_linebr)
+plot(show_range and range_valid ? range_low  : na, "Daily Range Low",  color=color.green,              linewidth=2, style=plot.style_linebr)
+plot(show_range and range_valid ? range_high - zone_size : na, "Top Zone",    color=color.new(color.red,   60), linewidth=1, style=plot.style_linebr)
+plot(show_range and range_valid ? range_low  + zone_size : na, "Bottom Zone", color=color.new(color.green, 60), linewidth=1, style=plot.style_linebr)
+
+bgcolor(top_active ? color.new(color.red,   92) : na, title="Top side active")
+bgcolor(bot_active ? color.new(color.green, 92) : na, title="Bottom side active")
+
+plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.abovebar, color.orange, size=size.normal)
+plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
+
+if show_signals and short_signal
+    label.new(bar_index, high, "4H BOS ↓ " + str.tostring(last_pl, price_format) + " | TP1 1:" + str.tostring(tp1_rr) + " TP2 1:" + str.tostring(tp2_rr),
+         color=color.new(color.orange, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
+if show_signals and long_signal
+    label.new(bar_index, low, "4H BOS ↑ " + str.tostring(last_ph, price_format) + " | TP1 1:" + str.tostring(tp1_rr) + " TP2 1:" + str.tostring(tp2_rr),
+         color=color.new(color.aqua, 30), textcolor=color.white, style=label.style_label_up, size=size.small)
+
+plotshape(show_signals and short_signal_bb, "SHORT_BB", shape.triangledown, location.abovebar, color.fuchsia, size=size.normal)
+plotshape(show_signals and long_signal_bb,  "LONG_BB",  shape.triangleup,   location.belowbar, color.fuchsia, size=size.normal)
+
+if show_signals and short_signal_bb
+    label.new(bar_index, high, "BOX BREAK ↓ | TP 1:1", color=color.new(color.fuchsia, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
+if show_signals and long_signal_bb
+    label.new(bar_index, low,  "BOX BREAK ↑ | TP 1:1", color=color.new(color.fuchsia, 30), textcolor=color.white, style=label.style_label_up,   size=size.small)
+
+in_trade = strategy.position_size != 0
+plot(show_trade_lvls and in_trade ? s_entry : na, "Entry", color=color.white,               style=plot.style_linebr)
+plot(show_trade_lvls and in_trade ? s_sl    : na, "SL",    color=color.red,                 style=plot.style_linebr, linewidth=2)
+plot(show_trade_lvls and in_trade ? s_tp1   : na, "TP1",   color=color.new(color.green, 50), style=plot.style_linebr)
+plot(show_trade_lvls and in_trade ? s_tp2   : na, "TP2",   color=color.green,               style=plot.style_linebr, linewidth=2)
+
+if show_signals and (tp1_short_hit or tp1_long_hit)
+    label.new(bar_index, last_exit_price, "TP1 50%", color=color.new(color.green, 40), textcolor=color.white, size=size.small)
+if show_signals and (tp2_close_short or tp2_close_long)
+    label.new(bar_index, last_exit_price, "TP2", color=color.lime, textcolor=color.black, size=size.small)
+if show_signals and (sl_short_hit or sl_long_hit)
+    label.new(bar_index, last_exit_price, "SL", color=color.red, textcolor=color.white, size=size.small)
+
+// =============================================================================
+// INFO TABLE
+// =============================================================================
+var table info = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 70), border_width=1)
+if show_info and barstate.islast
+    table.cell(info, 0, 0, "PAPER v7",  text_color=color.white)
+    table.cell(info, 1, 0, "Daily Range | 4H BOS Reversal", text_color=color.yellow)
+    table.cell(info, 0, 1, "Timeframe", text_color=color.gray)
+    table.cell(info, 1, 1, tf_ok ? "4H OK" : "WRONG TF — load on 4H", text_color=tf_ok ? color.green : color.red)
+    table.cell(info, 0, 2, "Symbol",    text_color=color.gray)
+    table.cell(info, 1, 2, symbol_name + (instrument_ok ? "" : " (DISABLED)"), text_color=instrument_ok ? color.white : color.red)
+    table.cell(info, 0, 3, "Range High", text_color=color.gray)
+    table.cell(info, 1, 3, range_valid ? str.tostring(range_high, price_format) : "Building...", text_color=color.red)
+    table.cell(info, 0, 4, "Range Low",  text_color=color.gray)
+    table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green)
+    table.cell(info, 0, 5, "Top side",   text_color=color.gray)
+    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + str.tostring(last_pl, price_format) : "--",
+         text_color=top_active ? color.orange : color.gray)
+    table.cell(info, 0, 6, "Bottom side", text_color=color.gray)
+    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + str.tostring(last_ph, price_format) : "--",
+         text_color=bot_active ? color.aqua : color.gray)
+    table.cell(info, 0, 7, "Exits",      text_color=color.gray)
+    table.cell(info, 1, 7, "REV: SL wick, TP1 1:" + str.tostring(tp1_rr) + " (50%), TP2 1:" + str.tostring(tp2_rr) + " | BB: SL opp. wall, TP 1:1" + (bb_enabled ? "" : " (OFF)"), text_color=color.gray)
+    table.cell(info, 0, 8, "Risk",       text_color=color.gray)
+    table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#"), text_color=color.gray)
+    table.cell(info, 0, 9, "Position",   text_color=color.gray)
+    table.cell(info, 1, 9, in_trade ? (strategy.position_size > 0 ? "LONG" : "SHORT") + (tp1_hit ? " (TP1 hit)" : "") : "FLAT",
+         text_color=in_trade ? color.yellow : color.gray)

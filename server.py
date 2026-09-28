@@ -227,8 +227,8 @@ def handle_paper_signal(data):
     emoji    = "🟢" if direction == "LONG" else "🔴"
     rr_line  = f"\nR:R: <code>{rr}</code>" if rr else ""
     bos_line = f"\nBOS: <code>{bos_level}</code>" if bos_level else ""
-    tf_label = f"15M" if str(timeframe) == "15" else f"{timeframe}M"
-    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS", "box_break": " · BOX BREAK"}.get(setup, "")
+    tf_label = "4H" if str(timeframe) == "240" else f"{timeframe}M"
+    setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS", "box_break": " · BOX BREAK", "range_rev": " · RANGE REVERSAL"}.get(setup, "")
 
     if limit_hit:
         exec_line = f"\n⚠️ <b>NOT EXECUTED — {limit_reason}</b>"
@@ -437,6 +437,7 @@ def state():
         if s == "bos_div":              return "C"
         if s == "mid_bos":              return "D"
         if s == "box_break":            return "E"
+        if s == "range_rev":            return "F"
         return "A"
 
     model_stats = {
@@ -445,6 +446,7 @@ def state():
         "C": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
         "D": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
         "E": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
+        "F": {"trades": 0, "wins": 0, "losses": 0, "pnl": 0.0},
     }
     try:
         for t in db.load_trades():

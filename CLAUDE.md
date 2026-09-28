@@ -92,7 +92,8 @@ Push to `paper-trading` → Railway auto-deploys.
 | `config.py` | All environment variables and risk constants |
 | `notifier.py` | Telegram send helper — `parse_mode: HTML` |
 | `logger.py` | Legacy SQLite schema — not actively wired into current flow |
-| `pine_script_paper_v5.pine` | **Active Pine Script** — load on all 12 × 15M TV charts |
+| `pine_script_paper_v7.pine` | **Active Pine Script** — load on all 13 × 4H TV charts |
+| `pine_script_paper_v5.pine` | Retired 2026-09-28 — kept for rollback |
 | `pine_script_paper_v4.pine` | Retired — kept for reference only |
 | `dashboard.html` | Single-file live dashboard served at `/dashboard` |
 | `generate_architecture_pdf.py` | Generates `Trading_Bot_Architecture.pdf` — run locally |
@@ -101,7 +102,18 @@ Push to `paper-trading` → Railway auto-deploys.
 
 ---
 
-## Strategy — v5 (current)
+## Strategy — v7 (current, 2026-09-28)
+
+`pine_script_paper_v7.pine`, loaded on **4H** charts (signals suppressed on any other timeframe). Replaces every v5 entry model; v5 file kept untouched for rollback.
+
+- **Range:** confirmed Daily pivot high/low (`pivot_len` 5, non-repainting — last closed daily bar). Locks once both sides exist; resets when a 4H close goes beyond a boundary by 30% of range size. No touch/mid-cross/swing quality gate.
+- **Range Reversal (`setup: "range_rev"`, model F):** price wicks into the top zone (10% of range) → highest high since entering = reversal wick → 4H close breaks below the latest confirmed 4H swing low (`bos_pivot_len` 3, must sit in the upper half) → SHORT at the BOS bar close. Mirror image at the bottom for LONG. SL = reversal wick + 0.1×ATR(14). TP1 = 1:2 (50%), TP2 = 1:3. **SL stays at the wick after TP1** — no breakeven, no trailing.
+- **Box Break (`setup: "box_break"`, model E):** 4H close above Daily range high → LONG, below range low → SHORT. SL = opposite range wall, single 1:1 target, full close. One per side per range.
+- **Risk:** flat 0.5% on every instrument (paper $500; FTMO EA `InpRiskPercent` 0.5, US100/US500 2x bump removed). GBPUSD/AUDUSD/GBPJPY still skipped (input toggle).
+- v5-only filters (COT hard-block, volume, US500 NY-AM, Commercial/Retail block, session windows) are **not** in v7.
+- FTMO EA: `InpBreakevenAtTP1` / `InpTrailEnabled` both default false to match.
+
+## Strategy — v5 (retired 2026-09-28, kept for reference)
 
 ### Range — 4H Pivot-Anchored
 - `ta.pivothigh/low` with `pivot_len=10` on 4H via `request.security("240", ...)`
@@ -292,8 +304,8 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 
 ## Pine Script Setup (TradingView)
 
-- **Active script:** `pine_script_paper_v5.pine`
-- **Chart timeframe:** 15M on all instruments
+- **Active script:** `pine_script_paper_v7.pine` (v5 retired 2026-09-28)
+- **Chart timeframe:** 4H on all instruments
 - **Alert condition:** "Any alert() function call" — Once Per Bar Close
 - **Webhook URL:** `https://tradingbot-production-1e5a.up.railway.app/webhook/paper`
 - **Token input:** must match `PAPER_WEBHOOK_TOKEN` Railway env var

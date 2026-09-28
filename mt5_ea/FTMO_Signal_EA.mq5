@@ -9,8 +9,9 @@
 //|   - At entry: SL = signal stop_loss, TP = signal tp2 (broker-side |
 //|     safety net for both floor and ceiling, works even if this EA  |
 //|     is not running).                                              |
-//|   - While running: at TP1, close 50% + move SL to breakeven; then |
-//|     trail (1.5R -> lock 1R, then trail 0.5R behind peak).         |
+//|   - While running: at TP1, close 50%. Since v7 (2026-09-28) the   |
+//|     SL stays at the original stop after TP1 -- breakeven move and |
+//|     trailing are off by default (InpBreakevenAtTP1/InpTrailEnabled).|
 //|   - No dependency on the server after the entry signal arrives.   |
 //|                                                                    |
 //| EXCEPTION -- box_break (Entry E) signals are single-target: Pine  |
@@ -53,7 +54,7 @@
 
 input string InpServerURL      = "https://tradingbot-production-1e5a.up.railway.app/latest-signal";
 input int    InpPollSeconds    = 30;
-input double InpRiskPercent    = 0.25;      // % of account balance risked per trade ($25 on a $10K account)
+input double InpRiskPercent    = 0.5;       // % of account balance risked per trade, every symbol ($50 on a $10K account) -- v7, 2026-09-28
 input int    InpMagicNumber    = 20260704;
 input int    InpMaxSlippagePts = 20;
 input int    InpPendingExpiryMinutes = 30;  // pending LIMIT/STOP orders cancel if unfilled this long (was end-of-day; late fills on a stale price context were diverging badly from paper's modeled entry -- see 2026-09-11 analysis)
@@ -83,7 +84,12 @@ input string InpSymbolMap_US500  = "US500.sim";
 input string InpSymbolMap_USOIL  = "USOIL.sim";
 input string InpSymbolMap_BTCUSD = "BTCUSD.sim";
 
-// Trailing rule, matches the paper strategy: SL stays at breakeven until peak
+// v7 (2026-09-28): SL stays at the original stop after TP1, matching the
+// paper strategy -- both off by default, kept as toggles for rollback to v5.
+input bool   InpBreakevenAtTP1 = false;
+input bool   InpTrailEnabled   = false;
+
+// Trailing rule (only when InpTrailEnabled): SL stays at breakeven until peak
 // reaches 1.5R, only then locks to 1R and trails 0.5R behind peak from there.
 input double InpTrailArmR   = 1.5;
 input double InpTrailGapR   = 0.5;
@@ -472,13 +478,9 @@ double ComputeLotSize(string botSymbol, string brokerSymbol, double slDistance)
   {
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
 
-   // Risk bump, added 2026-08-25 (user call, matching the paper bot's Pine
-   // Script change same day): US100 (all trades) and US500 both get 0.5%
-   // instead of the 0.25% baseline. No session check needed for US500 here --
-   // the Pine Script now only ever fires a US500 signal during NY AM
-   // (8am-12pm CT), so by the time a US500 signal reaches this EA via
-   // /latest-signal, it is already guaranteed to be an NY-AM signal.
-   double riskPct   = (botSymbol == "US100" || botSymbol == "US500") ? InpRiskPercent * 2.0 : InpRiskPercent;
+   // Flat risk on every symbol since v7 (2026-09-28, user call) -- the
+   // 2026-08-25 US100/US500 2x bump is removed.
+   double riskPct   = InpRiskPercent;
    double riskMoney = balance * riskPct / 100.0;
 
    double tickValue = SymbolInfoDouble(brokerSymbol, SYMBOL_TRADE_TICK_VALUE);
@@ -561,8 +563,11 @@ void ManageOpenPositions()
             trade.PositionClosePartial(ticket, closeVol);
            }
 
-         double breakeven = NormalizeDouble(entry, digits);
-         trade.PositionModify(ticket, breakeven, curTP); // keep tp2 as broker TP unchanged
+         if(InpBreakevenAtTP1)
+           {
+            double breakeven = NormalizeDouble(entry, digits);
+            trade.PositionModify(ticket, breakeven, curTP); // keep tp2 as broker TP unchanged
+           }
 
          GlobalVariableSet(phaseKey, 1);
          GlobalVariableSet(peakKey, exitPrice);
@@ -570,6 +575,7 @@ void ManageOpenPositions()
         }
 
       // phase 1: trailing
+      if(!InpTrailEnabled) continue;
       double peak = GlobalVariableCheck(peakKey) ? GlobalVariableGet(peakKey) : exitPrice;
       if(isLong && exitPrice > peak) { peak = exitPrice; GlobalVariableSet(peakKey, peak); }
       if(!isLong && exitPrice < peak) { peak = exitPrice; GlobalVariableSet(peakKey, peak); }
