@@ -146,6 +146,14 @@ def webhook_paper():
     data = request.get_json(force=True, silent=True) or {}
 
     if data.get("token") != PAPER_WEBHOOK_TOKEN:
+        # Log what was actually sent (token masked) so a misconfigured TradingView
+        # alert -- e.g. "Order fills" default text instead of the script's JSON --
+        # is diagnosable from Railway logs. Added 2026-10-02: every webhook since
+        # 9/28 was rejected here with no way to see why.
+        body = request.get_data(as_text=True)[:300]
+        if PAPER_WEBHOOK_TOKEN:
+            body = body.replace(PAPER_WEBHOOK_TOKEN, "***")
+        print(f"[webhook] 401 rejected — content-type={request.content_type!r} body={body!r}", flush=True)
         return jsonify({"error": "unauthorized"}), 401
 
     instrument = _normalize_instrument(data.get("symbol", data.get("instrument", "")))

@@ -5,7 +5,8 @@ import time
 import schedule
 import threading
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
+import functools
 import pytz
 
 from risk import reset_paper_daily, reset_paper_weekly, paper_state
@@ -41,9 +42,9 @@ def weekly_summary():
     log("Generating weekly summary...")
 
     now = ct_now()
-    days_since_monday = now.weekday()
-    week_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    week_start = week_start.replace(day=now.day - days_since_monday)
+    # timedelta, not replace(day=...): early in a month (e.g. Fri Oct 2) the old
+    # day arithmetic went negative, raised, and killed the whole scheduler thread.
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
 
     def parse_dt(t):
         date_str = t.get("date") or ""
@@ -120,12 +121,25 @@ def purge_stale_non_forex_opens():
         log(f"[scheduler] Purged {deleted} stale non-forex OPEN/UNKNOWN trade(s)")
 
 
+def _safe(job):
+    """One failing job must not kill the scheduler thread (2026-10-02: a
+    weekly_summary exception silently stopped resets, scorecard, and heartbeat)."""
+    @functools.wraps(job)
+    def wrapper():
+        try:
+            job()
+        except Exception as e:
+            log(f"[scheduler] {job.__name__} failed: {e!r}")
+            send_telegram(f"⚠️ <b>Scheduler job failed</b>\n<code>{job.__name__}: {e!r}</code>")
+    return wrapper
+
+
 def run_scheduler():
-    schedule.every().day.at("05:00").do(midnight_reset)
-    schedule.every().day.at("20:50").do(weekly_summary)
-    schedule.every().day.at("21:00").do(v7_scorecard)
-    schedule.every().hour.do(heartbeat)
-    schedule.every(6).hours.do(purge_stale_non_forex_opens)
+    schedule.every().day.at("05:00").do(_safe(midnight_reset))
+    schedule.every().day.at("20:50").do(_safe(weekly_summary))
+    schedule.every().day.at("21:00").do(_safe(v7_scorecard))
+    schedule.every().hour.do(_safe(heartbeat))
+    schedule.every(6).hours.do(_safe(purge_stale_non_forex_opens))
 
     log("Scheduler started — midnight reset 00:00 CT | weekly summary Fri 15:50 CT | v7 scorecard Fri 16:00 CT | heartbeat hourly | stale-open purge every 6h")
 

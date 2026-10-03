@@ -20,11 +20,11 @@
 //            the reversal wick -> 4H close breaks ABOVE the most recent 4H swing
 //            high (bullish BOS, swing high in the lower half) -> LONG at close.
 //
-// Exits:
+// Exits (changed 2026-10-02, user spec):
 //   SL  = just beyond the reversal wick (wick extreme + ATR(14) * sl_atr_buf)
-//   TP1 = 1:2 RR -> close 50%
-//   TP2 = 1:3 RR -> close remaining 50%
-//   SL stays at the reversal wick after TP1 (no breakeven move, no trailing).
+//   TP  = 1:3 RR -> full close, no partials
+//   Once price reaches 1:2 RR, SL moves to 1:1 RR (locks 1R) for the rest of
+//   the trade.
 //
 // Box Break (v5 Entry E, moved onto the Daily range 2026-09-28):
 //   4H close above range high -> LONG | 4H close below range low -> SHORT.
@@ -72,8 +72,9 @@ max_break_pct = input.float(30.0, "Reset range if price closes beyond by % of ra
 bos_pivot_len = input.int(3,      "4H Swing Pivot Length for BOS",                    group="Entry", minval=2,   maxval=10)
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
-tp1_rr        = input.float(2.0,  "TP1 R:R (closes 50%)",                             group="Entry", minval=0.5, step=0.1)
-tp2_rr        = input.float(3.0,  "TP2 R:R (closes remaining 50%)",                   group="Entry", minval=1.0, step=0.1)
+tp_rr         = input.float(3.0,  "Take Profit R:R (full close)",                     group="Entry", minval=1.0, step=0.1)
+lock_at_rr    = input.float(2.0,  "Move SL once price reaches R:R",                   group="Entry", minval=0.5, step=0.1)
+lock_to_rr    = input.float(1.0,  "...to this R:R (locked profit)",                   group="Entry", minval=0.0, step=0.1)
 
 exclude_disabled = input.bool(true, "Skip GBPUSD / AUDUSD / GBPJPY (disabled instruments)", group="Filters")
 bb_enabled       = input.bool(true, "Enable Box Break (4H close beyond Daily range)",      group="Filters")
@@ -87,6 +88,9 @@ show_range      = input.bool(true, "Show range levels",   group="Display")
 show_signals    = input.bool(true, "Show entry signals",  group="Display")
 show_trade_lvls = input.bool(true, "Show SL/TP on trade", group="Display")
 show_info       = input.bool(true, "Show info table",     group="Display")
+show_status     = input.bool(true, "Show status label + level tags next to price", group="Display")
+table_pos_in    = input.string("Bottom Right", "Info table position", options=["Top Right", "Bottom Right", "Bottom Left", "Top Left", "Middle Right"], group="Display")
+table_size_in   = input.string("Normal", "Info table text size", options=["Small", "Normal", "Large"], group="Display")
 
 // =============================================================================
 // INSTRUMENT CONFIG
@@ -212,14 +216,12 @@ bull_bos = bot_active and not na(last_ph) and last_ph < range_mid and
 short_entry = close
 short_sl    = not na(top_extreme) ? math.max(top_extreme + atr_now * sl_atr_buf, short_entry + _min_sl_price) : na
 short_risk  = not na(short_sl) ? short_sl - short_entry : na
-short_tp1   = not na(short_risk) ? short_entry - short_risk * tp1_rr : na
-short_tp2   = not na(short_risk) ? short_entry - short_risk * tp2_rr : na
+short_tp    = not na(short_risk) ? short_entry - short_risk * tp_rr : na
 
 long_entry = close
 long_sl    = not na(bot_extreme) ? math.min(bot_extreme - atr_now * sl_atr_buf, long_entry - _min_sl_price) : na
 long_risk  = not na(long_sl) ? long_entry - long_sl : na
-long_tp1   = not na(long_risk) ? long_entry + long_risk * tp1_rr : na
-long_tp2   = not na(long_risk) ? long_entry + long_risk * tp2_rr : na
+long_tp    = not na(long_risk) ? long_entry + long_risk * tp_rr : na
 
 _size(entry_p, sl_p, risk_usd) =>
     sl_dist = not na(sl_p) ? math.max(math.abs(entry_p - sl_p), syminfo.mintick) : syminfo.mintick
@@ -229,8 +231,6 @@ _tp1q(sz) => math.max(0.01, math.round(sz * 0.50, 2))
 
 short_lots     = _size(short_entry, short_sl, risk_dollars_eff)
 long_lots      = _size(long_entry,  long_sl,  risk_dollars_eff)
-short_tp1_lots = _tp1q(short_lots)
-long_tp1_lots  = _tp1q(long_lots)
 
 // =============================================================================
 // FINAL SIGNALS
@@ -304,16 +304,23 @@ var float  s_entry = na
 var float  s_sl    = na
 var float  s_tp1   = na
 var float  s_tp2   = na
+var float  s_risk  = na        // R in price terms (range reversal SL lock)
+var int    s_bar   = -1        // signal bar
+var string s_setup = ""        // "rev", "bb", "mc"
+var bool   lock_done = false   // range reversal SL already moved to lock_to_rr
 
-_entry_msg(dir, lots, entry, sl, tp1, tp2, bos) =>
+// Single full target: "tp1" carries the 1:3 TP and no "tp2" is sent (same
+// single-target shape as box_break). sl_lock_* are informational.
+_entry_msg(dir, lots, entry, sl, tp, lock_trig, lock_to, bos) =>
     '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
          '","direction":"' + dir + '","setup":"range_rev","timeframe":"240"' +
          ',"lot_size":'    + str.tostring(lots) +
          ',"entry_price":' + str.tostring(entry, price_format) +
          ',"stop_loss":'   + str.tostring(sl,    price_format) +
-         ',"tp1":'         + str.tostring(tp1,   price_format) +
-         ',"tp2":'         + str.tostring(tp2,   price_format) +
-         ',"rr_to_tp1":'   + str.tostring(tp1_rr) +
+         ',"tp1":'         + str.tostring(tp,    price_format) +
+         ',"rr_to_tp1":'   + str.tostring(tp_rr) +
+         ',"sl_lock_trigger":' + str.tostring(lock_trig, price_format) +
+         ',"sl_lock_to":'  + str.tostring(lock_to, price_format) +
          ',"bos_level":'   + str.tostring(bos,        price_format) +
          ',"range_high":'  + str.tostring(range_high, price_format) +
          ',"range_low":'   + str.tostring(range_low,  price_format) +
@@ -321,25 +328,33 @@ _entry_msg(dir, lots, entry, sl, tp1, tp2, bos) =>
 
 if short_signal
     strategy.entry("SHORT", strategy.short, qty=short_lots, comment="SHORT " + str.tostring(short_lots) + "L")
-    strategy.exit("SHORT_TP1", from_entry="SHORT", qty=short_tp1_lots, limit=short_tp1, stop=short_sl, comment="TP1 1:" + str.tostring(tp1_rr))
-    strategy.exit("SHORT_TP2", from_entry="SHORT", limit=short_tp2, stop=short_sl, comment="TP2 1:" + str.tostring(tp2_rr))
+    strategy.exit("SHORT_X", from_entry="SHORT", limit=short_tp, stop=short_sl, comment="TP 1:" + str.tostring(tp_rr))
     s_entry := short_entry
     s_sl    := short_sl
-    s_tp1   := short_tp1
-    s_tp2   := short_tp2
+    s_tp1   := short_tp
+    s_tp2   := na
+    s_risk  := short_risk
+    s_bar   := bar_index
+    s_setup := "rev"
+    lock_done := false
     _entry_alert_pending := true
-    _entry_alert_msg     := _entry_msg("SHORT", short_lots, short_entry, short_sl, short_tp1, short_tp2, last_pl)
+    _entry_alert_msg     := _entry_msg("SHORT", short_lots, short_entry, short_sl, short_tp,
+         short_entry - short_risk * lock_at_rr, short_entry - short_risk * lock_to_rr, last_pl)
 
 if long_signal
     strategy.entry("LONG", strategy.long, qty=long_lots, comment="LONG " + str.tostring(long_lots) + "L")
-    strategy.exit("LONG_TP1", from_entry="LONG", qty=long_tp1_lots, limit=long_tp1, stop=long_sl, comment="TP1 1:" + str.tostring(tp1_rr))
-    strategy.exit("LONG_TP2", from_entry="LONG", limit=long_tp2, stop=long_sl, comment="TP2 1:" + str.tostring(tp2_rr))
+    strategy.exit("LONG_X", from_entry="LONG", limit=long_tp, stop=long_sl, comment="TP 1:" + str.tostring(tp_rr))
     s_entry := long_entry
     s_sl    := long_sl
-    s_tp1   := long_tp1
-    s_tp2   := long_tp2
+    s_tp1   := long_tp
+    s_tp2   := na
+    s_risk  := long_risk
+    s_bar   := bar_index
+    s_setup := "rev"
+    lock_done := false
     _entry_alert_pending := true
-    _entry_alert_msg     := _entry_msg("LONG", long_lots, long_entry, long_sl, long_tp1, long_tp2, last_ph)
+    _entry_alert_msg     := _entry_msg("LONG", long_lots, long_entry, long_sl, long_tp,
+         long_entry + long_risk * lock_at_rr, long_entry + long_risk * lock_to_rr, last_ph)
 
 _bb_msg(dir, lots, entry, sl, tp1) =>
     '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
@@ -360,6 +375,7 @@ if long_signal_bb
     s_sl    := bb_long_sl
     s_tp1   := bb_long_tp1
     s_tp2   := na
+    s_setup := "bb"
     bb_long_done := true
     _entry_alert_pending := true
     _entry_alert_msg     := _bb_msg("LONG", _bb_lots, bb_long_entry, bb_long_sl, bb_long_tp1)
@@ -372,6 +388,7 @@ if short_signal_bb
     s_sl    := bb_short_sl
     s_tp1   := bb_short_tp1
     s_tp2   := na
+    s_setup := "bb"
     bb_short_done := true
     _entry_alert_pending := true
     _entry_alert_msg     := _bb_msg("SHORT", _bb_lots, bb_short_entry, bb_short_sl, bb_short_tp1)
@@ -398,6 +415,7 @@ if long_signal_mc
     s_sl    := mc_long_sl
     s_tp1   := mc_long_tp1
     s_tp2   := mc_long_tp2
+    s_setup := "mc"
     _entry_alert_pending := true
     _entry_alert_msg     := _mc_msg("LONG", _mc_lots, mc_long_entry, mc_long_sl, mc_long_tp1, mc_long_tp2)
 
@@ -410,6 +428,7 @@ if short_signal_mc
     s_sl    := mc_short_sl
     s_tp1   := mc_short_tp1
     s_tp2   := mc_short_tp2
+    s_setup := "mc"
     _entry_alert_pending := true
     _entry_alert_msg     := _mc_msg("SHORT", _mc_lots, mc_short_entry, mc_short_sl, mc_short_tp1, mc_short_tp2)
 
@@ -455,6 +474,19 @@ if range_broken
     last_zone     := "none"
 
 // =============================================================================
+// RANGE REVERSAL SL LOCK — once price reaches lock_at_rr (1:2), move the stop
+// to lock_to_rr (1:1). Target stays at tp_rr (1:3).
+// =============================================================================
+if s_setup == "rev" and strategy.position_size != 0 and not lock_done and bar_index > s_bar and not na(s_risk) and s_risk > 0
+    _is_short = strategy.position_size < 0
+    _fav_rr   = _is_short ? (s_entry - low) / s_risk : (high - s_entry) / s_risk
+    if _fav_rr >= lock_at_rr
+        lock_done := true
+        s_sl      := _is_short ? s_entry - s_risk * lock_to_rr : s_entry + s_risk * lock_to_rr
+        strategy.exit(_is_short ? "SHORT_X" : "LONG_X", from_entry=_is_short ? "SHORT" : "LONG",
+             limit=s_tp1, stop=s_sl, comment="TP 1:" + str.tostring(tp_rr) + " | SL locked 1:" + str.tostring(lock_to_rr))
+
+// =============================================================================
 // LIFECYCLE ALERTS
 // =============================================================================
 var float prev_pos = 0.0
@@ -489,10 +521,15 @@ if tp1_short_hit
     _lc("tp1_hit", "SHORT")
 if tp1_long_hit
     _lc("tp1_hit", "LONG")
+// A range reversal closed in profit but short of its 1:3 target was stopped at
+// the locked 1:1 -> reported as tp1_hit (a 1R win); a full target hit is tp2_hit.
+_rev_lock_exit = s_setup == "rev" and lock_done and _closed_now and
+     (prev_pos < 0 ? strategy.closedtrades.exit_price(_n) > s_tp1 + syminfo.mintick :
+                     strategy.closedtrades.exit_price(_n) < s_tp1 - syminfo.mintick)
 if tp2_close_short
-    _lc("tp2_hit", "SHORT")
+    _lc(_rev_lock_exit ? "tp1_hit" : "tp2_hit", "SHORT")
 if tp2_close_long
-    _lc("tp2_hit", "LONG")
+    _lc(_rev_lock_exit ? "tp1_hit" : "tp2_hit", "LONG")
 if sl_short_hit
     _lc("sl_hit", "SHORT")
 if sl_long_hit
@@ -523,10 +560,10 @@ plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.a
 plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
 
 if show_signals and short_signal
-    label.new(bar_index, high, "4H BOS ↓ " + str.tostring(last_pl, price_format) + " | TP1 1:" + str.tostring(tp1_rr) + " TP2 1:" + str.tostring(tp2_rr),
+    label.new(bar_index, high, "4H BOS ↓ " + str.tostring(last_pl, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.orange, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
 if show_signals and long_signal
-    label.new(bar_index, low, "4H BOS ↑ " + str.tostring(last_ph, price_format) + " | TP1 1:" + str.tostring(tp1_rr) + " TP2 1:" + str.tostring(tp2_rr),
+    label.new(bar_index, low, "4H BOS ↑ " + str.tostring(last_ph, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.aqua, 30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
 plotshape(show_signals and short_signal_bb, "SHORT_BB", shape.triangledown, location.abovebar, color.fuchsia, size=size.normal)
@@ -559,32 +596,74 @@ if show_signals and (sl_short_hit or sl_long_hit)
     label.new(bar_index, last_exit_price, "SL", color=color.red, textcolor=color.white, size=size.small)
 
 // =============================================================================
+// STATUS — what v7 is doing right now, in plain words (label next to price)
+// =============================================================================
+_fmt(v) => na(v) ? "--" : str.tostring(v, price_format)
+
+status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 4H" :
+     not instrument_ok ? "INSTRUMENT DISABLED" :
+     not range_valid ? "BUILDING RANGE: waiting for Daily pivot high + low" :
+     in_trade ? (strategy.position_size > 0 ? "IN TRADE: LONG" : "IN TRADE: SHORT") + (tp1_hit ? " (TP1 hit)" : "") +
+         (s_setup == "rev" and lock_done ? " | SL locked at 1:" + str.tostring(lock_to_rr) + " " + _fmt(s_sl) : "") :
+     mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 4H close > " + _fmt(mc_l_c1_high) :
+     mc_s_c1_bar == bar_index ? "MID CONT SHORT ARMED: next 4H close < " + _fmt(mc_s_c1_low) :
+     top_active ? (not na(last_pl) and last_pl > range_mid ? "TOP ACTIVE: short on 4H close < " + _fmt(last_pl) + " (BOS)" :
+                   "TOP ACTIVE: waiting for a 4H swing low in the upper half") :
+     bot_active ? (not na(last_ph) and last_ph < range_mid ? "BOTTOM ACTIVE: long on 4H close > " + _fmt(last_ph) + " (BOS)" :
+                   "BOTTOM ACTIVE: waiting for a 4H swing high in the lower half") :
+     "WAITING: mid-range. Reversal needs a zone tap; box break needs 4H close beyond " + _fmt(range_high) + " / " + _fmt(range_low)
+status_clr = not tf_ok or not instrument_ok ? color.red : not range_valid ? color.gray : in_trade ? color.yellow :
+     (mc_l_c1_bar == bar_index or mc_s_c1_bar == bar_index) ? color.yellow : top_active ? color.orange : bot_active ? color.aqua : color.gray
+
+var label lbl_status = na
+var label lbl_hi     = na
+var label lbl_mid    = na
+var label lbl_lo     = na
+if barstate.islast
+    label.delete(lbl_status)
+    label.delete(lbl_hi)
+    label.delete(lbl_mid)
+    label.delete(lbl_lo)
+    if show_status
+        lbl_status := label.new(bar_index + 2, close, "v7 " + status_txt, style=label.style_label_left,
+             color=color.new(status_clr, 15), textcolor=color.black, size=size.normal)
+        if range_valid
+            lbl_hi  := label.new(bar_index + 2, range_high, "Range High " + _fmt(range_high), style=label.style_label_left, color=color.new(color.red, 30),   textcolor=color.white, size=size.small)
+            lbl_mid := label.new(bar_index + 2, range_mid,  "Mid "        + _fmt(range_mid),  style=label.style_label_left, color=color.new(color.gray, 30),  textcolor=color.white, size=size.small)
+            lbl_lo  := label.new(bar_index + 2, range_low,  "Range Low "  + _fmt(range_low),  style=label.style_label_left, color=color.new(color.green, 30), textcolor=color.white, size=size.small)
+
+// =============================================================================
 // INFO TABLE
 // =============================================================================
-var table info = table.new(position.top_right, 2, 11, bgcolor=color.new(color.black, 70), border_width=1)
+_tpos  = table_pos_in == "Top Right" ? position.top_right : table_pos_in == "Bottom Left" ? position.bottom_left :
+     table_pos_in == "Top Left" ? position.top_left : table_pos_in == "Middle Right" ? position.middle_right : position.bottom_right
+_tsize = table_size_in == "Small" ? size.small : table_size_in == "Large" ? size.large : size.normal
+var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), border_width=1)
 if show_info and barstate.islast
-    table.cell(info, 0, 0, "PAPER v7",  text_color=color.white)
-    table.cell(info, 1, 0, "Daily Range | 4H BOS Reversal", text_color=color.yellow)
-    table.cell(info, 0, 1, "Timeframe", text_color=color.gray)
-    table.cell(info, 1, 1, tf_ok ? "4H OK" : "WRONG TF — load on 4H", text_color=tf_ok ? color.green : color.red)
-    table.cell(info, 0, 2, "Symbol",    text_color=color.gray)
-    table.cell(info, 1, 2, symbol_name + (instrument_ok ? "" : " (DISABLED)"), text_color=instrument_ok ? color.white : color.red)
-    table.cell(info, 0, 3, "Range High", text_color=color.gray)
-    table.cell(info, 1, 3, range_valid ? str.tostring(range_high, price_format) : "Building...", text_color=color.red)
-    table.cell(info, 0, 4, "Range Low",  text_color=color.gray)
-    table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green)
-    table.cell(info, 0, 5, "Top side",   text_color=color.gray)
+    table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 1, 0, "Daily Range | 4H BOS Reversal", text_color=color.yellow, text_size=_tsize)
+    table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 1, tf_ok ? "4H OK" : "WRONG TF — load on 4H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
+    table.cell(info, 0, 2, "Symbol",    text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 2, symbol_name + (instrument_ok ? "" : " (DISABLED)"), text_color=instrument_ok ? color.white : color.red, text_size=_tsize)
+    table.cell(info, 0, 3, "Range High", text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 3, range_valid ? str.tostring(range_high, price_format) : "Building...", text_color=color.red, text_size=_tsize)
+    table.cell(info, 0, 4, "Range Low",  text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green, text_size=_tsize)
+    table.cell(info, 0, 5, "Top side",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + str.tostring(last_pl, price_format) : "--",
-         text_color=top_active ? color.orange : color.gray)
-    table.cell(info, 0, 6, "Bottom side", text_color=color.gray)
+         text_color=top_active ? color.orange : color.gray, text_size=_tsize)
+    table.cell(info, 0, 6, "Bottom side", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + str.tostring(last_ph, price_format) : "--",
-         text_color=bot_active ? color.aqua : color.gray)
-    table.cell(info, 0, 7, "Exits",      text_color=color.gray)
-    table.cell(info, 1, 7, "REV: SL wick, TP1 1:" + str.tostring(tp1_rr) + " (50%), TP2 1:" + str.tostring(tp2_rr) + " | BB: SL opp. wall, TP 1:1" + (bb_enabled ? "" : " (OFF)"), text_color=color.gray)
-    table.cell(info, 0, 8, "Risk",       text_color=color.gray)
-    table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#") + " | Mid Cont $" + str.tostring(risk_dollars_mc, "#"), text_color=color.gray)
-    table.cell(info, 0, 10, "4H Taps",   text_color=color.gray)
-    table.cell(info, 1, 10, "Top " + str.tostring(top_taps) + " / Bottom " + str.tostring(bot_taps) + " | from: " + last_zone, text_color=color.gray)
-    table.cell(info, 0, 9, "Position",   text_color=color.gray)
-    table.cell(info, 1, 9, in_trade ? (strategy.position_size > 0 ? "LONG" : "SHORT") + (tp1_hit ? " (TP1 hit)" : "") : "FLAT",
-         text_color=in_trade ? color.yellow : color.gray)
+         text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
+    table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall, TP 1:1" + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
+    table.cell(info, 0, 8, "Risk",       text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#") + " | Mid Cont $" + str.tostring(risk_dollars_mc, "#"), text_color=color.gray, text_size=_tsize)
+    table.cell(info, 0, 10, "4H Taps",   text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 10, "Top " + str.tostring(top_taps) + " / Bottom " + str.tostring(bot_taps) + " | from: " + last_zone, text_color=color.gray, text_size=_tsize)
+    table.cell(info, 0, 9, "Position",   text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 9, in_trade ? (strategy.position_size > 0 ? "LONG" : "SHORT") + (tp1_hit ? " (TP1 hit)" : "") + (s_setup == "rev" and lock_done ? " | SL locked" : "") : "FLAT",
+         text_color=in_trade ? color.yellow : color.gray, text_size=_tsize)
