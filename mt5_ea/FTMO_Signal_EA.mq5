@@ -14,6 +14,14 @@
 //|     trailing are off by default (InpBreakevenAtTP1/InpTrailEnabled).|
 //|   - No dependency on the server after the entry signal arrives.   |
 //|                                                                    |
+//| v7 (2026-10-02): range_rev is ALSO single-target -- Pine sends the |
+//| 1:3 TP as "tp1" with no "tp2", plus sl_lock_trigger / sl_lock_to.  |
+//| Broker TP = tp1. Once live price reaches the trigger (1:2), the EA |
+//| moves the SL to the lock level (1:1) once -- see ManageSlLocks().  |
+//| Lock levels are stored as R-multiples so they stay right even when |
+//| the entry falls back to a market order at a different price.       |
+//| mid_cont keeps two targets (50% at tp1, rest at tp2, SL unmoved).  |
+//|                                                                    |
 //| EXCEPTION -- box_break (Entry E) signals are single-target: Pine  |
 //| never sends a tp2 for them (s_tp2 := na, full close at tp1, no    |
 //| partial/trail split). Broker TP is set to tp1 directly and no     |
@@ -292,6 +300,7 @@ void OnTimer()
 
    PollSignals();
    ManageOpenPositions();
+   ManageSlLocks();
   }
 
 //+------------------------------------------------------------------+
@@ -363,11 +372,13 @@ void TryEnter(string botSymbol, string block)
    double slDistance = MathAbs(entryPrice - stopLoss);
    if(slDistance <= 0) { Print("Zero SL distance for ", botSymbol); return; }
 
-   // box_break is single-target (Pine sends no tp2 for it, s_tp2 := na) --
-   // use tp1 as the real, only take-profit rather than the phantom 0
-   // JsonNum() returns for the missing "tp2" key.
-   bool isBoxBreak = (setup == "box_break");
-   double orderTP  = isBoxBreak ? tp1 : tp2;
+   // box_break and v7 range_rev are single-target (Pine sends no tp2) -- use
+   // tp1 as the real, only take-profit rather than the phantom 0 JsonNum()
+   // returns for the missing "tp2" key. Any signal without a tp2 is treated
+   // the same way as a safety net.
+   bool isBoxBreak     = (setup == "box_break");
+   bool isSingleTarget = isBoxBreak || setup == "range_rev" || tp2 <= 0;
+   double orderTP      = isSingleTarget ? tp1 : tp2;
 
    double lots = ComputeLotSize(botSymbol, brokerSymbol, slDistance, setup);
    if(lots <= 0) { Print("Computed zero lot size for ", botSymbol); return; }
@@ -426,8 +437,19 @@ void TryEnter(string botSymbol, string block)
      }
 
    ulong orderTicket = trade.ResultOrder();
-   if(!isBoxBreak)
+   if(!isSingleTarget)
       GlobalVariableSet("ftmo_ea_tp1_" + (string)orderTicket, tp1);
+   // v7 range_rev SL lock, stored as R-multiples of the signal's own risk.
+   if(setup == "range_rev")
+     {
+      double lockTrig = JsonNum(block, "sl_lock_trigger");
+      double lockTo   = JsonNum(block, "sl_lock_to");
+      if(lockTrig > 0 && lockTo > 0)
+        {
+         GlobalVariableSet("ftmo_ea_locktrig_" + (string)orderTicket, MathAbs(lockTrig - JsonNum(block, "entry_price")) / slDistance);
+         GlobalVariableSet("ftmo_ea_lockto_"   + (string)orderTicket, MathAbs(lockTo   - JsonNum(block, "entry_price")) / slDistance);
+        }
+     }
    // box_break: no tp1-partial GlobalVariable registered -- ManageOpenPositions()
    // skips any ticket without one (see its GlobalVariableCheck(tp1Key) guard), so
    // the broker's own TP order (= tp1, the single real target) handles the full
@@ -514,6 +536,53 @@ double ComputeLotSize(string botSymbol, string brokerSymbol, double slDistance, 
 
    lots = MathMin(volMax, lots);
    return NormalizeDouble(lots, 2);
+  }
+
+//+------------------------------------------------------------------+
+//| v7 range_rev SL lock: once live price reaches the trigger R (1:2),|
+//| move the SL to the lock R (1:1) one time. Broker TP (1:3) stays.  |
+//+------------------------------------------------------------------+
+void ManageSlLocks()
+  {
+   for(int i = 0; i < PositionsTotal(); i++)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket)) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
+
+      string trigKey = "ftmo_ea_locktrig_" + (string)ticket;
+      string doneKey = "ftmo_ea_lockdone_" + (string)ticket;
+      if(!GlobalVariableCheck(trigKey) || GlobalVariableCheck(doneKey)) continue;
+
+      string sym   = PositionGetString(POSITION_SYMBOL);
+      bool isLong  = PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY;
+      double entry = PositionGetDouble(POSITION_PRICE_OPEN);
+      double curSL = PositionGetDouble(POSITION_SL);
+      double curTP = PositionGetDouble(POSITION_TP);
+
+      // Original SL = the SL on the first pass (nothing else moves a range_rev SL).
+      string origKey = "ftmo_ea_lockorig_" + (string)ticket;
+      if(!GlobalVariableCheck(origKey)) GlobalVariableSet(origKey, curSL);
+      double R = MathAbs(entry - GlobalVariableGet(origKey));
+      if(R <= 0) continue;
+
+      double trigR = GlobalVariableGet(trigKey);
+      double toR   = GlobalVariableCheck("ftmo_ea_lockto_" + (string)ticket) ? GlobalVariableGet("ftmo_ea_lockto_" + (string)ticket) : 1.0;
+      double price = isLong ? SymbolInfoDouble(sym, SYMBOL_BID) : SymbolInfoDouble(sym, SYMBOL_ASK);
+      double profitR = isLong ? (price - entry) / R : (entry - price) / R;
+      if(profitR < trigR) continue;
+
+      int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      double newSL = NormalizeDouble(isLong ? entry + toR * R : entry - toR * R, digits);
+      if(trade.PositionModify(ticket, newSL, curTP))
+        {
+         GlobalVariableSet(doneKey, 1);
+         Print("SL lock: ", sym, " ticket ", ticket, " reached ", DoubleToString(profitR, 2),
+               "R, SL moved to ", newSL, " (", DoubleToString(toR, 2), "R)");
+        }
+      else
+         Print("SL lock modify failed for ticket ", ticket, ": ", trade.ResultRetcodeDescription());
+     }
   }
 
 //+------------------------------------------------------------------+
