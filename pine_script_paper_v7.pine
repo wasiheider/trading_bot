@@ -1,6 +1,6 @@
 // =============================================================================
 // PAPER TRADING — WYCKOFF RANGE REVERSAL v7
-// Daily Pivot Range | 4H BOS Reversal at the Boundaries | 4H Entry
+// Daily Pivot Range | 1H BOS Reversal at the Boundaries | 1H Entry
 // =============================================================================
 // Replaces every v5 entry model (A/B/C/D/E) with ONE setup, per user spec
 // 2026-09-28. v5 is kept untouched in pine_script_paper_v5.pine for rollback.
@@ -14,18 +14,18 @@
 //   No entries while price is more than max_break_pct beyond the range.
 //
 // Taps (market structure, not candles):
-//   Top tap = a confirmed 4H swing high in the top zone (or above the range
-//   high). A second tap only counts after price pulls back and forms a 4H swing
+//   Top tap = a confirmed 1H swing high in the top zone (or above the range
+//   high). A second tap only counts after price pulls back and forms a 1H swing
 //   low below the top zone. Bottom = mirror image. Counts reset on a new range.
 //
 // Setup (both sides, mirror images):
 //   TOP    : price trades into the top zone (wick within zone_pct of range high,
 //            or above it) -> the highest high since entering the zone is the
-//            reversal wick -> 4H close breaks BELOW the most recent confirmed 4H
+//            reversal wick -> 1H close breaks BELOW the most recent confirmed 1H
 //            swing low (bearish BOS, swing low must sit in the upper half of
 //            the range) -> SHORT at the BOS bar's close.
 //   BOTTOM : price trades into the bottom zone -> lowest low since entering is
-//            the reversal wick -> 4H close breaks ABOVE the most recent 4H swing
+//            the reversal wick -> 1H close breaks ABOVE the most recent 1H swing
 //            high (bullish BOS, swing high in the lower half) -> LONG at close.
 //
 // Exits (changed 2026-10-02, user spec):
@@ -35,16 +35,16 @@
 //   the trade.
 //
 // Box Break (v5 Entry E, moved onto the Daily range 2026-09-28):
-//   4H close above range high -> LONG | 4H close below range low -> SHORT.
+//   1H close above range high -> LONG | 1H close below range low -> SHORT.
 //   SL = opposite range wall, single target at 1:1 RR, full close (E exits).
 //   One break per side per range.
 //
 // Mid Continuation (added 2026-09-28, user spec):
-//   Price comes down from the top zone, a 4H candle trades to/through 50% of
+//   Price comes down from the top zone, a 1H candle trades to/through 50% of
 //   the range but CLOSES back above it (candle 1, arms the setup), only while
-//   the top has fewer than 2 completed 4H taps. The NEXT 4H candle must pierce
+//   the top has fewer than 2 completed 1H taps. The NEXT 1H candle must pierce
 //   and close above candle 1's high -> LONG at candle 2's close. Mirror image
-//   from the bottom -> SHORT. Any 4H close through the mid kills the setup
+//   from the bottom -> SHORT. Any 1H close through the mid kills the setup
 //   until price revisits that boundary zone.
 //   SL = beyond the lower wick of candles 1-2. TP1 1:1 (50%), TP2 1:2, SL
 //   stays put after TP1. Risk 0.25% (smaller range play).
@@ -52,14 +52,16 @@
 // Risk: 0.5% ($500 on the $100K paper account) on every position, except
 // Mid Continuation at 0.25% ($250).
 //
-// Chart       : Load on 4H (signals are suppressed on any other timeframe)
+// Chart       : Load on 1H (signals are suppressed on any other timeframe).
+//               Moved from 1H to 1H 2026-10-02 (user): every entry, tap, and
+//               candle rule runs on 1H; only the range is Daily.
 // Webhook     : https://tradingbot-production-1e5a.up.railway.app/webhook/paper
 // Token       : paper_wasirizvi_wyckoffstrategy
 // =============================================================================
 
 //@version=6
 strategy(
-     title             = "Paper Wyckoff v7 — Daily Range / 4H BOS Reversal",
+     title             = "Paper Wyckoff v7 — Daily Range / 1H BOS Reversal",
      shorttitle        = "PAPER-v7",
      overlay           = true,
      pyramiding        = 0,
@@ -77,7 +79,7 @@ pivot_len     = input.int(5,      "Daily Pivot Length for Range (bars each side)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
 max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
 
-bos_pivot_len = input.int(3,      "4H Swing Pivot Length for BOS",                    group="Entry", minval=2,   maxval=10)
+bos_pivot_len = input.int(3,      "1H Swing Pivot Length for BOS",                    group="Entry", minval=2,   maxval=10)
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
 tp_rr         = input.float(3.0,  "Take Profit R:R (full close)",                     group="Entry", minval=1.0, step=0.1)
@@ -85,10 +87,10 @@ lock_at_rr    = input.float(2.0,  "Move SL once price reaches R:R",             
 lock_to_rr    = input.float(1.0,  "...to this R:R (locked profit)",                   group="Entry", minval=0.0, step=0.1)
 
 exclude_disabled = input.bool(true, "Skip GBPUSD / AUDUSD / GBPJPY (disabled instruments)", group="Filters")
-bb_enabled       = input.bool(true, "Enable Box Break (4H close beyond Daily range)",      group="Filters")
+bb_enabled       = input.bool(true, "Enable Box Break (1H close beyond Daily range)",      group="Filters")
 
 mc_enabled       = input.bool(true,  "Enable Mid Continuation",                              group="Mid Continuation")
-mc_max_taps      = input.int(2,      "Allowed while boundary 4H taps are below",             group="Mid Continuation", minval=1, maxval=10)
+mc_max_taps      = input.int(2,      "Allowed while boundary 1H taps are below",             group="Mid Continuation", minval=1, maxval=10)
 mc_tp1_rr        = input.float(1.0,  "TP1 R:R (closes 50%)",                                 group="Mid Continuation", minval=0.5, step=0.1)
 mc_tp2_rr        = input.float(2.0,  "TP2 R:R (closes remaining 50%)",                       group="Mid Continuation", minval=0.5, step=0.1)
 
@@ -119,7 +121,7 @@ _min_sl_price = pip_size * min_sl_pips
 price_format  = is_us100 ? "#.#" : is_xauusd ? "#.##" : "#.#####"
 
 instrument_ok = not exclude_disabled or not (is_gbpusd or is_audusd or is_gbpjpy)
-tf_ok         = timeframe.period == "240"
+tf_ok         = timeframe.period == "60"
 
 risk_dollars_eff = 500.0  // 0.5% of the $100K paper account, every instrument
 risk_dollars_mc  = 250.0  // 0.25% for Mid Continuation
@@ -161,7 +163,7 @@ range_broken = range_valid and
       close < range_low  - range_size * (max_break_pct / 100.0))
 
 // =============================================================================
-// 4H SWING STRUCTURE
+// 1H SWING STRUCTURE
 // =============================================================================
 _ph4 = ta.pivothigh(high, bos_pivot_len, bos_pivot_len)
 _pl4 = ta.pivotlow(low,   bos_pivot_len, bos_pivot_len)
@@ -186,7 +188,7 @@ var float top_extreme = na    // reversal wick high (SL anchor for shorts)
 var bool  bot_active  = false
 var float bot_extreme = na    // reversal wick low  (SL anchor for longs)
 
-// 4H taps per boundary (market structure) + which boundary price came from.
+// 1H taps per boundary (market structure) + which boundary price came from.
 var int    top_taps      = 0
 var int    bot_taps      = 0
 var bool   top_tap_armed = true
@@ -212,9 +214,9 @@ if in_bot_zone
     bot_extreme := bot_active ? math.min(bot_extreme, low) : low
     bot_active  := true
 
-// Market-structure taps: a confirmed 4H swing high in the top zone (or above
+// Market-structure taps: a confirmed 1H swing high in the top zone (or above
 // the range high) is one top tap. The next one only counts after price pulls
-// back and forms a 4H swing low below the top zone. Bottom is the mirror.
+// back and forms a 1H swing low below the top zone. Bottom is the mirror.
 if range_valid and not na(_ph4)
     if _ph4 >= range_high - zone_size and top_tap_armed
         top_taps      += 1
@@ -236,9 +238,9 @@ if in_bot_zone
 
 // =============================================================================
 // BOS DETECTION
-//   Bear: 4H close crosses below the latest confirmed 4H swing low, which sits
+//   Bear: 1H close crosses below the latest confirmed 1H swing low, which sits
 //         in the upper half of the range, while the top side is active.
-//   Bull: 4H close crosses above the latest confirmed 4H swing high, which sits
+//   Bull: 1H close crosses above the latest confirmed 1H swing high, which sits
 //         in the lower half of the range, while the bottom side is active.
 // =============================================================================
 no_position = strategy.opentrades == 0
@@ -279,7 +281,7 @@ short_signal = bear_bos and _base_ok and not na(short_risk) and short_risk > 0
 long_signal  = bull_bos and _base_ok and not na(long_risk)  and long_risk  > 0 and not short_signal
 
 // =============================================================================
-// BOX BREAK — 4H close beyond the Daily range, E exits (SL opposite wall, 1:1)
+// BOX BREAK — 1H close beyond the Daily range, E exits (SL opposite wall, 1:1)
 // =============================================================================
 var bool bb_long_done  = false
 var bool bb_short_done = false
@@ -303,7 +305,7 @@ short_signal_bb = _bb_ok and not bb_short_done and close < range_low  and close[
 
 // =============================================================================
 // MID CONTINUATION — failed close through 50% (candle 1), confirmed by the
-// next 4H candle piercing and closing beyond candle 1 (candle 2 = entry)
+// next 1H candle piercing and closing beyond candle 1 (candle 2 = entry)
 // =============================================================================
 // Candle 1 of the previous bar, stored at the end of that bar's evaluation.
 var float mc_l_c1_high = na
@@ -354,7 +356,7 @@ var bool   lock_done = false   // range reversal SL already moved to lock_to_rr
 // single-target shape as box_break). sl_lock_* are informational.
 _entry_msg(dir, lots, entry, sl, tp, lock_trig, lock_to, bos) =>
     '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-         '","direction":"' + dir + '","setup":"range_rev","timeframe":"240"' +
+         '","direction":"' + dir + '","setup":"range_rev","timeframe":"60"' +
          ',"lot_size":'    + str.tostring(lots) +
          ',"entry_price":' + str.tostring(entry, price_format) +
          ',"stop_loss":'   + str.tostring(sl,    price_format) +
@@ -399,7 +401,7 @@ if long_signal
 
 _bb_msg(dir, lots, entry, sl, tp1) =>
     '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-         '","direction":"' + dir + '","setup":"box_break","timeframe":"240"' +
+         '","direction":"' + dir + '","setup":"box_break","timeframe":"60"' +
          ',"lot_size":'    + str.tostring(lots) +
          ',"entry_price":' + str.tostring(entry, price_format) +
          ',"stop_loss":'   + str.tostring(sl,    price_format) +
@@ -436,7 +438,7 @@ if short_signal_bb
 
 _mc_msg(dir, lots, entry, sl, tp1, tp2) =>
     '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
-         '","direction":"' + dir + '","setup":"mid_cont","timeframe":"240"' +
+         '","direction":"' + dir + '","setup":"mid_cont","timeframe":"60"' +
          ',"lot_size":'    + str.tostring(lots) +
          ',"entry_price":' + str.tostring(entry, price_format) +
          ',"stop_loss":'   + str.tostring(sl,    price_format) +
@@ -474,7 +476,7 @@ if short_signal_mc
     _entry_alert_msg     := _mc_msg("SHORT", _mc_lots, mc_short_entry, mc_short_sl, mc_short_tp1, mc_short_tp2)
 
 // Mid Continuation state. Store this bar as candle 1 if it armed (and no
-// entry fired on it); one trade per visit to a boundary; a 4H close through
+// entry fired on it); one trade per visit to a boundary; a 1H close through
 // the mid means the continuation failed until the boundary is revisited.
 mc_l_c1_bar := -1
 mc_s_c1_bar := -1
@@ -575,11 +577,23 @@ prev_pos := strategy.position_size
 // =============================================================================
 // VISUALS
 // =============================================================================
-plot(show_range and range_valid ? range_high : na, "Daily Range High", color=color.red,                linewidth=2, style=plot.style_linebr)
-plot(show_range and range_valid ? range_mid  : na, "Range Mid",        color=color.gray,               linewidth=1, style=plot.style_linebr)
-plot(show_range and range_valid ? range_low  : na, "Daily Range Low",  color=color.green,              linewidth=2, style=plot.style_linebr)
-plot(show_range and range_valid ? range_high - zone_size : na, "Top Zone",    color=color.new(color.red,   60), linewidth=1, style=plot.style_linebr)
-plot(show_range and range_valid ? range_low  + zone_size : na, "Bottom Zone", color=color.new(color.green, 60), linewidth=1, style=plot.style_linebr)
+// Current range only: flat High / Mid / Low lines from the bar this range
+// started on, extended right. Older ranges are not drawn (user, 2026-10-02).
+var int range_start_bar = na
+if range_changed or (range_valid and na(range_start_bar))
+    range_start_bar := bar_index
+var line ln_hi  = na
+var line ln_mid = na
+var line ln_lo  = na
+if barstate.islast
+    line.delete(ln_hi)
+    line.delete(ln_mid)
+    line.delete(ln_lo)
+    if show_range and range_valid
+        _x1 = math.max(nz(range_start_bar, bar_index), bar_index - 4900)
+        ln_hi  := line.new(_x1, range_high, bar_index, range_high, extend=extend.right, color=color.red,   width=2)
+        ln_mid := line.new(_x1, range_mid,  bar_index, range_mid,  extend=extend.right, color=color.gray,  width=1, style=line.style_dashed)
+        ln_lo  := line.new(_x1, range_low,  bar_index, range_low,  extend=extend.right, color=color.green, width=2)
 
 bgcolor(top_active ? color.new(color.red,   92) : na, title="Top side active")
 bgcolor(bot_active ? color.new(color.green, 92) : na, title="Bottom side active")
@@ -588,10 +602,10 @@ plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.a
 plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
 
 if show_signals and short_signal
-    label.new(bar_index, high, "4H BOS ↓ " + str.tostring(last_pl, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
+    label.new(bar_index, high, "1H BOS ↓ " + str.tostring(last_pl, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.orange, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
 if show_signals and long_signal
-    label.new(bar_index, low, "4H BOS ↑ " + str.tostring(last_ph, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
+    label.new(bar_index, low, "1H BOS ↑ " + str.tostring(last_ph, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.aqua, 30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
 plotshape(show_signals and short_signal_bb, "SHORT_BB", shape.triangledown, location.abovebar, color.fuchsia, size=size.normal)
@@ -628,18 +642,18 @@ if show_signals and (sl_short_hit or sl_long_hit)
 // =============================================================================
 _fmt(v) => na(v) ? "--" : str.tostring(v, price_format)
 
-status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 4H" :
+status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 1H" :
      not instrument_ok ? "INSTRUMENT DISABLED" :
      not range_valid ? (na(last_dph) or na(last_dpl) ? "BUILDING RANGE: waiting for Daily swing high + low" : "NO VALID RANGE: latest Daily swing high is below the swing low (trending), waiting for new swings") :
      in_trade ? (strategy.position_size > 0 ? "IN TRADE: LONG" : "IN TRADE: SHORT") + (tp1_hit ? " (TP1 hit)" : "") +
          (s_setup == "rev" and lock_done ? " | SL locked at 1:" + str.tostring(lock_to_rr) + " " + _fmt(s_sl) : "") :
-     mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 4H close > " + _fmt(mc_l_c1_high) :
-     mc_s_c1_bar == bar_index ? "MID CONT SHORT ARMED: next 4H close < " + _fmt(mc_s_c1_low) :
-     top_active ? (not na(last_pl) and last_pl > range_mid ? "TOP ACTIVE: short on 4H close < " + _fmt(last_pl) + " (BOS)" :
-                   "TOP ACTIVE: waiting for a 4H swing low in the upper half") :
-     bot_active ? (not na(last_ph) and last_ph < range_mid ? "BOTTOM ACTIVE: long on 4H close > " + _fmt(last_ph) + " (BOS)" :
-                   "BOTTOM ACTIVE: waiting for a 4H swing high in the lower half") :
-     "WAITING: mid-range. Reversal needs a zone tap; box break needs 4H close beyond " + _fmt(range_high) + " / " + _fmt(range_low)
+     mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 1H close > " + _fmt(mc_l_c1_high) :
+     mc_s_c1_bar == bar_index ? "MID CONT SHORT ARMED: next 1H close < " + _fmt(mc_s_c1_low) :
+     top_active ? (not na(last_pl) and last_pl > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(last_pl) + " (BOS)" :
+                   "TOP ACTIVE: waiting for a 1H swing low in the upper half") :
+     bot_active ? (not na(last_ph) and last_ph < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(last_ph) + " (BOS)" :
+                   "BOTTOM ACTIVE: waiting for a 1H swing high in the lower half") :
+     "WAITING: mid-range. Reversal needs a zone tap; box break needs 1H close beyond " + _fmt(range_high) + " / " + _fmt(range_low)
 status_clr = not tf_ok or not instrument_ok ? color.red : not range_valid ? color.gray : in_trade ? color.yellow :
      (mc_l_c1_bar == bar_index or mc_s_c1_bar == bar_index) ? color.yellow : top_active ? color.orange : bot_active ? color.aqua : color.gray
 
@@ -671,9 +685,9 @@ if show_info and barstate.islast
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
     table.cell(info, 0, 0, "PAPER v7",  text_color=color.white, text_size=_tsize)
-    table.cell(info, 1, 0, "Daily Range | 4H BOS Reversal", text_color=color.yellow, text_size=_tsize)
+    table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 1, tf_ok ? "4H OK" : "WRONG TF — load on 4H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
+    table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
     table.cell(info, 0, 2, "Symbol",    text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 2, symbol_name + (instrument_ok ? "" : " (DISABLED)"), text_color=instrument_ok ? color.white : color.red, text_size=_tsize)
     table.cell(info, 0, 3, "Range High", text_color=color.gray, text_size=_tsize)
@@ -690,7 +704,7 @@ if show_info and barstate.islast
     table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall, TP 1:1" + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 8, "Risk",       text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#") + " | Mid Cont $" + str.tostring(risk_dollars_mc, "#"), text_color=color.gray, text_size=_tsize)
-    table.cell(info, 0, 10, "4H Taps (structure)",   text_color=color.gray, text_size=_tsize)
+    table.cell(info, 0, 10, "1H Taps (structure)",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 10, "Top " + str.tostring(top_taps) + " / Bottom " + str.tostring(bot_taps) + " | from: " + last_zone, text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 9, "Position",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 9, in_trade ? (strategy.position_size > 0 ? "LONG" : "SHORT") + (tp1_hit ? " (TP1 hit)" : "") + (s_setup == "rev" and lock_done ? " | SL locked" : "") : "FLAT",

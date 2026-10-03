@@ -3,8 +3,8 @@
 Shared by GET /scorecard (dashboard card) and the Friday Telegram scorecard
 in main.py, so both always show the same numbers.
 
-v7 trades = setup range_rev or mid_cont, or box_break on the 4H timeframe
-("240"), dated on/after V7_START. v5 box_break trades were 15M, so the
+v7 trades = setup range_rev or mid_cont, or box_break on the v7 timeframes
+(1H "60", or 4H "240" from 9/28-10/2), dated on/after V7_START. v5 box_break trades were 15M, so the
 timeframe check keeps them out even though the setup name is shared.
 """
 from datetime import datetime, timedelta
@@ -17,8 +17,8 @@ CT = pytz.timezone("America/Chicago")
 V7_START = "2026-09-28"
 
 SETUPS = [
-    ("range_rev", "F — 4H Reversal"),
-    ("box_break", "E — Box Break (4H)"),
+    ("range_rev", "F — Range Reversal"),
+    ("box_break", "E — Box Break (v7)"),
     ("mid_cont",  "G — Mid Continuation"),
 ]
 
@@ -29,7 +29,7 @@ def _is_v7(t) -> bool:
     setup = (t.get("setup") or "").lower()
     if setup in ("range_rev", "mid_cont"):
         return True
-    return setup == "box_break" and str(t.get("timeframe")) == "240"
+    return setup == "box_break" and str(t.get("timeframe")) in ("60", "240")
 
 
 def _planned_risk(setup: str) -> float:

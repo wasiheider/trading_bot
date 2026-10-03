@@ -92,7 +92,7 @@ Push to `paper-trading` → Railway auto-deploys.
 | `config.py` | All environment variables and risk constants |
 | `notifier.py` | Telegram send helper — `parse_mode: HTML` |
 | `logger.py` | Legacy SQLite schema — not actively wired into current flow |
-| `pine_script_paper_v7.pine` | **Active Pine Script** — load on all 13 × 4H TV charts |
+| `pine_script_paper_v7.pine` | **Active Pine Script** — load on all 13 × 1H TV charts |
 | `pine_script_paper_v5.pine` | Retired 2026-09-28 — kept for rollback |
 | `pine_script_paper_v4.pine` | Retired — kept for reference only |
 | `dashboard.html` | Single-file live dashboard served at `/dashboard` |
@@ -105,7 +105,7 @@ Push to `paper-trading` → Railway auto-deploys.
 
 ## Strategy — v7 (current, 2026-09-28)
 
-`pine_script_paper_v7.pine`, loaded on **4H** charts (signals suppressed on any other timeframe). Replaces every v5 entry model; v5 file kept untouched for rollback.
+`pine_script_paper_v7.pine`, loaded on **1H** charts (signals suppressed on any other timeframe). **Moved from 4H to 1H on 2026-10-02 (user: "move everything to 1 Hour")**: every entry trigger, tap, and candle rule below runs on 1H candles/swings; only the range is Daily. Read "4H" in the bullets below as 1H. Replaces every v5 entry model; v5 file kept untouched for rollback.
 
 - **Range (reworked 2026-10-02):** the **most recent** confirmed Daily swing high and swing low (`pivot_len` 5, non-repainting), read from chart history and updated whenever a newer Daily swing confirms; frozen while a trade is open. No entries while price is >30% of range beyond it. A new range resets zone state, taps, and box-break flags. No touch/mid-cross/swing quality gate.
 - **Taps are market structure, not candles:** a top tap = a confirmed 4H swing high (`bos_pivot_len` 3) in the top 10% zone or above the range high; another only counts after a 4H swing low forms below the top zone. Bottom mirrors. Used by Mid Continuation's < 2 taps rule.
@@ -115,7 +115,7 @@ Push to `paper-trading` → Railway auto-deploys.
 - **Risk:** flat 0.5% on every instrument except Mid Continuation at 0.25% (paper: `RISK_PER_TRADE` / `MID_CONT_RISK_PER_TRADE` in `config.py`, applied per setup in `handle_paper_signal`; FTMO EA `InpRiskPercent` 0.5, halved for `mid_cont`; US100/US500 2x bump removed). GBPUSD/AUDUSD/GBPJPY still skipped (input toggle).
 - v5-only filters (COT hard-block, volume, US500 NY-AM, Commercial/Retail block, session windows) are **not** in v7.
 - FTMO EA: `InpBreakevenAtTP1` / `InpTrailEnabled` both default false to match.
-- **Server enforces 4H-only:** `handle_paper_signal` rejects any entry whose `timeframe` isn't `"240"` (`V7_TIMEFRAME` in `server.py`) with a "Paper Signal Blocked" Telegram — catches leftover v5 15M alerts. TP/SL lifecycle events are not affected.
+- **Server enforces 1H-only:** `handle_paper_signal` rejects any entry whose `timeframe` isn't `"60"` (`V7_TIMEFRAME` in `server.py`) with a "Paper Signal Blocked" Telegram — catches leftover v5 15M alerts. TP/SL lifecycle events are not affected.
 
 ## Strategy — v5 (retired 2026-09-28, kept for reference)
 
@@ -311,7 +311,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 ## Pine Script Setup (TradingView)
 
 - **Active script:** `pine_script_paper_v7.pine` (v5 retired 2026-09-28)
-- **Chart timeframe:** 4H on all instruments
+- **Chart timeframe:** 1H on all instruments (v7, since 2026-10-02)
 - **Alert condition:** "Any alert() function call" — Once Per Bar Close
 - **Webhook URL:** `https://tradingbot-production-1e5a.up.railway.app/webhook/paper`
 - **Token input:** must match `PAPER_WEBHOOK_TOKEN` Railway env var

@@ -63,7 +63,7 @@ MICRO_MIRROR_TARGETS = set(MICRO_MIRROR_MAP.values())
 MICROS_ENABLED = False
 
 
-V7_TIMEFRAME = "240"  # only 4H entry signals are accepted
+V7_TIMEFRAME = "60"  # only 1H entry signals are accepted (v7 moved 4H -> 1H 2026-10-02)
 
 
 def _normalize_instrument(raw: str) -> str:
@@ -183,12 +183,12 @@ def handle_paper_signal(data):
     range_low   = data.get("range_low")
     sl_pips     = _calc_sl_pips(instrument, price, sl) or data.get("sl_pips")
 
-    # v7 is 4H-only (2026-09-28): reject entries from any other timeframe, e.g.
+    # v7 is 1H-only (4H 2026-09-28, 1H since 2026-10-02): reject entries from any other timeframe, e.g.
     # a leftover v5 15M alert still firing in TradingView. Lifecycle events
     # (TP/SL for already-open trades) go through handle_paper_lifecycle and
     # are unaffected.
     if str(timeframe) != V7_TIMEFRAME:
-        reason = f"non-4H entry (timeframe {timeframe}) — v7 is 4H-only; delete this chart's old alert"
+        reason = f"non-1H entry (timeframe {timeframe}) — v7 is 1H-only; recreate this chart's alert on 1H"
         send_telegram(f"{_MASCOT}\n🚫 <b>Paper Signal Blocked</b>\n<code>{instrument} {direction}</code> [{setup or '?'}]\nReason: {reason}")
         return jsonify({"status": "blocked", "reason": reason}), 200
 
@@ -249,7 +249,7 @@ def handle_paper_signal(data):
     emoji    = "🟢" if direction == "LONG" else "🔴"
     rr_line  = f"\nR:R: <code>{rr}</code>" if rr else ""
     bos_line = f"\nBOS: <code>{bos_level}</code>" if bos_level else ""
-    tf_label = "4H" if str(timeframe) == "240" else f"{timeframe}M"
+    tf_label = {"60": "1H", "240": "4H"}.get(str(timeframe), f"{timeframe}M")
     setup_label = {"spring": " · SPRING", "upthrust": " · UPTHRUST", "bos_div": " · BOS+DIV", "mid_bos": " · MID BOS", "box_break": " · BOX BREAK", "range_rev": " · RANGE REVERSAL", "mid_cont": " · MID CONTINUATION"}.get(setup, "")
 
     if limit_hit:

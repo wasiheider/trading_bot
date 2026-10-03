@@ -191,7 +191,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     </div>
     <div class="tb-dot" id="conn-dot"></div>
     <div>
-      <div class="tb-name">TRADING BOT V7 <span class="tb-tag">DAILY PIVOT RANGE · 4H BOS · REVERSAL + BOX BREAK + MID CONT</span></div>
+      <div class="tb-name">TRADING BOT V7 <span class="tb-tag">DAILY SWING RANGE · 1H BOS · REVERSAL + BOX BREAK + MID CONT</span></div>
       <div class="tb-clock" id="clock-line">Connecting...</div>
     </div>
   </div>
@@ -218,7 +218,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="exec-banner">
     <div>
       <div class="exec-mode">&#9654; Auto-Executing — OANDA Demo (Forex) · Log+Telegram (All Others)</div>
-      <div class="exec-sub">v7 live 2026-09-28 · 4H charts only · Range Reversal (F): 4H BOS at top/bottom zone, TP@1:3 full close · SL beyond reversal wick, moves to 1:1 once price hits 1:2 · Box Break (E): 4H close beyond Daily range, SL opposite wall, 1:1 full close · Mid Continuation (G): failed close through 50% + next 4H candle closes beyond it, &lt;2 taps on that boundary, TP1@1:1(50%) · TP2@1:2 · $500/trade (0.5%) all instruments, Mid Continuation $250 (0.25%) · v5 models A–D retired · Micros disabled · Active: EURUSD/USDJPY/EURNZD/NZDUSD/XAUUSD/XAGUSD/US30/US500/US100/USOIL/BTCUSD/USDCAD (GBPUSD disabled)</div>
+      <div class="exec-sub">v7 live 2026-09-28 · 1H charts only (Daily range) · Range Reversal (F): 1H BOS at top/bottom zone, TP@1:3 full close · SL beyond reversal wick, moves to 1:1 once price hits 1:2 · Box Break (E): 1H close beyond Daily range, SL opposite wall, 1:1 full close · Mid Continuation (G): failed close through 50% + next 1H candle closes beyond it, &lt;2 taps on that boundary, TP1@1:1(50%) · TP2@1:2 · $500/trade (0.5%) all instruments, Mid Continuation $250 (0.25%) · v5 models A–D retired · Micros disabled · Active: EURUSD/USDJPY/EURNZD/NZDUSD/XAUUSD/XAGUSD/US30/US500/US100/USOIL/BTCUSD/USDCAD (GBPUSD disabled)</div>
     </div>
     <span class="bd2 bg2">PAPER</span>
   </div>
@@ -256,9 +256,9 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
       <div class="card">
         <div class="ct">Schedule &amp; Filters</div>
         <div class="sr2"><span class="sl3">&#8635; Daily Reset</span><div class="st">00:00 CT<div class="sd">P&L + signal counters</div></div></div>
-        <div class="sr2"><span class="sl3">&#9654; Timeframe</span><div class="st">4H only<div class="sd">signals suppressed on other TFs</div></div></div>
+        <div class="sr2"><span class="sl3">&#9654; Timeframe</span><div class="st">1H only<div class="sd">signals suppressed on other TFs</div></div></div>
         <div class="sr2"><span class="sl3">&#9654; Range</span><div class="st">Daily pivots<div class="sd">locks once high + low confirmed</div></div></div>
-        <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">30% beyond<div class="sd">4H close past boundary = range reset</div></div></div>
+        <div class="sr2"><span class="sl3">&#9654; Range Break</span><div class="st">30% beyond<div class="sd">no entries 30% past range; range follows latest Daily swings</div></div></div>
         <div class="sr2"><span class="sl3">&#9654; Max Positions</span><div class="st">5 open<div class="sd">one per instrument</div></div></div>
         <div class="sr2"><span class="sl3">&#9825; Heartbeat</span><div class="st">Hourly<div class="sd">Railway keepalive</div></div></div>
       </div>
@@ -351,19 +351,19 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 
       <div class="card">
         <div class="ct">Strategy v7 Architecture</div>
-        <div class="row"><span class="rl">Chart</span><span class="rv" style="color:var(--b)">4H only · live 2026-09-28 · v5 (15M) retired</span></div>
+        <div class="row"><span class="rl">Chart</span><span class="rv" style="color:var(--b)">1H only (1H 9/28–10/2) · live 2026-09-28 · v5 (15M) retired</span></div>
         <div class="row"><span class="rl">Range High/Low</span><span class="rv" style="color:var(--b)">Daily pivot-anchored (5 bars each side, closed daily bars only) · locked until break</span></div>
         <div class="row"><span class="rl">Range Mid</span><span class="rv" style="color:var(--t2)">(High + Low) / 2 · boundary zones = 10% of range</span></div>
-        <div class="row"><span class="rl">F — Range Reversal</span><span class="rv" style="color:var(--pu)">Wick into top/bottom zone → 4H close breaks latest 4H swing low/high (in that half of the range) → entry at BOS close · both sides</span></div>
+        <div class="row"><span class="rl">F — Range Reversal</span><span class="rv" style="color:var(--pu)">Wick into top/bottom zone → 1H close breaks latest 1H swing low/high (in that half of the range) → entry at BOS close · both sides</span></div>
         <div class="row"><span class="rl">&nbsp;&nbsp;SL / TP</span><span class="rv" style="color:var(--g)">SL beyond reversal wick + 0.1× ATR · single TP at 1:3 (full close, no partials) · once price reaches 1:2, SL moves to 1:1 (locks 1R) · changed 2026-10-02</span></div>
-        <div class="row"><span class="rl">E — Box Break</span><span class="rv" style="color:#ff9800">4H close beyond Daily range high/low · SL = opposite wall · 1:1 single target, full close · one per side per range</span></div>
-        <div class="row"><span class="rl">G — Mid Continuation</span><span class="rv" style="color:#ffd600">From a boundary, 4H candle fails to close through 50% → next 4H candle closes beyond it → entry back toward that boundary · only while that boundary has &lt;2 4H taps</span></div>
+        <div class="row"><span class="rl">E — Box Break</span><span class="rv" style="color:#ff9800">1H close beyond Daily range high/low · SL = opposite wall · 1:1 single target, full close · one per side per range</span></div>
+        <div class="row"><span class="rl">G — Mid Continuation</span><span class="rv" style="color:#ffd600">From a boundary, 1H candle fails to close through 50% → next 1H candle closes beyond it → entry back toward that boundary · only while that boundary has &lt;2 1H taps</span></div>
         <div class="row"><span class="rl">&nbsp;&nbsp;SL / TP</span><span class="rv" style="color:var(--g)">SL beyond the two candles' wick · TP1 1:1 (50%) · TP2 1:2 · SL stays put</span></div>
         <div class="row"><span class="rl">Risk / Trade</span><span class="rv">$500 (0.5%) all instruments & setups · Mid Continuation $250 (0.25%) · FTMO EA same %</span></div>
         <div class="row"><span class="rl">Blocked</span><span class="rv" style="color:var(--t3)">GBPUSD / AUDUSD / GBPJPY · one open position per instrument</span></div>
         <div class="row"><span class="rl">Not in v7</span><span class="rv" style="color:var(--t3)">v5 COT / volume / session filters and models A–D · history rows A–E before 2026-09-28 are v5 trades</span></div>
         <div class="row"><span class="rl">Micros</span><span class="rv" style="color:var(--t3)">MNQ/MES/MYM/MGC/MCL disabled 2026-08-25 — was double-booking parent PnL into account balance</span></div>
-        <div class="row"><span class="rl">Range Reset</span><span class="rv" style="color:var(--t2)">4H close 30% beyond a boundary</span></div>
+        <div class="row"><span class="rl">Range Reset</span><span class="rv" style="color:var(--t2)">none: range = latest Daily swing high/low; no entries 30% beyond</span></div>
       </div>
     </div>
   </div>
@@ -917,12 +917,12 @@ function renderSessionBreakdown(trades) {
     if (s === 'bos_div') return 'C — BOS+Div';
     if (s === 'mid_bos') return 'D — Mid Retest';
     if (s === 'box_fade' || s === 'box_break') return 'E — Box Break';
-    if (s === 'range_rev') return 'F — 4H Reversal';
+    if (s === 'range_rev') return 'F — Range Reversal';
     if (s === 'mid_cont') return 'G — Mid Continuation';
     return 'A — BOS';
   }
   const mBuckets = bucket(closed, t => setupToModel(t.setup));
-  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div', 'D — Mid Retest', 'E — Box Break', 'F — 4H Reversal', 'G — Mid Continuation'];
+  const MODEL_ORDER = ['A — BOS', 'B — Wyckoff', 'C — BOS+Div', 'D — Mid Retest', 'E — Box Break', 'F — Range Reversal', 'G — Mid Continuation'];
 
   const totalTrades = closed.length;
   const totalWins   = closed.filter(t => (t.result||'').includes('TP')).length;
