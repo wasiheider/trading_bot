@@ -5,10 +5,18 @@
 // Replaces every v5 entry model (A/B/C/D/E) with ONE setup, per user spec
 // 2026-09-28. v5 is kept untouched in pine_script_paper_v5.pine for rollback.
 //
-// Range:
-//   Range High / Low = confirmed Daily pivot high / low (non-repainting: taken
-//   from the last CLOSED daily bar). Levels lock once both sides exist and only
-//   reset when price closes beyond a boundary by max_break_pct of range size.
+// Range (reworked 2026-10-02, user spec):
+//   Range High / Low = the MOST RECENT confirmed Daily swing high / swing low,
+//   read from chart history (non-repainting: from the last CLOSED daily bar).
+//   Updates whenever a newer Daily swing confirms, so it follows current
+//   structure instead of locking onto the first pivots it saw. Frozen while a
+//   trade is open; picks up the latest swings as soon as the position is flat.
+//   No entries while price is more than max_break_pct beyond the range.
+//
+// Taps (market structure, not candles):
+//   Top tap = a confirmed 4H swing high in the top zone (or above the range
+//   high). A second tap only counts after price pulls back and forms a 4H swing
+//   low below the top zone. Bottom = mirror image. Counts reset on a new range.
 //
 // Setup (both sides, mirror images):
 //   TOP    : price trades into the top zone (wick within zone_pct of range high,
@@ -67,7 +75,7 @@ strategy(
 // =============================================================================
 pivot_len     = input.int(5,      "Daily Pivot Length for Range (bars each side)",   group="Range", minval=2,   maxval=20)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
-max_break_pct = input.float(30.0, "Reset range if price closes beyond by % of range", group="Range", minval=5.0, step=5.0)
+max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
 
 bos_pivot_len = input.int(3,      "4H Swing Pivot Length for BOS",                    group="Entry", minval=2,   maxval=10)
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
@@ -121,26 +129,29 @@ _quote_to_usd    = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency ==
 atr_now = ta.atr(14)
 
 // =============================================================================
-// DAILY PIVOT-ANCHORED RANGE
+// DAILY RANGE = MOST RECENT CONFIRMED DAILY SWING HIGH / LOW
 // expr[1] + lookahead_on = value from the last CLOSED daily bar, so the range
-// never repaints intraday.
+// never repaints intraday. A Daily swing confirms pivot_len days after it forms.
 // =============================================================================
 _d_ph = request.security(syminfo.tickerid, "D", ta.pivothigh(high, pivot_len, pivot_len)[1], lookahead=barmerge.lookahead_on)
 _d_pl = request.security(syminfo.tickerid, "D", ta.pivotlow(low,  pivot_len, pivot_len)[1],  lookahead=barmerge.lookahead_on)
 
-var float range_high   = na
-var float range_low    = na
-var bool  range_locked = false
+// Latest confirmed Daily swings, tracked continuously from history.
+var float last_dph = na
+var float last_dpl = na
+if not na(_d_ph)
+    last_dph := _d_ph
+if not na(_d_pl)
+    last_dpl := _d_pl
 
-if not range_locked
-    if not na(_d_ph)
-        range_high := na(range_high) ? _d_ph : math.max(range_high, _d_ph)
-    if not na(_d_pl)
-        range_low  := na(range_low)  ? _d_pl : math.min(range_low,  _d_pl)
-    if not na(range_high) and not na(range_low) and range_high > range_low
-        range_locked := true
+var float range_high = na
+var float range_low  = na
+if strategy.position_size == 0
+    range_high := last_dph
+    range_low  := last_dpl
 
-range_valid = range_locked and not na(range_high) and not na(range_low) and range_high > range_low
+range_valid   = not na(range_high) and not na(range_low) and range_high > range_low
+range_changed = range_valid and (range_high != range_high[1] or range_low != range_low[1])
 range_size  = range_valid ? range_high - range_low : na
 range_mid   = range_valid ? (range_high + range_low) / 2 : na
 zone_size   = range_valid ? range_size * (zone_pct / 100.0) : na
@@ -175,6 +186,25 @@ var float top_extreme = na    // reversal wick high (SL anchor for shorts)
 var bool  bot_active  = false
 var float bot_extreme = na    // reversal wick low  (SL anchor for longs)
 
+// 4H taps per boundary (market structure) + which boundary price came from.
+var int    top_taps      = 0
+var int    bot_taps      = 0
+var bool   top_tap_armed = true
+var bool   bot_tap_armed = true
+var string last_zone     = "none"
+
+// New range -> start every boundary state fresh.
+if range_changed
+    top_active    := false
+    top_extreme   := na
+    bot_active    := false
+    bot_extreme   := na
+    top_taps      := 0
+    bot_taps      := 0
+    top_tap_armed := true
+    bot_tap_armed := true
+    last_zone     := "none"
+
 if in_top_zone
     top_extreme := top_active ? math.max(top_extreme, high) : high
     top_active  := true
@@ -182,15 +212,23 @@ if in_bot_zone
     bot_extreme := bot_active ? math.min(bot_extreme, low) : low
     bot_active  := true
 
-// 4H taps per boundary: each separate 4H visit into the zone counts once.
+// Market-structure taps: a confirmed 4H swing high in the top zone (or above
+// the range high) is one top tap. The next one only counts after price pulls
+// back and forms a 4H swing low below the top zone. Bottom is the mirror.
+if range_valid and not na(_ph4)
+    if _ph4 >= range_high - zone_size and top_tap_armed
+        top_taps      += 1
+        top_tap_armed := false
+    if _ph4 > range_low + zone_size
+        bot_tap_armed := true
+if range_valid and not na(_pl4)
+    if _pl4 <= range_low + zone_size and bot_tap_armed
+        bot_taps      += 1
+        bot_tap_armed := false
+    if _pl4 < range_high - zone_size
+        top_tap_armed := true
+
 // last_zone = which boundary price most recently came from (Mid Continuation).
-var int    top_taps  = 0
-var int    bot_taps  = 0
-var string last_zone = "none"
-if in_top_zone and not in_top_zone[1]
-    top_taps += 1
-if in_bot_zone and not in_bot_zone[1]
-    bot_taps += 1
 if in_top_zone
     last_zone := "top"
 if in_bot_zone
@@ -245,6 +283,9 @@ long_signal  = bull_bos and _base_ok and not na(long_risk)  and long_risk  > 0 a
 // =============================================================================
 var bool bb_long_done  = false
 var bool bb_short_done = false
+if range_changed
+    bb_long_done  := false
+    bb_short_done := false
 
 bb_long_entry  = close
 bb_long_sl     = range_low
@@ -450,8 +491,8 @@ if long_signal_mc or (last_zone == "top" and range_valid and close < range_mid)
 if short_signal_mc or (last_zone == "bottom" and range_valid and close > range_mid)
     last_zone := "none"
 
-// Zone state resets: after a signal on that side, when price closes back
-// through the mid without a BOS, or when the range resets.
+// Zone state resets: after a signal on that side, or when price closes back
+// through the mid without a BOS (a new range also resets it, see above).
 if short_signal or (range_valid and close < range_mid)
     top_active  := false
     top_extreme := na
@@ -459,19 +500,6 @@ if long_signal or (range_valid and close > range_mid)
     bot_active  := false
     bot_extreme := na
 
-if range_broken
-    range_high   := na
-    range_low    := na
-    range_locked := false
-    top_active   := false
-    top_extreme  := na
-    bot_active   := false
-    bot_extreme  := na
-    bb_long_done  := false
-    bb_short_done := false
-    top_taps      := 0
-    bot_taps      := 0
-    last_zone     := "none"
 
 // =============================================================================
 // RANGE REVERSAL SL LOCK — once price reaches lock_at_rr (1:2), move the stop
@@ -602,7 +630,7 @@ _fmt(v) => na(v) ? "--" : str.tostring(v, price_format)
 
 status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 4H" :
      not instrument_ok ? "INSTRUMENT DISABLED" :
-     not range_valid ? "BUILDING RANGE: waiting for Daily pivot high + low" :
+     not range_valid ? (na(last_dph) or na(last_dpl) ? "BUILDING RANGE: waiting for Daily swing high + low" : "NO VALID RANGE: latest Daily swing high is below the swing low (trending), waiting for new swings") :
      in_trade ? (strategy.position_size > 0 ? "IN TRADE: LONG" : "IN TRADE: SHORT") + (tp1_hit ? " (TP1 hit)" : "") +
          (s_setup == "rev" and lock_done ? " | SL locked at 1:" + str.tostring(lock_to_rr) + " " + _fmt(s_sl) : "") :
      mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 4H close > " + _fmt(mc_l_c1_high) :
@@ -662,7 +690,7 @@ if show_info and barstate.islast
     table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall, TP 1:1" + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 8, "Risk",       text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#") + " | Mid Cont $" + str.tostring(risk_dollars_mc, "#"), text_color=color.gray, text_size=_tsize)
-    table.cell(info, 0, 10, "4H Taps",   text_color=color.gray, text_size=_tsize)
+    table.cell(info, 0, 10, "4H Taps (structure)",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 10, "Top " + str.tostring(top_taps) + " / Bottom " + str.tostring(bot_taps) + " | from: " + last_zone, text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 9, "Position",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 9, in_trade ? (strategy.position_size > 0 ? "LONG" : "SHORT") + (tp1_hit ? " (TP1 hit)" : "") + (s_setup == "rev" and lock_done ? " | SL locked" : "") : "FLAT",
