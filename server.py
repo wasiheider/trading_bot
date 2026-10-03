@@ -538,10 +538,10 @@ EA_INSTRUMENTS = [
 ]
 SIGNAL_MAX_AGE_HOURS = 6
 
-# Disabled 2026-09-28 (user call): v7 is paper-only while it's evaluated for a
-# couple of months -- the FTMO EA must not trade it. The EA keeps polling but
-# always gets an empty list. Flip to True to re-enable.
-EA_SIGNALS_ENABLED = False
+# Disabled 2026-09-28 for a paper-only v7 evaluation; RE-ENABLED 2026-10-02
+# (user: "make it live") after the EA got v7 support (single-target range_rev
+# + SL lock). Set to False to stop the FTMO EA from receiving new entries.
+EA_SIGNALS_ENABLED = True
 
 @app.route("/latest-signal", methods=["GET"])
 def latest_signal():

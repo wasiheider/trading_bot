@@ -250,7 +250,7 @@ All persistent data lives in Railway PostgreSQL. `DATABASE_URL` is auto-injected
 | `/webhook/paper` | POST | TradingView signal receiver — entries + lifecycle events |
 | `/admin/reset` | POST | Full state reset — requires `PAPER_WEBHOOK_TOKEN` |
 | `/admin/resolve-trade` | POST | Manually resolve a single trade stuck at `OPEN`/`UNKNOWN` — `{token, trade_id, result?, pnl?}`, requires `PAPER_WEBHOOK_TOKEN`. Added 2026-07-20 after a hard OANDA order failure left a trade permanently stuck (see Known Gaps) |
-| `/latest-signal` | GET | Latest entry signal per instrument (13 non-micro instruments, same set as the paper bot), polled by the FTMO MT5 EA — see below. **DISABLED 2026-09-28** (`EA_SIGNALS_ENABLED = False` in `server.py`): always returns an empty list so the EA places nothing while v7 is evaluated paper-only |
+| `/latest-signal` | GET | Latest entry signal per instrument (13 non-micro instruments, same set as the paper bot), polled by the FTMO MT5 EA — see below. Disabled 2026-09-28 for a paper-only evaluation, **re-enabled 2026-10-02** (`EA_SIGNALS_ENABLED = True` in `server.py`) once the EA had v7 support. Set to False to stop FTMO entries |
 
 ---
 
