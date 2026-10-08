@@ -102,6 +102,11 @@ input bool   InpTrailEnabled   = false;
 input double InpTrailArmR   = 1.5;
 input double InpTrailGapR   = 0.5;
 
+// v7 time exit (2026-10-08): close any EA position still open this many H1
+// bars after it filled, every setup -- matches the Pine script's max_hold_bars
+// so FTMO doesn't keep holding a trade the paper strategy already closed. 0 = off.
+input int    InpMaxHoldBars = 120;
+
 CTrade trade;
 
 #define BOT_SYMBOL_COUNT 13
@@ -301,6 +306,7 @@ void OnTimer()
    PollSignals();
    ManageOpenPositions();
    ManageSlLocks();
+   ManageTimeExits();
   }
 
 //+------------------------------------------------------------------+
@@ -582,6 +588,31 @@ void ManageSlLocks()
         }
       else
          Print("SL lock modify failed for ticket ", ticket, ": ", trade.ResultRetcodeDescription());
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| v7 time exit: close a position once InpMaxHoldBars H1 bars have   |
+//| opened since its fill (weekends have no bars, so they don't count)|
+//+------------------------------------------------------------------+
+void ManageTimeExits()
+  {
+   if(InpMaxHoldBars <= 0) return;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket)) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
+
+      string sym      = PositionGetString(POSITION_SYMBOL);
+      datetime opened = (datetime)PositionGetInteger(POSITION_TIME);
+      int held = iBarShift(sym, PERIOD_H1, opened, false);
+      if(held < InpMaxHoldBars) continue;   // -1 (history not loaded yet) also waits
+
+      if(trade.PositionClose(ticket))
+         Print("Time exit: ", sym, " ticket ", ticket, " closed after ", held, " H1 bars");
+      else
+         Print("Time exit close failed for ticket ", ticket, ": ", trade.ResultRetcodeDescription());
      }
   }
 

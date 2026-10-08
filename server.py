@@ -162,7 +162,7 @@ def webhook_paper():
         return jsonify({"status": "ignored", "reason": f"{instrument} is mirrored from its parent instrument"}), 200
 
     event = data.get("event", "").lower()
-    if event in ("tp1_hit", "tp2_hit", "sl_hit"):
+    if event in ("tp1_hit", "tp2_hit", "sl_hit", "time_exit"):
         return handle_paper_lifecycle(data, event)
 
     return handle_paper_signal(data)
@@ -368,10 +368,15 @@ def handle_paper_lifecycle(data, event):
     final_pnl = oanda_pnl if oanda_pnl is not None else pine_pnl
 
     locally_tracked = bool(oanda_trade_id) or db.has_open_trade(instrument, direction, include_unknown=True)
+    # time_exit (v7, 2026-10-08): Pine closed a trade still open after its max
+    # hold bars. Win/loss by realized PNL; stored as TIME_TP / TIME_SL so every
+    # existing "TP"-in-result / "SL"-in-result win check keeps working.
+    time_won = (final_pnl or 0) > 0
     if locally_tracked:
-        won = event in ("tp1_hit", "tp2_hit")
+        won = event in ("tp1_hit", "tp2_hit") or (event == "time_exit" and time_won)
         update_paper_outcome(won=won, pnl=final_pnl)
-        result_map = {"tp1_hit": "TP1", "tp2_hit": "TP2", "sl_hit": "SL"}
+        result_map = {"tp1_hit": "TP1", "tp2_hit": "TP2", "sl_hit": "SL",
+                      "time_exit": "TIME_TP" if time_won else "TIME_SL"}
         record_paper_trade({
             "instrument": instrument,
             "direction":  direction,
@@ -380,8 +385,8 @@ def handle_paper_lifecycle(data, event):
         })
         db.update_trade(instrument, direction, result_map.get(event, event.upper()), final_pnl)
 
-    emoji_map = {"tp1_hit": "✅", "tp2_hit": "🏆", "sl_hit": "❌"}
-    label_map = {"tp1_hit": "TP1 Hit", "tp2_hit": "TP2 Hit", "sl_hit": "Stop Loss Hit"}
+    emoji_map = {"tp1_hit": "✅", "tp2_hit": "🏆", "sl_hit": "❌", "time_exit": "⏱️"}
+    label_map = {"tp1_hit": "TP1 Hit", "tp2_hit": "TP2 Hit", "sl_hit": "Stop Loss Hit", "time_exit": "Time Exit (max hold reached)"}
     dir_emoji = "🟢" if direction == "LONG" else "🔴"
     pnl_line  = f"\nP&L: <code>${final_pnl:+.2f}</code>" if final_pnl is not None else ""
     trade_label = "\n🏦 Paper/FTMO MT5 Trade" if instrument.upper() in oanda.INSTRUMENT_MAP else "\n🏦 FTMO Tradingview Eval Trade"
@@ -479,7 +484,7 @@ def state():
                 continue
             m = _setup_to_model(t.get("setup", ""))
             model_stats[m]["trades"] += 1
-            if res in ("TP1", "TP2"):
+            if "TP" in res:   # TP1 / TP2 / TIME_TP
                 model_stats[m]["wins"] += 1
             else:
                 model_stats[m]["losses"] += 1

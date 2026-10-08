@@ -88,6 +88,8 @@ lock_to_rr    = input.float(1.0,  "...to this R:R (locked profit)",             
 
 exclude_disabled = input.bool(true, "Skip GBPUSD / AUDUSD / GBPJPY (disabled instruments)", group="Filters")
 bb_enabled       = input.bool(true, "Enable Box Break (1H close beyond Daily range)",      group="Filters")
+bb_sl_atr_cap    = input.float(3.0, "Box Break max SL distance (x ATR14)",                   group="Filters", minval=0.5, step=0.5)
+max_hold_bars    = input.int(120,   "Close any trade still open after N 1H bars (0 = off)",  group="Filters", minval=0)
 
 mc_enabled       = input.bool(true,  "Enable Mid Continuation",                              group="Mid Continuation")
 mc_max_taps      = input.int(2,      "Allowed while boundary 1H taps are below",             group="Mid Continuation", minval=1, maxval=10)
@@ -290,12 +292,12 @@ if range_changed
     bb_short_done := false
 
 bb_long_entry  = close
-bb_long_sl     = range_low
+bb_long_sl     = math.max(range_low, close - atr_now * bb_sl_atr_cap)   // opposite wall, capped (2026-10-08)
 bb_long_risk   = range_valid ? bb_long_entry - bb_long_sl : na
 bb_long_tp1    = not na(bb_long_risk) and bb_long_risk > 0 ? bb_long_entry + bb_long_risk : na
 
 bb_short_entry = close
-bb_short_sl    = range_high
+bb_short_sl    = math.min(range_high, close + atr_now * bb_sl_atr_cap)
 bb_short_risk  = range_valid ? bb_short_sl - bb_short_entry : na
 bb_short_tp1   = not na(bb_short_risk) and bb_short_risk > 0 ? bb_short_entry - bb_short_risk : na
 
@@ -348,7 +350,7 @@ var float  s_sl    = na
 var float  s_tp1   = na
 var float  s_tp2   = na
 var float  s_risk  = na        // R in price terms (range reversal SL lock)
-var int    s_bar   = -1        // signal bar
+var int    s_bar   = -1        // entry bar (every setup; time exit + SL lock)
 var string s_setup = ""        // "rev", "bb", "mc"
 var bool   lock_done = false   // range reversal SL already moved to lock_to_rr
 
@@ -418,6 +420,7 @@ if long_signal_bb
     s_sl    := bb_long_sl
     s_tp1   := bb_long_tp1
     s_tp2   := na
+    s_bar   := bar_index
     s_setup := "bb"
     bb_long_done := true
     _entry_alert_pending := true
@@ -431,6 +434,7 @@ if short_signal_bb
     s_sl    := bb_short_sl
     s_tp1   := bb_short_tp1
     s_tp2   := na
+    s_bar   := bar_index
     s_setup := "bb"
     bb_short_done := true
     _entry_alert_pending := true
@@ -458,6 +462,7 @@ if long_signal_mc
     s_sl    := mc_long_sl
     s_tp1   := mc_long_tp1
     s_tp2   := mc_long_tp2
+    s_bar   := bar_index
     s_setup := "mc"
     _entry_alert_pending := true
     _entry_alert_msg     := _mc_msg("LONG", _mc_lots, mc_long_entry, mc_long_sl, mc_long_tp1, mc_long_tp2)
@@ -471,6 +476,7 @@ if short_signal_mc
     s_sl    := mc_short_sl
     s_tp1   := mc_short_tp1
     s_tp2   := mc_short_tp2
+    s_bar   := bar_index
     s_setup := "mc"
     _entry_alert_pending := true
     _entry_alert_msg     := _mc_msg("SHORT", _mc_lots, mc_short_entry, mc_short_sl, mc_short_tp1, mc_short_tp2)
@@ -517,6 +523,15 @@ if s_setup == "rev" and strategy.position_size != 0 and not lock_done and bar_in
              limit=s_tp1, stop=s_sl, comment="TP 1:" + str.tostring(tp_rr) + " | SL locked 1:" + str.tostring(lock_to_rr))
 
 // =============================================================================
+// TIME EXIT — any trade still open max_hold_bars 1H bars after entry is closed
+// at market (fills next bar open), reported as "time_exit". Stops a chart from
+// sitting in one far-SL trade for weeks and blocking every new signal (US100
+// box break 10/2026). Applies to all three setups.
+// =============================================================================
+if max_hold_bars > 0 and strategy.position_size != 0 and s_bar >= 0 and bar_index - s_bar >= max_hold_bars
+    strategy.close_all(comment="TIME")
+
+// =============================================================================
 // LIFECYCLE ALERTS
 // =============================================================================
 var float prev_pos = 0.0
@@ -556,14 +571,18 @@ if tp1_long_hit
 _rev_lock_exit = s_setup == "rev" and lock_done and _closed_now and
      (prev_pos < 0 ? strategy.closedtrades.exit_price(_n) > s_tp1 + syminfo.mintick :
                      strategy.closedtrades.exit_price(_n) < s_tp1 - syminfo.mintick)
-if tp2_close_short
-    _lc(_rev_lock_exit ? "tp1_hit" : "tp2_hit", "SHORT")
-if tp2_close_long
-    _lc(_rev_lock_exit ? "tp1_hit" : "tp2_hit", "LONG")
-if sl_short_hit
-    _lc("sl_hit", "SHORT")
-if sl_long_hit
-    _lc("sl_hit", "LONG")
+_time_exit = _closed_now and strategy.closedtrades.exit_comment(_n) == "TIME"
+if _time_exit
+    _lc("time_exit", prev_pos < 0 ? "SHORT" : "LONG")
+else
+    if tp2_close_short
+        _lc(_rev_lock_exit ? "tp1_hit" : "tp2_hit", "SHORT")
+    if tp2_close_long
+        _lc(_rev_lock_exit ? "tp1_hit" : "tp2_hit", "LONG")
+    if sl_short_hit
+        _lc("sl_hit", "SHORT")
+    if sl_long_hit
+        _lc("sl_hit", "LONG")
 
 // Entry alert goes out after any lifecycle alert from the same bar, so the
 // server closes the old trade before it sees the new one.
@@ -632,9 +651,11 @@ plot(show_trade_lvls and in_trade ? s_tp2   : na, "TP2",   color=color.green,   
 
 if show_signals and (tp1_short_hit or tp1_long_hit)
     label.new(bar_index, last_exit_price, "TP1 50%", color=color.new(color.green, 40), textcolor=color.white, size=size.small)
-if show_signals and (tp2_close_short or tp2_close_long)
+if show_signals and _time_exit
+    label.new(bar_index, last_exit_price, "TIME " + str.tostring(max_hold_bars) + " bars", color=color.gray, textcolor=color.white, size=size.small)
+if show_signals and not _time_exit and (tp2_close_short or tp2_close_long)
     label.new(bar_index, last_exit_price, "TP2", color=color.lime, textcolor=color.black, size=size.small)
-if show_signals and (sl_short_hit or sl_long_hit)
+if show_signals and not _time_exit and (sl_short_hit or sl_long_hit)
     label.new(bar_index, last_exit_price, "SL", color=color.red, textcolor=color.white, size=size.small)
 
 // =============================================================================
@@ -701,7 +722,7 @@ if show_info and barstate.islast
     table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + str.tostring(last_ph, price_format) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall, TP 1:1" + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 8, "Risk",       text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#") + " | Mid Cont $" + str.tostring(risk_dollars_mc, "#"), text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 10, "1H Taps (structure)",   text_color=color.gray, text_size=_tsize)
