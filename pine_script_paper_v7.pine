@@ -89,7 +89,7 @@ lock_to_rr    = input.float(1.0,  "...to this R:R (locked profit)",             
 exclude_disabled = input.bool(true, "Skip GBPUSD / AUDUSD / GBPJPY (disabled instruments)", group="Filters")
 bb_enabled       = input.bool(true, "Enable Box Break (1H close beyond Daily range)",      group="Filters")
 bb_sl_atr_cap    = input.float(3.0, "Box Break max SL distance (x ATR14)",                   group="Filters", minval=0.5, step=0.5)
-trade_from       = input.time(timestamp("America/Chicago", 2026, 10, 8, 0, 0), "Only take entries from (older history stays flat)", group="Filters")
+trade_from       = input.time(timestamp("2026-10-08T00:00:00-05:00"), "Only take entries from (older history stays flat)", group="Filters")
 max_hold_bars    = input.int(120,   "Close any trade still open after N 1H bars (0 = off)",  group="Filters", minval=0)
 
 mc_enabled       = input.bool(true,  "Enable Mid Continuation",                              group="Mid Continuation")
