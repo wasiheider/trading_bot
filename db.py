@@ -100,6 +100,10 @@ def init_db():
             updated_at  TIMESTAMP DEFAULT NOW()
         );
     """)
+    # v7 range_rev SL lock levels, passed through /latest-signal to the FTMO EA
+    # (added 2026-10-08 -- the EA read them but the server never stored them).
+    cur.execute("ALTER TABLE signals ADD COLUMN IF NOT EXISTS sl_lock_trigger REAL")
+    cur.execute("ALTER TABLE signals ADD COLUMN IF NOT EXISTS sl_lock_to REAL")
     # Ensure bot_state always has exactly one row
     cur.execute("INSERT INTO bot_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
     cur.execute("INSERT INTO cot_cache (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
@@ -390,8 +394,8 @@ def log_signal(data: dict):
             INSERT INTO signals (
                 ts, symbol, direction, setup, timeframe,
                 range_high, range_low, entry_price, stop_loss,
-                tp1, tp2, rr_to_tp1, bos_level
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                tp1, tp2, rr_to_tp1, bos_level, sl_lock_trigger, sl_lock_to
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             datetime.now(CT).strftime("%Y-%m-%d %H:%M:%S"),
             data.get("symbol", data.get("instrument", "")),
@@ -406,6 +410,8 @@ def log_signal(data: dict):
             data.get("tp2"),
             data.get("rr_to_tp1"),
             data.get("bos_level"),
+            data.get("sl_lock_trigger"),
+            data.get("sl_lock_to"),
         ))
         conn.commit()
         cur.close()
@@ -426,7 +432,8 @@ def get_latest_signals(instruments: list, max_age_hours: int = 6) -> dict:
     threshold = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
     cur.execute("""
         SELECT DISTINCT ON (UPPER(symbol)) id, ts, symbol, direction, setup, timeframe,
-               entry_price, stop_loss, tp1, tp2, rr_to_tp1, bos_level
+               entry_price, stop_loss, tp1, tp2, rr_to_tp1, bos_level,
+               sl_lock_trigger, sl_lock_to
         FROM signals
         WHERE UPPER(symbol) = ANY(%s) AND created_at >= %s
         ORDER BY UPPER(symbol), id DESC
@@ -444,6 +451,8 @@ def get_latest_signals(instruments: list, max_age_hours: int = 6) -> dict:
             "tp2":         row["tp2"],
             "rr_to_tp1":   row["rr_to_tp1"],
             "bos_level":   row["bos_level"],
+            "sl_lock_trigger": row["sl_lock_trigger"],
+            "sl_lock_to":  row["sl_lock_to"],
             "timestamp":   row["ts"],
         }
     cur.close()
