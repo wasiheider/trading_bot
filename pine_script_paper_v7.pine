@@ -89,6 +89,7 @@ lock_to_rr    = input.float(1.0,  "...to this R:R (locked profit)",             
 exclude_disabled = input.bool(true, "Skip GBPUSD / AUDUSD / GBPJPY (disabled instruments)", group="Filters")
 bb_enabled       = input.bool(true, "Enable Box Break (1H close beyond Daily range)",      group="Filters")
 bb_sl_atr_cap    = input.float(3.0, "Box Break max SL distance (x ATR14)",                   group="Filters", minval=0.5, step=0.5)
+trade_from       = input.time(timestamp("America/Chicago", 2026, 10, 8, 0, 0), "Only take entries from (older history stays flat)", group="Filters")
 max_hold_bars    = input.int(120,   "Close any trade still open after N 1H bars (0 = off)",  group="Filters", minval=0)
 
 mc_enabled       = input.bool(true,  "Enable Mid Continuation",                              group="Mid Continuation")
@@ -277,7 +278,10 @@ long_lots      = _size(long_entry,  long_sl,  risk_dollars_eff)
 // =============================================================================
 // FINAL SIGNALS
 // =============================================================================
-_base_ok = tf_ok and instrument_ok and no_position and range_valid and not range_broken
+// time >= trade_from: no positions from old chart history, so a freshly loaded
+// chart starts FLAT instead of inheriting a historical trade that blocks every
+// new signal (2026-10-08). Move the date back to backtest.
+_base_ok = tf_ok and instrument_ok and no_position and range_valid and not range_broken and time >= trade_from
 
 short_signal = bear_bos and _base_ok and not na(short_risk) and short_risk > 0
 long_signal  = bull_bos and _base_ok and not na(long_risk)  and long_risk  > 0 and not short_signal
