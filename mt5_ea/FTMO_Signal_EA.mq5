@@ -107,6 +107,12 @@ input double InpTrailGapR   = 0.5;
 // so FTMO doesn't keep holding a trade the paper strategy already closed. 0 = off.
 input int    InpMaxHoldBars = 120;
 
+// Min-lot tolerance (2026-10-08, user call): when the risk-sized lot rounds
+// below the broker minimum, still take the trade at the minimum lot if that
+// risks no more than this % over the budget (US100 0.1-lot min skipped a
+// $50.34-risk signal vs a $49.17 budget). Anything further over is skipped.
+input double InpMinLotOveragePct = 10.0;
+
 CTrade trade;
 
 #define BOT_SYMBOL_COUNT 13
@@ -534,9 +540,16 @@ double ComputeLotSize(string botSymbol, string brokerSymbol, double slDistance, 
    if(lots < volMin)
      {
       double minLotRisk = volMin * lossPerLot;
+      if(minLotRisk <= riskMoney * (1.0 + InpMinLotOveragePct / 100.0))
+        {
+         Print("Min lot ", volMin, " on ", brokerSymbol, " risks $", DoubleToString(minLotRisk, 2),
+               " vs $", DoubleToString(riskMoney, 2), " budget -- within ",
+               DoubleToString(InpMinLotOveragePct, 0), "% tolerance, taking it.");
+         return NormalizeDouble(volMin, 2);
+        }
       Print("Skipping ", brokerSymbol, ": broker minimum lot ", volMin,
             " would risk $", DoubleToString(minLotRisk, 2), " vs $",
-            DoubleToString(riskMoney, 2), " budget -- signal skipped, not oversized.");
+            DoubleToString(riskMoney, 2), " budget (over the "+DoubleToString(InpMinLotOveragePct, 0)+"% tolerance) -- signal skipped, not oversized.");
       return 0;
      }
 
