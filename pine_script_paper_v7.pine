@@ -605,10 +605,14 @@ prev_pos := strategy.position_size
 var int range_start_bar = na
 if range_changed or (range_valid and na(range_start_bar))
     range_start_bar := bar_index
+// Strategies only run on the open realtime bar when it closes, so barstate.islast
+// alone left the table/status/range lines blank until the first 1H close after
+// loading. The last confirmed history bar draws them right away (2026-10-08).
+_draw_now = barstate.islast or barstate.islastconfirmedhistory
 var line ln_hi  = na
 var line ln_mid = na
 var line ln_lo  = na
-if barstate.islast
+if _draw_now
     line.delete(ln_hi)
     line.delete(ln_mid)
     line.delete(ln_lo)
@@ -686,7 +690,7 @@ var label lbl_status = na
 var label lbl_hi     = na
 var label lbl_mid    = na
 var label lbl_lo     = na
-if barstate.islast
+if _draw_now
     label.delete(lbl_status)
     label.delete(lbl_hi)
     label.delete(lbl_mid)
@@ -706,7 +710,7 @@ _tpos  = table_pos_in == "Top Right" ? position.top_right : table_pos_in == "Bot
      table_pos_in == "Top Left" ? position.top_left : table_pos_in == "Middle Right" ? position.middle_right : position.bottom_right
 _tsize = table_size_in == "Small" ? size.small : table_size_in == "Large" ? size.large : size.normal
 var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), border_width=1)
-if show_info and barstate.islast
+if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
     table.cell(info, 0, 0, "PAPER v7",  text_color=color.white, text_size=_tsize)
