@@ -173,6 +173,26 @@ _pl4 = ta.pivotlow(low,   bos_pivot_len, bos_pivot_len)
 
 var float last_ph = na
 var float last_pl = na
+
+// BOS levels follow market structure, not every pivot (user, 2026-10-08):
+//   bos_low  = the 1H swing low that produced the latest HIGHER HIGH. It only
+//              moves when a new HH confirms; lower highs and internal pullback
+//              lows leave it alone.
+//   bos_high = mirror: the swing high that produced the latest LOWER LOW.
+// Uses last_pl / last_ph BEFORE this bar's update, i.e. the swing that came
+// before the new HH / LL. Once a level is broken by a 1H close it is cleared
+// (end of script) and the next swing high / low starts the structure again.
+var float struct_hh = na
+var float struct_ll = na
+var float bos_low   = na
+var float bos_high  = na
+if not na(_ph4) and (na(struct_hh) or _ph4 > struct_hh)
+    struct_hh := _ph4
+    bos_low   := last_pl
+if not na(_pl4) and (na(struct_ll) or _pl4 < struct_ll)
+    struct_ll := _pl4
+    bos_high  := last_ph
+
 if not na(_ph4)
     last_ph := _ph4
 if not na(_pl4)
@@ -248,10 +268,10 @@ if in_bot_zone
 // =============================================================================
 no_position = strategy.opentrades == 0
 
-bear_bos = top_active and not na(last_pl) and last_pl > range_mid and
-     close < last_pl and close[1] >= last_pl
-bull_bos = bot_active and not na(last_ph) and last_ph < range_mid and
-     close > last_ph and close[1] <= last_ph
+bear_bos = top_active and not na(bos_low) and bos_low > range_mid and
+     close < bos_low and close[1] >= bos_low
+bull_bos = bot_active and not na(bos_high) and bos_high < range_mid and
+     close > bos_high and close[1] <= bos_high
 
 // =============================================================================
 // SL / TP
@@ -388,7 +408,7 @@ if short_signal
     lock_done := false
     _entry_alert_pending := true
     _entry_alert_msg     := _entry_msg("SHORT", short_lots, short_entry, short_sl, short_tp,
-         short_entry - short_risk * lock_at_rr, short_entry - short_risk * lock_to_rr, last_pl)
+         short_entry - short_risk * lock_at_rr, short_entry - short_risk * lock_to_rr, bos_low)
 
 if long_signal
     strategy.entry("LONG", strategy.long, qty=long_lots, comment="LONG " + str.tostring(long_lots) + "L")
@@ -403,7 +423,7 @@ if long_signal
     lock_done := false
     _entry_alert_pending := true
     _entry_alert_msg     := _entry_msg("LONG", long_lots, long_entry, long_sl, long_tp,
-         long_entry + long_risk * lock_at_rr, long_entry + long_risk * lock_to_rr, last_ph)
+         long_entry + long_risk * lock_at_rr, long_entry + long_risk * lock_to_rr, bos_high)
 
 _bb_msg(dir, lots, entry, sl, tp1) =>
     '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
@@ -629,10 +649,10 @@ plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.a
 plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
 
 if show_signals and short_signal
-    label.new(bar_index, high, "1H BOS ↓ " + str.tostring(last_pl, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
+    label.new(bar_index, high, "1H BOS ↓ " + str.tostring(bos_low, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.orange, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
 if show_signals and long_signal
-    label.new(bar_index, low, "1H BOS ↑ " + str.tostring(last_ph, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
+    label.new(bar_index, low, "1H BOS ↑ " + str.tostring(bos_high, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.aqua, 30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
 plotshape(show_signals and short_signal_bb, "SHORT_BB", shape.triangledown, location.abovebar, color.fuchsia, size=size.normal)
@@ -678,10 +698,10 @@ status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 1H" :
          (s_setup == "rev" and lock_done ? " | SL locked at 1:" + str.tostring(lock_to_rr) + " " + _fmt(s_sl) : "") :
      mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 1H close > " + _fmt(mc_l_c1_high) :
      mc_s_c1_bar == bar_index ? "MID CONT SHORT ARMED: next 1H close < " + _fmt(mc_s_c1_low) :
-     top_active ? (not na(last_pl) and last_pl > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(last_pl) + " (BOS)" :
-                   "TOP ACTIVE: waiting for a 1H swing low in the upper half") :
-     bot_active ? (not na(last_ph) and last_ph < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(last_ph) + " (BOS)" :
-                   "BOTTOM ACTIVE: waiting for a 1H swing high in the lower half") :
+     top_active ? (not na(bos_low) and bos_low > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(bos_low) + " (BOS)" :
+                   "TOP ACTIVE: waiting for a 1H higher high whose swing low sits in the upper half") :
+     bot_active ? (not na(bos_high) and bos_high < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(bos_high) + " (BOS)" :
+                   "BOTTOM ACTIVE: waiting for a 1H lower low whose swing high sits in the lower half") :
      "WAITING: mid-range. Reversal needs a zone tap; box break needs 1H close beyond " + _fmt(range_high) + " / " + _fmt(range_low)
 status_clr = not tf_ok or not instrument_ok ? color.red : not range_valid ? color.gray : in_trade ? color.yellow :
      (mc_l_c1_bar == bar_index or mc_s_c1_bar == bar_index) ? color.yellow : top_active ? color.orange : bot_active ? color.aqua : color.gray
@@ -724,10 +744,10 @@ if show_info and _draw_now
     table.cell(info, 0, 4, "Range Low",  text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green, text_size=_tsize)
     table.cell(info, 0, 5, "Top side",   text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + str.tostring(last_pl, price_format) : "--",
+    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + str.tostring(bos_low, price_format) : "--",
          text_color=top_active ? color.orange : color.gray, text_size=_tsize)
     table.cell(info, 0, 6, "Bottom side", text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + str.tostring(last_ph, price_format) : "--",
+    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + str.tostring(bos_high, price_format) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
@@ -738,3 +758,15 @@ if show_info and _draw_now
     table.cell(info, 0, 9, "Position",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 9, in_trade ? (strategy.position_size > 0 ? "LONG" : "SHORT") + (tp1_hit ? " (TP1 hit)" : "") + (s_setup == "rev" and lock_done ? " | SL locked" : "") : "FLAT",
          text_color=in_trade ? color.yellow : color.gray, text_size=_tsize)
+
+// =============================================================================
+// STRUCTURE RESET — a 1H close through a BOS level breaks that structure; the
+// next confirmed swing high / low starts it again (runs last so this bar's
+// signal, label and alert still see the level that was broken).
+// =============================================================================
+if not na(bos_low) and close < bos_low
+    bos_low   := na
+    struct_hh := na
+if not na(bos_high) and close > bos_high
+    bos_high  := na
+    struct_ll := na
