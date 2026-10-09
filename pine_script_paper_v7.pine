@@ -194,6 +194,8 @@ var float struct_hh  = na
 var float struct_ll  = na
 var float bos_low    = na
 var float bos_high   = na
+var array<float> h4_phs = array.new_float()   // recent confirmed 4H swing highs (oldest first)
+var array<float> h4_pls = array.new_float()   // recent confirmed 4H swing lows
 if _new_h4
     // Uses h4_last_pl / h4_last_ph BEFORE this update = the swing behind the new HH / LL.
     if not na(_h4_ph) and (na(struct_hh) or _h4_ph > struct_hh)
@@ -204,8 +206,14 @@ if _new_h4
         bos_high  := h4_last_ph
     if not na(_h4_ph)
         h4_last_ph := _h4_ph
+        array.push(h4_phs, _h4_ph)
+        if array.size(h4_phs) > 30
+            array.shift(h4_phs)
     if not na(_h4_pl)
         h4_last_pl := _h4_pl
+        array.push(h4_pls, _h4_pl)
+        if array.size(h4_pls) > 30
+            array.shift(h4_pls)
 
 // =============================================================================
 // ZONE STATE — reversal wick tracking
@@ -708,9 +716,9 @@ status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 1H" :
      mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 1H close > " + _fmt(mc_l_c1_high) :
      mc_s_c1_bar == bar_index ? "MID CONT SHORT ARMED: next 1H close < " + _fmt(mc_s_c1_low) :
      top_active ? (not na(bos_low) and bos_low > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(bos_low) + " (BOS)" :
-                   "TOP ACTIVE: waiting for a 4H higher high whose swing low sits in the upper half") :
+                   "TOP ACTIVE: waiting for a 4H BOS level (swing low) in the upper half") :
      bot_active ? (not na(bos_high) and bos_high < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(bos_high) + " (BOS)" :
-                   "BOTTOM ACTIVE: waiting for a 4H lower low whose swing high sits in the lower half") :
+                   "BOTTOM ACTIVE: waiting for a 4H BOS level (swing high) in the lower half") :
      "WAITING: mid-range. Reversal needs a zone tap; box break needs 1H close beyond " + _fmt(range_high) + " / " + _fmt(range_low)
 status_clr = not tf_ok or not instrument_ok ? color.red : not range_valid ? color.gray : in_trade ? color.yellow :
      (mc_l_c1_bar == bar_index or mc_s_c1_bar == bar_index) ? color.yellow : top_active ? color.orange : bot_active ? color.aqua : color.gray
@@ -753,10 +761,10 @@ if show_info and _draw_now
     table.cell(info, 0, 4, "Range Low",  text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green, text_size=_tsize)
     table.cell(info, 0, 5, "Top side",   text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + str.tostring(bos_low, price_format) : "--",
+    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + (na(bos_low) ? "none yet (no 4H swing low below price)" : _fmt(bos_low)) : "--",
          text_color=top_active ? color.orange : color.gray, text_size=_tsize)
     table.cell(info, 0, 6, "Bottom side", text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + str.tostring(bos_high, price_format) : "--",
+    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + (na(bos_high) ? "none yet (no 4H swing high above price)" : _fmt(bos_high)) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
@@ -769,13 +777,54 @@ if show_info and _draw_now
          text_color=in_trade ? color.yellow : color.gray, text_size=_tsize)
 
 // =============================================================================
-// STRUCTURE RESET — a 1H close through a BOS level breaks that structure; the
-// next confirmed swing high / low starts it again (runs last so this bar's
-// signal, label and alert still see the level that was broken).
+// STRUCTURE RESET — a 1H close through a BOS level breaks it. The new level is
+// the most recent confirmed 4H swing low still below price (user, option 2,
+// 2026-10-09: no gap waiting for a new 4H swing high); from there the HH rule
+// applies again, measured against the latest 4H swing high. Mirror for highs.
+// Runs last so this bar's signal, label and alert still see the broken level.
 // =============================================================================
+_recent_below(arr, px) =>
+    float res = na
+    int n = array.size(arr)
+    if n > 0
+        for i = n - 1 to 0
+            float v = array.get(arr, i)
+            if v < px
+                res := v
+                break
+    res
+
+_recent_above(arr, px) =>
+    float res = na
+    int n = array.size(arr)
+    if n > 0
+        for i = n - 1 to 0
+            float v = array.get(arr, i)
+            if v > px
+                res := v
+                break
+    res
+
 if not na(bos_low) and close < bos_low
-    bos_low   := na
-    struct_hh := na
+    bos_low   := _recent_below(h4_pls, close)
+    struct_hh := h4_last_ph
 if not na(bos_high) and close > bos_high
-    bos_high  := na
-    struct_ll := na
+    bos_high  := _recent_above(h4_phs, close)
+    struct_ll := h4_last_pl
+
+// BOS lines: the live 4H BOS levels, drawn across the chart from the current bar.
+var line  ln_bos_lo = na
+var line  ln_bos_hi = na
+var label lb_bos_lo = na
+var label lb_bos_hi = na
+if _draw_now
+    line.delete(ln_bos_lo)
+    line.delete(ln_bos_hi)
+    label.delete(lb_bos_lo)
+    label.delete(lb_bos_hi)
+    if show_range and not na(bos_low)
+        ln_bos_lo := line.new(bar_index - 60, bos_low, bar_index, bos_low, extend=extend.right, color=color.orange, width=2, style=line.style_dotted)
+        lb_bos_lo := label.new(bar_index + 2, bos_low, "4H BOS (short) " + _fmt(bos_low), style=label.style_label_left, color=color.new(color.orange, 30), textcolor=color.white, size=size.small)
+    if show_range and not na(bos_high)
+        ln_bos_hi := line.new(bar_index - 60, bos_high, bar_index, bos_high, extend=extend.right, color=color.aqua, width=2, style=line.style_dotted)
+        lb_bos_hi := label.new(bar_index + 2, bos_high, "4H BOS (long) " + _fmt(bos_high), style=label.style_label_left, color=color.new(color.aqua, 30), textcolor=color.black, size=size.small)
