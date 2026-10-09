@@ -75,7 +75,7 @@ strategy(
 // =============================================================================
 // INPUTS
 // =============================================================================
-pivot_len     = input.int(5,      "Daily Pivot Length for Range (bars each side)",   group="Range", minval=2,   maxval=20)
+pivot_len     = input.int(2,      "Daily Pivot Length for Range (bars each side)",   group="Range", minval=2,   maxval=20)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
 max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
 
@@ -174,15 +174,18 @@ _pl4 = ta.pivotlow(low,   bos_pivot_len, bos_pivot_len)
 // =============================================================================
 // 4H STRUCTURE -> BOS LEVELS (user, 2026-10-09: "BOS level should be the 4H
 // swing high/swing low but execution on 1H chart")
-//   bos_low  = the 4H swing low that produced the latest 4H HIGHER HIGH. It
-//              only moves when a new 4H HH confirms; 4H lower highs and
-//              internal pullback lows leave it alone.
-//   bos_high = mirror: the 4H swing high that produced the latest 4H LOWER LOW.
+//   bos_low  = the FIRST 4H swing low that forms AFTER the latest 4H higher
+//              high (the pullback low off the top; NQ 10/2026: HH 31,616.5 ->
+//              BOS 31,143). It stays fixed until a new 4H HH, then the first
+//              swing low after that HH replaces it. Lower highs and later
+//              pullback lows leave it alone.
+//   bos_high = mirror: the first 4H swing high after the latest 4H LOWER LOW.
 // The trigger is still a 1H close through the level (see BOS DETECTION).
 // expr[1] + lookahead_on = pivots from the last CLOSED 4H bar (no repaint);
-// processed once, on the first 1H bar of each new 4H bar. Once a 1H close
-// breaks a level it is cleared (end of script) and the next 4H swing
-// restarts the structure.
+// processed once, on the first 1H bar of each new 4H bar. A 1H close through
+// the level fires the signal but does NOT move it (user, 2026-10-09: "31145 is
+// BOS" after NQ already broke it) -- only a new 4H HH / LL does. Same logic on
+// every instrument.
 // =============================================================================
 _h4_ph  = request.security(syminfo.tickerid, "240", ta.pivothigh(high, bos_pivot_len, bos_pivot_len)[1], lookahead=barmerge.lookahead_on)
 _h4_pl  = request.security(syminfo.tickerid, "240", ta.pivotlow(low,   bos_pivot_len, bos_pivot_len)[1], lookahead=barmerge.lookahead_on)
@@ -194,26 +197,27 @@ var float struct_hh  = na
 var float struct_ll  = na
 var float bos_low    = na
 var float bos_high   = na
-var array<float> h4_phs = array.new_float()   // recent confirmed 4H swing highs (oldest first)
-var array<float> h4_pls = array.new_float()   // recent confirmed 4H swing lows
+var bool await_bos_low  = false   // a new HH confirmed; next 4H swing low becomes bos_low
+var bool await_bos_high = false   // a new LL confirmed; next 4H swing high becomes bos_high
 if _new_h4
-    // Uses h4_last_pl / h4_last_ph BEFORE this update = the swing behind the new HH / LL.
+    // A swing low confirmed after the HH confirmed always sits after the HH bar
+    // (both use the same pivot length), so "next confirmed low" = low after the HH.
+    if not na(_h4_pl) and await_bos_low
+        bos_low       := _h4_pl
+        await_bos_low := false
+    if not na(_h4_ph) and await_bos_high
+        bos_high       := _h4_ph
+        await_bos_high := false
     if not na(_h4_ph) and (na(struct_hh) or _h4_ph > struct_hh)
-        struct_hh := _h4_ph
-        bos_low   := h4_last_pl
+        struct_hh     := _h4_ph
+        await_bos_low := true
     if not na(_h4_pl) and (na(struct_ll) or _h4_pl < struct_ll)
-        struct_ll := _h4_pl
-        bos_high  := h4_last_ph
+        struct_ll      := _h4_pl
+        await_bos_high := true
     if not na(_h4_ph)
         h4_last_ph := _h4_ph
-        array.push(h4_phs, _h4_ph)
-        if array.size(h4_phs) > 30
-            array.shift(h4_phs)
     if not na(_h4_pl)
         h4_last_pl := _h4_pl
-        array.push(h4_pls, _h4_pl)
-        if array.size(h4_pls) > 30
-            array.shift(h4_pls)
 
 // =============================================================================
 // ZONE STATE — reversal wick tracking
@@ -761,10 +765,10 @@ if show_info and _draw_now
     table.cell(info, 0, 4, "Range Low",  text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green, text_size=_tsize)
     table.cell(info, 0, 5, "Top side",   text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + (na(bos_low) ? "none yet (no 4H swing low below price)" : _fmt(bos_low)) : "--",
+    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + (na(bos_low) ? "none yet (waiting for a 4H swing low after a 4H HH)" : _fmt(bos_low)) : "--",
          text_color=top_active ? color.orange : color.gray, text_size=_tsize)
     table.cell(info, 0, 6, "Bottom side", text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + (na(bos_high) ? "none yet (no 4H swing high above price)" : _fmt(bos_high)) : "--",
+    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + (na(bos_high) ? "none yet (waiting for a 4H swing high after a 4H LL)" : _fmt(bos_high)) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
@@ -775,42 +779,6 @@ if show_info and _draw_now
     table.cell(info, 0, 9, "Position",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 9, in_trade ? (strategy.position_size > 0 ? "LONG" : "SHORT") + (tp1_hit ? " (TP1 hit)" : "") + (s_setup == "rev" and lock_done ? " | SL locked" : "") : "FLAT",
          text_color=in_trade ? color.yellow : color.gray, text_size=_tsize)
-
-// =============================================================================
-// STRUCTURE RESET — a 1H close through a BOS level breaks it. The new level is
-// the most recent confirmed 4H swing low still below price (user, option 2,
-// 2026-10-09: no gap waiting for a new 4H swing high); from there the HH rule
-// applies again, measured against the latest 4H swing high. Mirror for highs.
-// Runs last so this bar's signal, label and alert still see the broken level.
-// =============================================================================
-_recent_below(arr, px) =>
-    float res = na
-    int n = array.size(arr)
-    if n > 0
-        for i = n - 1 to 0
-            float v = array.get(arr, i)
-            if v < px
-                res := v
-                break
-    res
-
-_recent_above(arr, px) =>
-    float res = na
-    int n = array.size(arr)
-    if n > 0
-        for i = n - 1 to 0
-            float v = array.get(arr, i)
-            if v > px
-                res := v
-                break
-    res
-
-if not na(bos_low) and close < bos_low
-    bos_low   := _recent_below(h4_pls, close)
-    struct_hh := h4_last_ph
-if not na(bos_high) and close > bos_high
-    bos_high  := _recent_above(h4_phs, close)
-    struct_ll := h4_last_pl
 
 // BOS lines: the live 4H BOS levels, drawn across the chart from the current bar.
 var line  ln_bos_lo = na
