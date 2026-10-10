@@ -75,11 +75,12 @@ strategy(
 // =============================================================================
 // INPUTS
 // =============================================================================
-pivot_len     = input.int(2,      "Daily Pivot Length for Range (bars each side)",   group="Range", minval=2,   maxval=20)
+pivot_len     = input.int(2,      "Daily Swing Length (range leg origin)",            group="Range", minval=1,   maxval=20)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
 max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
 
-bos_pivot_len = input.int(3,      "Swing Pivot Length (4H BOS levels, 1H taps)",      group="Entry", minval=2,   maxval=10)
+bos_pivot_len = input.int(5,      "4H Swing Length (range extremes + BOS)",           group="Entry", minval=2,   maxval=10)
+tap_pivot_len = input.int(3,      "1H Swing Length (taps)",                           group="Entry", minval=2,   maxval=10)
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
 tp_rr         = input.float(3.0,  "Take Profit R:R (full close)",                     group="Entry", minval=1.0, step=0.1)
@@ -134,26 +135,132 @@ _quote_to_usd    = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency ==
 atr_now = ta.atr(14)
 
 // =============================================================================
-// DAILY RANGE = MOST RECENT CONFIRMED DAILY SWING HIGH / LOW
-// expr[1] + lookahead_on = value from the last CLOSED daily bar, so the range
-// never repaints intraday. A Daily swing confirms pivot_len days after it forms.
+// RANGE = THE LATEST LEG (user levels 2026-10-09, verified on NQ / USDCAD /
+// XAGUSD):
+//   * A 4H swing high ABOVE the range high (or a Daily swing beyond it) is a new
+//     extreme: it becomes the range high, and the range low becomes the latest
+//     confirmed Daily swing low = where that leg started. Mirror for a new low.
+//   * Swings that form INSIDE the range change nothing (they are pullbacks).
+// BOS LEVELS (tied to the range):
+//   bos_low  = the FIRST 4H swing low after the range high (pullback off the
+//              top; NQ 31,616.5 -> 31,143, USDCAD 1.42939 -> 1.42061). Fixed
+//              until the range high changes; a 1H close through it fires the
+//              signal but does not move it.
+//   bos_high = the first 4H swing high after the range low.
+// Swings come from expr[1] + lookahead_on (last CLOSED Daily / 4H bar, no
+// repaint) along with the swing bar's time. Same logic on every instrument.
 // =============================================================================
-_d_ph = request.security(syminfo.tickerid, "D", ta.pivothigh(high, pivot_len, pivot_len)[1], lookahead=barmerge.lookahead_on)
-_d_pl = request.security(syminfo.tickerid, "D", ta.pivotlow(low,  pivot_len, pivot_len)[1],  lookahead=barmerge.lookahead_on)
+[_d_ph, _d_pl, _d_pt] = request.security(syminfo.tickerid, "D",
+     [ta.pivothigh(high, pivot_len, pivot_len)[1], ta.pivotlow(low, pivot_len, pivot_len)[1], time[pivot_len + 1]],
+     lookahead=barmerge.lookahead_on)
+[_h4_ph, _h4_pl, _h4_pt] = request.security(syminfo.tickerid, "240",
+     [ta.pivothigh(high, bos_pivot_len, bos_pivot_len)[1], ta.pivotlow(low, bos_pivot_len, bos_pivot_len)[1], time[bos_pivot_len + 1]],
+     lookahead=barmerge.lookahead_on)
+_new_d  = ta.change(time("D"))   != 0
+_new_h4 = ta.change(time("240")) != 0
 
-// Latest confirmed Daily swings, tracked continuously from history.
-var float last_dph = na
-var float last_dpl = na
-if not na(_d_ph)
-    last_dph := _d_ph
-if not na(_d_pl)
-    last_dpl := _d_pl
+// First swing in (vals, times) whose bar time is after t.
+_first_after(vals, times, t) =>
+    float res = na
+    int n = array.size(vals)
+    if n > 0 and not na(t)
+        for i = 0 to n - 1
+            if array.get(times, i) > t
+                res := array.get(vals, i)
+                break
+    res
 
+var float last_dph   = na
+var int   last_dph_t = na
+var float last_dpl   = na
+var int   last_dpl_t = na
+var array<float> h4_hv = array.new_float()   // confirmed 4H swing highs (oldest first)
+var array<int>   h4_ht = array.new_int()
+var array<float> h4_lv = array.new_float()   // confirmed 4H swing lows
+var array<int>   h4_lt = array.new_int()
+var float rng_hi   = na
+var int   rng_hi_t = na
+var float rng_lo   = na
+var int   rng_lo_t = na
+var float bos_low  = na
+var float bos_high = na
+
+float ext_hi   = na
+int   ext_hi_t = na
+float ext_lo   = na
+int   ext_lo_t = na
+
+if _new_d
+    if not na(_d_ph)
+        last_dph   := _d_ph
+        last_dph_t := _d_pt
+        if not na(rng_hi) and _d_ph > rng_hi
+            ext_hi   := _d_ph
+            ext_hi_t := _d_pt
+    if not na(_d_pl)
+        last_dpl   := _d_pl
+        last_dpl_t := _d_pt
+        if not na(rng_lo) and _d_pl < rng_lo
+            ext_lo   := _d_pl
+            ext_lo_t := _d_pt
+
+if _new_h4
+    if not na(_h4_ph)
+        array.push(h4_hv, _h4_ph)
+        array.push(h4_ht, _h4_pt)
+        if array.size(h4_hv) > 80
+            array.shift(h4_hv)
+            array.shift(h4_ht)
+        if not na(rng_hi) and _h4_ph > rng_hi and (na(ext_hi) or _h4_ph > ext_hi)
+            ext_hi   := _h4_ph
+            ext_hi_t := _h4_pt
+        else if na(bos_high) and not na(rng_lo_t) and _h4_pt > rng_lo_t
+            bos_high := _h4_ph
+    if not na(_h4_pl)
+        array.push(h4_lv, _h4_pl)
+        array.push(h4_lt, _h4_pt)
+        if array.size(h4_lv) > 80
+            array.shift(h4_lv)
+            array.shift(h4_lt)
+        if not na(rng_lo) and _h4_pl < rng_lo and (na(ext_lo) or _h4_pl < ext_lo)
+            ext_lo   := _h4_pl
+            ext_lo_t := _h4_pt
+        else if na(bos_low) and not na(rng_hi_t) and _h4_pt > rng_hi_t
+            bos_low := _h4_pl
+
+// New extreme -> new leg: the opposite end becomes the latest Daily swing.
+if not na(ext_hi)
+    rng_hi   := ext_hi
+    rng_hi_t := ext_hi_t
+    bos_low  := _first_after(h4_lv, h4_lt, rng_hi_t)
+    if not na(last_dpl) and last_dpl < rng_hi
+        rng_lo   := last_dpl
+        rng_lo_t := last_dpl_t
+        bos_high := _first_after(h4_hv, h4_ht, rng_lo_t)
+if not na(ext_lo)
+    rng_lo   := ext_lo
+    rng_lo_t := ext_lo_t
+    bos_high := _first_after(h4_hv, h4_ht, rng_lo_t)
+    if not na(last_dph) and last_dph > rng_lo
+        rng_hi   := last_dph
+        rng_hi_t := last_dph_t
+        bos_low  := _first_after(h4_lv, h4_lt, rng_hi_t)
+
+// First range on the chart: latest Daily swing high / low.
+if na(rng_hi) and not na(last_dph) and not na(last_dpl)
+    rng_hi   := last_dph
+    rng_hi_t := last_dph_t
+    rng_lo   := last_dpl
+    rng_lo_t := last_dpl_t
+    bos_low  := _first_after(h4_lv, h4_lt, rng_hi_t)
+    bos_high := _first_after(h4_hv, h4_ht, rng_lo_t)
+
+// Frozen while a trade is open.
 var float range_high = na
 var float range_low  = na
 if strategy.position_size == 0
-    range_high := last_dph
-    range_low  := last_dpl
+    range_high := rng_hi
+    range_low  := rng_lo
 
 range_valid   = not na(range_high) and not na(range_low) and range_high > range_low
 range_changed = range_valid and (range_high != range_high[1] or range_low != range_low[1])
@@ -168,56 +275,8 @@ range_broken = range_valid and
 // =============================================================================
 // 1H SWINGS (structure taps only)
 // =============================================================================
-_ph4 = ta.pivothigh(high, bos_pivot_len, bos_pivot_len)
-_pl4 = ta.pivotlow(low,   bos_pivot_len, bos_pivot_len)
-
-// =============================================================================
-// 4H STRUCTURE -> BOS LEVELS (user, 2026-10-09: "BOS level should be the 4H
-// swing high/swing low but execution on 1H chart")
-//   bos_low  = the FIRST 4H swing low that forms AFTER the latest 4H higher
-//              high (the pullback low off the top; NQ 10/2026: HH 31,616.5 ->
-//              BOS 31,143). It stays fixed until a new 4H HH, then the first
-//              swing low after that HH replaces it. Lower highs and later
-//              pullback lows leave it alone.
-//   bos_high = mirror: the first 4H swing high after the latest 4H LOWER LOW.
-// The trigger is still a 1H close through the level (see BOS DETECTION).
-// expr[1] + lookahead_on = pivots from the last CLOSED 4H bar (no repaint);
-// processed once, on the first 1H bar of each new 4H bar. A 1H close through
-// the level fires the signal but does NOT move it (user, 2026-10-09: "31145 is
-// BOS" after NQ already broke it) -- only a new 4H HH / LL does. Same logic on
-// every instrument.
-// =============================================================================
-_h4_ph  = request.security(syminfo.tickerid, "240", ta.pivothigh(high, bos_pivot_len, bos_pivot_len)[1], lookahead=barmerge.lookahead_on)
-_h4_pl  = request.security(syminfo.tickerid, "240", ta.pivotlow(low,   bos_pivot_len, bos_pivot_len)[1], lookahead=barmerge.lookahead_on)
-_new_h4 = ta.change(time("240")) != 0
-
-var float h4_last_ph = na
-var float h4_last_pl = na
-var float struct_hh  = na
-var float struct_ll  = na
-var float bos_low    = na
-var float bos_high   = na
-var bool await_bos_low  = false   // a new HH confirmed; next 4H swing low becomes bos_low
-var bool await_bos_high = false   // a new LL confirmed; next 4H swing high becomes bos_high
-if _new_h4
-    // A swing low confirmed after the HH confirmed always sits after the HH bar
-    // (both use the same pivot length), so "next confirmed low" = low after the HH.
-    if not na(_h4_pl) and await_bos_low
-        bos_low       := _h4_pl
-        await_bos_low := false
-    if not na(_h4_ph) and await_bos_high
-        bos_high       := _h4_ph
-        await_bos_high := false
-    if not na(_h4_ph) and (na(struct_hh) or _h4_ph > struct_hh)
-        struct_hh     := _h4_ph
-        await_bos_low := true
-    if not na(_h4_pl) and (na(struct_ll) or _h4_pl < struct_ll)
-        struct_ll      := _h4_pl
-        await_bos_high := true
-    if not na(_h4_ph)
-        h4_last_ph := _h4_ph
-    if not na(_h4_pl)
-        h4_last_pl := _h4_pl
+_ph4 = ta.pivothigh(high, tap_pivot_len, tap_pivot_len)
+_pl4 = ta.pivotlow(low,   tap_pivot_len, tap_pivot_len)
 
 // =============================================================================
 // ZONE STATE — reversal wick tracking
@@ -765,10 +824,10 @@ if show_info and _draw_now
     table.cell(info, 0, 4, "Range Low",  text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green, text_size=_tsize)
     table.cell(info, 0, 5, "Top side",   text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + (na(bos_low) ? "none yet (waiting for a 4H swing low after a 4H HH)" : _fmt(bos_low)) : "--",
+    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + (na(bos_low) ? "none yet (waiting for the first 4H swing low after the range high)" : _fmt(bos_low)) : "--",
          text_color=top_active ? color.orange : color.gray, text_size=_tsize)
     table.cell(info, 0, 6, "Bottom side", text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + (na(bos_high) ? "none yet (waiting for a 4H swing high after a 4H LL)" : _fmt(bos_high)) : "--",
+    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + (na(bos_high) ? "none yet (waiting for the first 4H swing high after the range low)" : _fmt(bos_high)) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
