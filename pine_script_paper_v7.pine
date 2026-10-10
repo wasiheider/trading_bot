@@ -81,6 +81,7 @@ max_break_pct = input.float(30.0, "No entries if price is beyond range by % of r
 
 bos_pivot_len = input.int(5,      "4H Swing Length (range extremes + BOS)",           group="Entry", minval=2,   maxval=10)
 tap_pivot_len = input.int(3,      "1H Swing Length (taps)",                           group="Entry", minval=2,   maxval=10)
+bos_min_depth = input.float(15.0, "BOS floor: min pullback depth (% of range)",       group="Entry", minval=0.0, maxval=50.0, step=1.0)
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
 tp_rr         = input.float(3.0,  "Take Profit R:R (full close)",                     group="Entry", minval=1.0, step=0.1)
@@ -144,12 +145,14 @@ atr_now = ta.atr(14)
 // BOS LEVELS = "the floor that held" (user, 2026-10-10):
 //   Only the side of the latest leg is used: after a new range HIGH the short
 //   BOS, after a new range LOW the long BOS (the other side is not drawn/traded).
-//   bos_low  = the LOWEST 4H swing low since the range high -- it follows the
-//              floor down as lower swing lows form (USDCAD 1.42378 -> 1.42061).
-//              Once a 1H close breaks it and the short fires, it is frozen
-//              until the range high changes (NQ stays 31,143 after the 10/8
-//              break even though 30,792 formed later).
-//   bos_high = mirror: the highest 4H swing high since the range low.
+//   bos_low  = the LOWEST 4H swing low since the range high that pulled back at
+//              least bos_min_depth % of the range from the high -- shallower
+//              dips inside the consolidation don't count (USDCAD 1.42378 is
+//              10.5% -> ignored; 1.42061 is 16.4% -> the floor; NQ 31,143 is 37%).
+//              Any 1H close below it breaks structure and freezes it until the
+//              range high changes (NQ stays 31,143 after the 10/8 break even
+//              though 30,792 formed later), whether or not a trade fired.
+//   bos_high = mirror: the highest qualifying 4H swing high since the range low.
 // Swings come from expr[1] + lookahead_on (last CLOSED Daily / 4H bar, no
 // repaint) along with the swing bar's time. Same logic on every instrument.
 // =============================================================================
@@ -162,24 +165,27 @@ atr_now = ta.atr(14)
 _new_d  = ta.change(time("D"))   != 0
 _new_h4 = ta.change(time("240")) != 0
 
-// Lowest / highest swing in (vals, times) whose bar time is after t.
-_min_after(vals, times, t) =>
+// Floor / ceiling: lowest (highest) swing after time t that is at least
+// bos_min_depth % of the range away from the range high (low).
+_floor_after(vals, times, t, hi, lo) =>
     float res = na
     int n = array.size(vals)
-    if n > 0 and not na(t)
+    if n > 0 and not na(t) and not na(hi) and not na(lo) and hi > lo
+        float maxv = hi - (hi - lo) * bos_min_depth / 100.0
         for i = 0 to n - 1
-            if array.get(times, i) > t
-                float v = array.get(vals, i)
+            float v = array.get(vals, i)
+            if array.get(times, i) > t and v <= maxv
                 res := na(res) ? v : math.min(res, v)
     res
 
-_max_after(vals, times, t) =>
+_ceil_after(vals, times, t, hi, lo) =>
     float res = na
     int n = array.size(vals)
-    if n > 0 and not na(t)
+    if n > 0 and not na(t) and not na(hi) and not na(lo) and hi > lo
+        float minv = lo + (hi - lo) * bos_min_depth / 100.0
         for i = 0 to n - 1
-            if array.get(times, i) > t
-                float v = array.get(vals, i)
+            float v = array.get(vals, i)
+            if array.get(times, i) > t and v >= minv
                 res := na(res) ? v : math.max(res, v)
     res
 
@@ -230,7 +236,7 @@ if _new_h4
         if not na(rng_hi) and _h4_ph > rng_hi and (na(ext_hi) or _h4_ph > ext_hi)
             ext_hi   := _h4_ph
             ext_hi_t := _h4_pt
-        else if not bos_high_frozen and not na(rng_lo_t) and _h4_pt > rng_lo_t
+        else if not bos_high_frozen and not na(rng_lo_t) and _h4_pt > rng_lo_t and _h4_ph >= rng_lo + (rng_hi - rng_lo) * bos_min_depth / 100.0
             bos_high := na(bos_high) ? _h4_ph : math.max(bos_high, _h4_ph)
     if not na(_h4_pl)
         array.push(h4_lv, _h4_pl)
@@ -241,7 +247,7 @@ if _new_h4
         if not na(rng_lo) and _h4_pl < rng_lo and (na(ext_lo) or _h4_pl < ext_lo)
             ext_lo   := _h4_pl
             ext_lo_t := _h4_pt
-        else if not bos_low_frozen and not na(rng_hi_t) and _h4_pt > rng_hi_t
+        else if not bos_low_frozen and not na(rng_hi_t) and _h4_pt > rng_hi_t and _h4_pl <= rng_hi - (rng_hi - rng_lo) * bos_min_depth / 100.0
             bos_low := na(bos_low) ? _h4_pl : math.min(bos_low, _h4_pl)
 
 // New extreme -> new leg: the opposite end becomes the latest Daily swing.
@@ -249,24 +255,24 @@ if not na(ext_hi)
     rng_hi   := ext_hi
     rng_hi_t := ext_hi_t
     leg_side := "up"
-    bos_low  := _min_after(h4_lv, h4_lt, rng_hi_t)
-    bos_low_frozen := false
     if not na(last_dpl) and last_dpl < rng_hi
         rng_lo   := last_dpl
         rng_lo_t := last_dpl_t
-        bos_high := _max_after(h4_hv, h4_ht, rng_lo_t)
+        bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
         bos_high_frozen := false
+    bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
+    bos_low_frozen := false
 if not na(ext_lo)
     rng_lo   := ext_lo
     rng_lo_t := ext_lo_t
     leg_side := "down"
-    bos_high := _max_after(h4_hv, h4_ht, rng_lo_t)
-    bos_high_frozen := false
     if not na(last_dph) and last_dph > rng_lo
         rng_hi   := last_dph
         rng_hi_t := last_dph_t
-        bos_low  := _min_after(h4_lv, h4_lt, rng_hi_t)
+        bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
         bos_low_frozen := false
+    bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
+    bos_high_frozen := false
 
 // First range on the chart: latest Daily swing high / low.
 if na(rng_hi) and not na(last_dph) and not na(last_dpl)
@@ -275,8 +281,8 @@ if na(rng_hi) and not na(last_dph) and not na(last_dpl)
     rng_lo   := last_dpl
     rng_lo_t := last_dpl_t
     leg_side := rng_hi_t > rng_lo_t ? "up" : "down"
-    bos_low  := _min_after(h4_lv, h4_lt, rng_hi_t)
-    bos_high := _max_after(h4_hv, h4_ht, rng_lo_t)
+    bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
+    bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
 
 // Frozen while a trade is open.
 var float range_high = na
@@ -879,10 +885,10 @@ if _draw_now
         ln_bos_hi := line.new(bar_index - 60, bos_high, bar_index, bos_high, extend=extend.right, color=color.aqua, width=2, style=line.style_dotted)
         lb_bos_hi := label.new(bar_index + 2, bos_high, "4H BOS (long) " + _fmt(bos_high), style=label.style_label_left, color=color.new(color.aqua, 30), textcolor=color.black, size=size.small)
 
-// A short / long reversal fired off its BOS -> that level is used; freeze it
-// until the range extreme on that side changes (runs last: this bar's signal,
-// label and alert already used the level).
-if short_signal
+// A 1H close through the BOS breaks structure -> freeze the level until the
+// range extreme on that side changes, whether or not a trade fired (runs last:
+// this bar's signal, label and alert already used the level).
+if not na(bos_low) and close < bos_low
     bos_low_frozen := true
-if long_signal
+if not na(bos_high) and close > bos_high
     bos_high_frozen := true
