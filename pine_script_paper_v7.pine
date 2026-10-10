@@ -141,12 +141,15 @@ atr_now = ta.atr(14)
 //     extreme: it becomes the range high, and the range low becomes the latest
 //     confirmed Daily swing low = where that leg started. Mirror for a new low.
 //   * Swings that form INSIDE the range change nothing (they are pullbacks).
-// BOS LEVELS (tied to the range):
-//   bos_low  = the FIRST 4H swing low after the range high (pullback off the
-//              top; NQ 31,616.5 -> 31,143, USDCAD 1.42939 -> 1.42061). Fixed
-//              until the range high changes; a 1H close through it fires the
-//              signal but does not move it.
-//   bos_high = the first 4H swing high after the range low.
+// BOS LEVELS = "the floor that held" (user, 2026-10-10):
+//   Only the side of the latest leg is used: after a new range HIGH the short
+//   BOS, after a new range LOW the long BOS (the other side is not drawn/traded).
+//   bos_low  = the LOWEST 4H swing low since the range high -- it follows the
+//              floor down as lower swing lows form (USDCAD 1.42378 -> 1.42061).
+//              Once a 1H close breaks it and the short fires, it is frozen
+//              until the range high changes (NQ stays 31,143 after the 10/8
+//              break even though 30,792 formed later).
+//   bos_high = mirror: the highest 4H swing high since the range low.
 // Swings come from expr[1] + lookahead_on (last CLOSED Daily / 4H bar, no
 // repaint) along with the swing bar's time. Same logic on every instrument.
 // =============================================================================
@@ -159,15 +162,25 @@ atr_now = ta.atr(14)
 _new_d  = ta.change(time("D"))   != 0
 _new_h4 = ta.change(time("240")) != 0
 
-// First swing in (vals, times) whose bar time is after t.
-_first_after(vals, times, t) =>
+// Lowest / highest swing in (vals, times) whose bar time is after t.
+_min_after(vals, times, t) =>
     float res = na
     int n = array.size(vals)
     if n > 0 and not na(t)
         for i = 0 to n - 1
             if array.get(times, i) > t
-                res := array.get(vals, i)
-                break
+                float v = array.get(vals, i)
+                res := na(res) ? v : math.min(res, v)
+    res
+
+_max_after(vals, times, t) =>
+    float res = na
+    int n = array.size(vals)
+    if n > 0 and not na(t)
+        for i = 0 to n - 1
+            if array.get(times, i) > t
+                float v = array.get(vals, i)
+                res := na(res) ? v : math.max(res, v)
     res
 
 var float last_dph   = na
@@ -184,6 +197,9 @@ var float rng_lo   = na
 var int   rng_lo_t = na
 var float bos_low  = na
 var float bos_high = na
+var bool  bos_low_frozen  = false   // short fired off bos_low -> fixed until the range high changes
+var bool  bos_high_frozen = false
+var string leg_side = na            // "up" = latest extreme is the range high, "down" = the range low
 
 float ext_hi   = na
 int   ext_hi_t = na
@@ -214,8 +230,8 @@ if _new_h4
         if not na(rng_hi) and _h4_ph > rng_hi and (na(ext_hi) or _h4_ph > ext_hi)
             ext_hi   := _h4_ph
             ext_hi_t := _h4_pt
-        else if na(bos_high) and not na(rng_lo_t) and _h4_pt > rng_lo_t
-            bos_high := _h4_ph
+        else if not bos_high_frozen and not na(rng_lo_t) and _h4_pt > rng_lo_t
+            bos_high := na(bos_high) ? _h4_ph : math.max(bos_high, _h4_ph)
     if not na(_h4_pl)
         array.push(h4_lv, _h4_pl)
         array.push(h4_lt, _h4_pt)
@@ -225,26 +241,32 @@ if _new_h4
         if not na(rng_lo) and _h4_pl < rng_lo and (na(ext_lo) or _h4_pl < ext_lo)
             ext_lo   := _h4_pl
             ext_lo_t := _h4_pt
-        else if na(bos_low) and not na(rng_hi_t) and _h4_pt > rng_hi_t
-            bos_low := _h4_pl
+        else if not bos_low_frozen and not na(rng_hi_t) and _h4_pt > rng_hi_t
+            bos_low := na(bos_low) ? _h4_pl : math.min(bos_low, _h4_pl)
 
 // New extreme -> new leg: the opposite end becomes the latest Daily swing.
 if not na(ext_hi)
     rng_hi   := ext_hi
     rng_hi_t := ext_hi_t
-    bos_low  := _first_after(h4_lv, h4_lt, rng_hi_t)
+    leg_side := "up"
+    bos_low  := _min_after(h4_lv, h4_lt, rng_hi_t)
+    bos_low_frozen := false
     if not na(last_dpl) and last_dpl < rng_hi
         rng_lo   := last_dpl
         rng_lo_t := last_dpl_t
-        bos_high := _first_after(h4_hv, h4_ht, rng_lo_t)
+        bos_high := _max_after(h4_hv, h4_ht, rng_lo_t)
+        bos_high_frozen := false
 if not na(ext_lo)
     rng_lo   := ext_lo
     rng_lo_t := ext_lo_t
-    bos_high := _first_after(h4_hv, h4_ht, rng_lo_t)
+    leg_side := "down"
+    bos_high := _max_after(h4_hv, h4_ht, rng_lo_t)
+    bos_high_frozen := false
     if not na(last_dph) and last_dph > rng_lo
         rng_hi   := last_dph
         rng_hi_t := last_dph_t
-        bos_low  := _first_after(h4_lv, h4_lt, rng_hi_t)
+        bos_low  := _min_after(h4_lv, h4_lt, rng_hi_t)
+        bos_low_frozen := false
 
 // First range on the chart: latest Daily swing high / low.
 if na(rng_hi) and not na(last_dph) and not na(last_dpl)
@@ -252,8 +274,9 @@ if na(rng_hi) and not na(last_dph) and not na(last_dpl)
     rng_hi_t := last_dph_t
     rng_lo   := last_dpl
     rng_lo_t := last_dpl_t
-    bos_low  := _first_after(h4_lv, h4_lt, rng_hi_t)
-    bos_high := _first_after(h4_hv, h4_ht, rng_lo_t)
+    leg_side := rng_hi_t > rng_lo_t ? "up" : "down"
+    bos_low  := _min_after(h4_lv, h4_lt, rng_hi_t)
+    bos_high := _max_after(h4_hv, h4_ht, rng_lo_t)
 
 // Frozen while a trade is open.
 var float range_high = na
@@ -348,9 +371,9 @@ if in_bot_zone
 // =============================================================================
 no_position = strategy.opentrades == 0
 
-bear_bos = top_active and not na(bos_low) and bos_low > range_mid and
+bear_bos = top_active and leg_side == "up" and not na(bos_low) and bos_low > range_mid and
      close < bos_low and close[1] >= bos_low
-bull_bos = bot_active and not na(bos_high) and bos_high < range_mid and
+bull_bos = bot_active and leg_side == "down" and not na(bos_high) and bos_high < range_mid and
      close > bos_high and close[1] <= bos_high
 
 // =============================================================================
@@ -778,9 +801,9 @@ status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 1H" :
          (s_setup == "rev" and lock_done ? " | SL locked at 1:" + str.tostring(lock_to_rr) + " " + _fmt(s_sl) : "") :
      mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 1H close > " + _fmt(mc_l_c1_high) :
      mc_s_c1_bar == bar_index ? "MID CONT SHORT ARMED: next 1H close < " + _fmt(mc_s_c1_low) :
-     top_active ? (not na(bos_low) and bos_low > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(bos_low) + " (BOS)" :
+     top_active ? (leg_side != "up" ? "TOP ACTIVE: no short reversal, latest leg is down" : not na(bos_low) and bos_low > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(bos_low) + " (BOS)" :
                    "TOP ACTIVE: waiting for a 4H BOS level (swing low) in the upper half") :
-     bot_active ? (not na(bos_high) and bos_high < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(bos_high) + " (BOS)" :
+     bot_active ? (leg_side != "down" ? "BOTTOM ACTIVE: no long reversal, latest leg is up" : not na(bos_high) and bos_high < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(bos_high) + " (BOS)" :
                    "BOTTOM ACTIVE: waiting for a 4H BOS level (swing high) in the lower half") :
      "WAITING: mid-range. Reversal needs a zone tap; box break needs 1H close beyond " + _fmt(range_high) + " / " + _fmt(range_low)
 status_clr = not tf_ok or not instrument_ok ? color.red : not range_valid ? color.gray : in_trade ? color.yellow :
@@ -824,10 +847,10 @@ if show_info and _draw_now
     table.cell(info, 0, 4, "Range Low",  text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green, text_size=_tsize)
     table.cell(info, 0, 5, "Top side",   text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + " | BOS < " + (na(bos_low) ? "none yet (waiting for the first 4H swing low after the range high)" : _fmt(bos_low)) : "--",
+    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + (leg_side != "up" ? " | no short BOS (latest leg is down)" : " | BOS < " + (na(bos_low) ? "none yet (no 4H swing low since the range high)" : _fmt(bos_low))) : "--",
          text_color=top_active ? color.orange : color.gray, text_size=_tsize)
     table.cell(info, 0, 6, "Bottom side", text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + " | BOS > " + (na(bos_high) ? "none yet (waiting for the first 4H swing high after the range low)" : _fmt(bos_high)) : "--",
+    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + (leg_side != "down" ? " | no long BOS (latest leg is up)" : " | BOS > " + (na(bos_high) ? "none yet (no 4H swing high since the range low)" : _fmt(bos_high))) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
@@ -849,9 +872,17 @@ if _draw_now
     line.delete(ln_bos_hi)
     label.delete(lb_bos_lo)
     label.delete(lb_bos_hi)
-    if show_range and not na(bos_low)
+    if show_range and leg_side == "up" and not na(bos_low)
         ln_bos_lo := line.new(bar_index - 60, bos_low, bar_index, bos_low, extend=extend.right, color=color.orange, width=2, style=line.style_dotted)
         lb_bos_lo := label.new(bar_index + 2, bos_low, "4H BOS (short) " + _fmt(bos_low), style=label.style_label_left, color=color.new(color.orange, 30), textcolor=color.white, size=size.small)
-    if show_range and not na(bos_high)
+    if show_range and leg_side == "down" and not na(bos_high)
         ln_bos_hi := line.new(bar_index - 60, bos_high, bar_index, bos_high, extend=extend.right, color=color.aqua, width=2, style=line.style_dotted)
         lb_bos_hi := label.new(bar_index + 2, bos_high, "4H BOS (long) " + _fmt(bos_high), style=label.style_label_left, color=color.new(color.aqua, 30), textcolor=color.black, size=size.small)
+
+// A short / long reversal fired off its BOS -> that level is used; freeze it
+// until the range extreme on that side changes (runs last: this bar's signal,
+// label and alert already used the level).
+if short_signal
+    bos_low_frozen := true
+if long_signal
+    bos_high_frozen := true
