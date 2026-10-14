@@ -37,7 +37,9 @@
 // Box Break (v5 Entry E, moved onto the Daily range 2026-09-28):
 //   1H close above range high -> LONG | 1H close below range low -> SHORT.
 //   SL = opposite range wall, single target at 1:1 RR, full close (E exits).
-//   One break per side per range.
+//   One break per side per LEG (2026-10-14): a range low that keeps extending
+//   lower in a selloff does not re-arm the short (no chasing a moving low).
+//   Range reversal BOS must sit within bos_max_depth (40%) of the extreme.
 //
 // Mid Continuation (added 2026-09-28, user spec):
 //   Price comes down from the top zone, a 1H candle trades to/through 50% of
@@ -82,6 +84,7 @@ max_break_pct = input.float(30.0, "No entries if price is beyond range by % of r
 bos_pivot_len = input.int(5,      "4H Swing Length (range extremes + BOS)",           group="Entry", minval=2,   maxval=10)
 tap_pivot_len = input.int(3,      "1H Swing Length (taps)",                           group="Entry", minval=2,   maxval=10)
 bos_min_depth = input.float(15.0, "BOS floor: min pullback depth (% of range)",       group="Entry", minval=0.0, maxval=50.0, step=1.0)
+bos_max_depth = input.float(40.0, "BOS max depth from the extreme (% of range)",      group="Entry", minval=10.0, maxval=50.0, step=1.0)
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
 tp_rr         = input.float(3.0,  "Take Profit R:R (full close)",                     group="Entry", minval=1.0, step=0.1)
@@ -377,9 +380,15 @@ if in_bot_zone
 // =============================================================================
 no_position = strategy.opentrades == 0
 
+// The BOS must sit near the extreme it reverses from (user, 2026-10-14): a
+// floor more than bos_max_depth % of the range below the high is a mid-range
+// level, and shorting it sells the middle (US500 10/14: BOS 50% deep, entry at
+// mid). NQ's 31,143 floor (37%) still qualifies.
 bear_bos = top_active and leg_side == "up" and not na(bos_low) and bos_low > range_mid and
+     range_high - bos_low <= range_size * bos_max_depth / 100.0 and
      close < bos_low and close[1] >= bos_low
 bull_bos = bot_active and leg_side == "down" and not na(bos_high) and bos_high < range_mid and
+     bos_high - range_low <= range_size * bos_max_depth / 100.0 and
      close > bos_high and close[1] <= bos_high
 
 // =============================================================================
@@ -418,11 +427,18 @@ long_signal  = bull_bos and _base_ok and not na(long_risk)  and long_risk  > 0 a
 // =============================================================================
 // BOX BREAK — 1H close beyond the Daily range, E exits (SL opposite wall, 1:1)
 // =============================================================================
+// One box break per side per LEG (user, 2026-10-14). When a selloff keeps
+// printing new 4H lows, each one becomes the new range low; re-arming the short
+// on every one of them sold each small bounce near the bottom (EURUSD 5 shorts
+// in a row 9/29-10/14, NZDUSD 7, XAGUSD 6). A range that only extends further
+// in the leg's direction keeps that side's break used up; a new leg resets it.
 var bool bb_long_done  = false
 var bool bb_short_done = false
 if range_changed
-    bb_long_done  := false
-    bb_short_done := false
+    bool _ext_down = leg_side == "down" and not na(range_low[1])  and range_low  < range_low[1]
+    bool _ext_up   = leg_side == "up"   and not na(range_high[1]) and range_high > range_high[1]
+    bb_long_done  := _ext_up   ? bb_long_done  : false
+    bb_short_done := _ext_down ? bb_short_done : false
 
 bb_long_entry  = close
 bb_long_sl     = math.max(range_low, close - atr_now * bb_sl_atr_cap)   // opposite wall, capped (2026-10-08)
@@ -437,6 +453,14 @@ bb_short_tp1   = not na(bb_short_risk) and bb_short_risk > 0 ? bb_short_entry - 
 _bb_ok = bb_enabled and _base_ok and not short_signal and not long_signal
 long_signal_bb  = _bb_ok and not bb_long_done  and close > range_high and close[1] <= range_high and not na(bb_long_tp1)
 short_signal_bb = _bb_ok and not bb_short_done and close < range_low  and close[1] >= range_low  and not na(bb_short_tp1)
+
+// Any 1H close through a wall uses that side up for the leg, traded or not
+// (blocked by an open trade or before trade_from), so a later re-break of the
+// same selloff's low can't fire either.
+if range_valid and close < range_low
+    bb_short_done := true
+if range_valid and close > range_high
+    bb_long_done := true
 
 // =============================================================================
 // MID CONTINUATION — failed close through 50% (candle 1), confirmed by the
@@ -807,10 +831,14 @@ status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 1H" :
          (s_setup == "rev" and lock_done ? " | SL locked at 1:" + str.tostring(lock_to_rr) + " " + _fmt(s_sl) : "") :
      mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 1H close > " + _fmt(mc_l_c1_high) :
      mc_s_c1_bar == bar_index ? "MID CONT SHORT ARMED: next 1H close < " + _fmt(mc_s_c1_low) :
-     top_active ? (leg_side != "up" ? "TOP ACTIVE: no short reversal, latest leg is down" : not na(bos_low) and bos_low > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(bos_low) + " (BOS)" :
-                   "TOP ACTIVE: waiting for a 4H BOS level (swing low) in the upper half") :
-     bot_active ? (leg_side != "down" ? "BOTTOM ACTIVE: no long reversal, latest leg is up" : not na(bos_high) and bos_high < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(bos_high) + " (BOS)" :
-                   "BOTTOM ACTIVE: waiting for a 4H BOS level (swing high) in the lower half") :
+     top_active ? (leg_side != "up" ? "TOP ACTIVE: no short reversal, latest leg is down" :
+                   not na(bos_low) and range_high - bos_low > range_size * bos_max_depth / 100.0 ? "TOP ACTIVE: no short, BOS " + _fmt(bos_low) + " is too deep (mid-range)" :
+                   not na(bos_low) and bos_low > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(bos_low) + " (BOS)" :
+                   "TOP ACTIVE: waiting for a 4H BOS level (swing low) near the high") :
+     bot_active ? (leg_side != "down" ? "BOTTOM ACTIVE: no long reversal, latest leg is up" :
+                   not na(bos_high) and bos_high - range_low > range_size * bos_max_depth / 100.0 ? "BOTTOM ACTIVE: no long, BOS " + _fmt(bos_high) + " is too deep (mid-range)" :
+                   not na(bos_high) and bos_high < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(bos_high) + " (BOS)" :
+                   "BOTTOM ACTIVE: waiting for a 4H BOS level (swing high) near the low") :
      "WAITING: mid-range. Reversal needs a zone tap; box break needs 1H close beyond " + _fmt(range_high) + " / " + _fmt(range_low)
 status_clr = not tf_ok or not instrument_ok ? color.red : not range_valid ? color.gray : in_trade ? color.yellow :
      (mc_l_c1_bar == bar_index or mc_s_c1_bar == bar_index) ? color.yellow : top_active ? color.orange : bot_active ? color.aqua : color.gray
