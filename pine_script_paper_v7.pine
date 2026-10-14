@@ -255,38 +255,28 @@ if _new_h4
         else if not bos_low_frozen and not na(rng_hi_t) and _h4_pt > rng_hi_t and _h4_pl <= rng_hi - (rng_hi - rng_lo) * bos_min_depth / 100.0
             bos_low := na(bos_low) ? _h4_pl : math.min(bos_low, _h4_pl)
 
-// New extreme. If it flips the leg, the opposite end becomes the latest Daily
-// swing (where the new leg started). If it only EXTENDS the current leg (a new
-// high while the leg is already up), the far end stays at the leg's origin
-// (2026-10-14, user levels): USDCAD stays 1.37598 - 1.42992 instead of
-// collapsing to the 1.42061 pullback; Gold 3960 - 4697, Silver 54.8 - 71.2.
+// New extreme -> new leg: the opposite end becomes the latest Daily swing.
 if not na(ext_hi)
-    bool _cont_up = leg_side == "up"
-    int  _prev_hi_t = rng_hi_t
     rng_hi   := ext_hi
     rng_hi_t := ext_hi_t
     leg_side := "up"
-    if not _cont_up and not na(last_dpl) and last_dpl < rng_hi
+    if not na(last_dpl) and last_dpl < rng_hi
         rng_lo   := last_dpl
         rng_lo_t := last_dpl_t
         bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
         bos_high_frozen := false
-    // Extension: the floor that held under the previous high still counts
-    // (USDCAD keeps its 1.4206 BOS after the 5-pip push to 1.42992).
-    bos_low  := _floor_after(h4_lv, h4_lt, _cont_up ? _prev_hi_t : rng_hi_t, rng_hi, rng_lo)
+    bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
     bos_low_frozen := false
 if not na(ext_lo)
-    bool _cont_dn = leg_side == "down"
-    int  _prev_lo_t = rng_lo_t
     rng_lo   := ext_lo
     rng_lo_t := ext_lo_t
     leg_side := "down"
-    if not _cont_dn and not na(last_dph) and last_dph > rng_lo
+    if not na(last_dph) and last_dph > rng_lo
         rng_hi   := last_dph
         rng_hi_t := last_dph_t
         bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
         bos_low_frozen := false
-    bos_high := _ceil_after(h4_hv, h4_ht, _cont_dn ? _prev_lo_t : rng_lo_t, rng_hi, rng_lo)
+    bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
     bos_high_frozen := false
 
 // First range on the chart: latest Daily swing high / low.
@@ -301,26 +291,33 @@ if na(rng_hi) and not na(last_dph) and not na(last_dpl)
 
 // Manual range (2026-10-14): when both inputs are set, they replace the auto
 // range on this chart (for charts where the auto read doesn't match yours, e.g.
-// US500 7625.2 - 7852.6). The time of each extreme = the latest 1H bar that
-// traded within 1% of the range from it; that drives leg_side and which 4H
-// swings count for the BOS, exactly as in auto mode.
+// USDCAD 1.37598 - 1.42992, Gold 3960 - 4697). Within 1% of the range from an
+// extreme counts as touching it: the BOS floor/ceiling is searched from the
+// FIRST touch of that extreme (USDCAD keeps 1.42061 from before the 1.42992
+// push), and whichever extreme was touched last sets leg_side.
 use_manual = man_hi > 0 and man_lo > 0 and man_hi > man_lo
 _t_changed(int a, int b) => na(a) != na(b) or (not na(a) and a != b)
-var int man_hi_t = na
-var int man_lo_t = na
+var int man_hi_t    = na   // first touch of the high zone since price last visited the low zone
+var int man_lo_t    = na
+var int man_hi_last = na   // latest touches (which extreme price visited last = leg_side)
+var int man_lo_last = na
 if use_manual
     float _tol = (man_hi - man_lo) * 0.01
     if high >= man_hi - _tol
-        man_hi_t := time
+        if na(man_hi_last) or (not na(man_lo_last) and man_lo_last > man_hi_last)
+            man_hi_t := time
+        man_hi_last := time
     if low <= man_lo + _tol
-        man_lo_t := time
+        if na(man_lo_last) or (not na(man_hi_last) and man_hi_last > man_lo_last)
+            man_lo_t := time
+        man_lo_last := time
     bool _man_new = na(rng_hi) or na(rng_lo) or rng_hi != man_hi or rng_lo != man_lo or _t_changed(rng_hi_t, man_hi_t) or _t_changed(rng_lo_t, man_lo_t)
     rng_hi   := man_hi
     rng_lo   := man_lo
     rng_hi_t := man_hi_t
     rng_lo_t := man_lo_t
-    if not na(man_hi_t) and not na(man_lo_t)
-        leg_side := man_hi_t > man_lo_t ? "up" : "down"
+    if not na(man_hi_last) and not na(man_lo_last)
+        leg_side := man_hi_last > man_lo_last ? "up" : "down"
     if _man_new
         bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
         bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
