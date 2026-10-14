@@ -80,6 +80,8 @@ strategy(
 pivot_len     = input.int(2,      "Daily Swing Length (range leg origin)",            group="Range", minval=1,   maxval=20)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
 max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
+man_hi        = input.float(0.0,  "Manual Range High (0 = auto)",                     group="Range", minval=0.0)
+man_lo        = input.float(0.0,  "Manual Range Low (0 = auto)",                      group="Range", minval=0.0)
 
 bos_pivot_len = input.int(5,      "4H Swing Length (range extremes + BOS)",           group="Entry", minval=2,   maxval=10)
 tap_pivot_len = input.int(3,      "1H Swing Length (taps)",                           group="Entry", minval=2,   maxval=10)
@@ -253,28 +255,38 @@ if _new_h4
         else if not bos_low_frozen and not na(rng_hi_t) and _h4_pt > rng_hi_t and _h4_pl <= rng_hi - (rng_hi - rng_lo) * bos_min_depth / 100.0
             bos_low := na(bos_low) ? _h4_pl : math.min(bos_low, _h4_pl)
 
-// New extreme -> new leg: the opposite end becomes the latest Daily swing.
+// New extreme. If it flips the leg, the opposite end becomes the latest Daily
+// swing (where the new leg started). If it only EXTENDS the current leg (a new
+// high while the leg is already up), the far end stays at the leg's origin
+// (2026-10-14, user levels): USDCAD stays 1.37598 - 1.42992 instead of
+// collapsing to the 1.42061 pullback; Gold 3960 - 4697, Silver 54.8 - 71.2.
 if not na(ext_hi)
+    bool _cont_up = leg_side == "up"
+    int  _prev_hi_t = rng_hi_t
     rng_hi   := ext_hi
     rng_hi_t := ext_hi_t
     leg_side := "up"
-    if not na(last_dpl) and last_dpl < rng_hi
+    if not _cont_up and not na(last_dpl) and last_dpl < rng_hi
         rng_lo   := last_dpl
         rng_lo_t := last_dpl_t
         bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
         bos_high_frozen := false
-    bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
+    // Extension: the floor that held under the previous high still counts
+    // (USDCAD keeps its 1.4206 BOS after the 5-pip push to 1.42992).
+    bos_low  := _floor_after(h4_lv, h4_lt, _cont_up ? _prev_hi_t : rng_hi_t, rng_hi, rng_lo)
     bos_low_frozen := false
 if not na(ext_lo)
+    bool _cont_dn = leg_side == "down"
+    int  _prev_lo_t = rng_lo_t
     rng_lo   := ext_lo
     rng_lo_t := ext_lo_t
     leg_side := "down"
-    if not na(last_dph) and last_dph > rng_lo
+    if not _cont_dn and not na(last_dph) and last_dph > rng_lo
         rng_hi   := last_dph
         rng_hi_t := last_dph_t
         bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
         bos_low_frozen := false
-    bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
+    bos_high := _ceil_after(h4_hv, h4_ht, _cont_dn ? _prev_lo_t : rng_lo_t, rng_hi, rng_lo)
     bos_high_frozen := false
 
 // First range on the chart: latest Daily swing high / low.
@@ -286,6 +298,34 @@ if na(rng_hi) and not na(last_dph) and not na(last_dpl)
     leg_side := rng_hi_t > rng_lo_t ? "up" : "down"
     bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
     bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
+
+// Manual range (2026-10-14): when both inputs are set, they replace the auto
+// range on this chart (for charts where the auto read doesn't match yours, e.g.
+// US500 7625.2 - 7852.6). The time of each extreme = the latest 1H bar that
+// traded within 1% of the range from it; that drives leg_side and which 4H
+// swings count for the BOS, exactly as in auto mode.
+use_manual = man_hi > 0 and man_lo > 0 and man_hi > man_lo
+_t_changed(int a, int b) => na(a) != na(b) or (not na(a) and a != b)
+var int man_hi_t = na
+var int man_lo_t = na
+if use_manual
+    float _tol = (man_hi - man_lo) * 0.01
+    if high >= man_hi - _tol
+        man_hi_t := time
+    if low <= man_lo + _tol
+        man_lo_t := time
+    bool _man_new = na(rng_hi) or na(rng_lo) or rng_hi != man_hi or rng_lo != man_lo or _t_changed(rng_hi_t, man_hi_t) or _t_changed(rng_lo_t, man_lo_t)
+    rng_hi   := man_hi
+    rng_lo   := man_lo
+    rng_hi_t := man_hi_t
+    rng_lo_t := man_lo_t
+    if not na(man_hi_t) and not na(man_lo_t)
+        leg_side := man_hi_t > man_lo_t ? "up" : "down"
+    if _man_new
+        bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
+        bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
+        bos_low_frozen  := false
+        bos_high_frozen := false
 
 // Frozen while a trade is open.
 var float range_high = na
@@ -876,9 +916,9 @@ if show_info and _draw_now
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
     table.cell(info, 0, 2, "Symbol",    text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 2, symbol_name + (instrument_ok ? "" : " (DISABLED)"), text_color=instrument_ok ? color.white : color.red, text_size=_tsize)
-    table.cell(info, 0, 3, "Range High", text_color=color.gray, text_size=_tsize)
+    table.cell(info, 0, 3, use_manual ? "Range High (manual)" : "Range High", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 3, range_valid ? str.tostring(range_high, price_format) : "Building...", text_color=color.red, text_size=_tsize)
-    table.cell(info, 0, 4, "Range Low",  text_color=color.gray, text_size=_tsize)
+    table.cell(info, 0, 4, use_manual ? "Range Low (manual)" : "Range Low",  text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green, text_size=_tsize)
     table.cell(info, 0, 5, "Top side",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + (leg_side != "up" ? " | no short BOS (latest leg is down)" : " | BOS < " + (na(bos_low) ? "none yet (no 4H swing low since the range high)" : _fmt(bos_low))) : "--",
