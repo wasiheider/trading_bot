@@ -80,8 +80,8 @@ strategy(
 pivot_len     = input.int(2,      "Daily Swing Length (range leg origin)",            group="Range", minval=1,   maxval=20)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
 max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
-man_hi        = input.float(0.0,  "Manual Range High (0 = auto)",                     group="Range", minval=0.0)
-man_lo        = input.float(0.0,  "Manual Range Low (0 = auto)",                      group="Range", minval=0.0)
+man_ranges    = input.text_area("USDCAD=1.42992/1.37598\nNZDUSD=0.598/0.55846\nXAUUSD=4697.1/3959.8\nXAGUSD=71.18/54.776",
+     "Manual ranges: SYMBOL=high/low, one per line (symbols not listed = auto)", group="Range")
 
 bos_pivot_len = input.int(5,      "4H Swing Length (range extremes + BOS)",           group="Entry", minval=2,   maxval=10)
 tap_pivot_len = input.int(3,      "1H Swing Length (taps)",                           group="Entry", minval=2,   maxval=10)
@@ -295,6 +295,22 @@ if na(rng_hi) and not na(last_dph) and not na(last_dpl)
 // extreme counts as touching it: the BOS floor/ceiling is searched from the
 // FIRST touch of that extreme (USDCAD keeps 1.42061 from before the 1.42992
 // push), and whichever extreme was touched last sets leg_side.
+// One layout is used for every symbol (switched from the watchlist), so the
+// levels live in one text box keyed by symbol; this chart picks its own line.
+var float man_hi = 0.0
+var float man_lo = 0.0
+if barstate.isfirst
+    string _src = str.replace_all(str.replace_all(man_ranges, ";", "\n"), " ", "")
+    for _ln in str.split(_src, "\n")
+        array<string> _kv = str.split(_ln, "=")
+        if array.size(_kv) == 2 and str.upper(array.get(_kv, 0)) == str.upper(symbol_name)
+            array<string> _hl = str.split(array.get(_kv, 1), "/")
+            if array.size(_hl) == 2
+                float _a = str.tonumber(array.get(_hl, 0))
+                float _b = str.tonumber(array.get(_hl, 1))
+                if not na(_a) and not na(_b) and _a != _b
+                    man_hi := math.max(_a, _b)
+                    man_lo := math.min(_a, _b)
 use_manual = man_hi > 0 and man_lo > 0 and man_hi > man_lo
 _t_changed(int a, int b) => na(a) != na(b) or (not na(a) and a != b)
 var int man_hi_t    = na   // first touch of the high zone since price last visited the low zone
@@ -907,7 +923,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/14b)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/14c)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
