@@ -89,7 +89,8 @@ bos_min_depth = input.float(15.0, "BOS floor: min pullback depth (% of range)", 
 bos_max_depth = input.float(40.0, "BOS max depth from the extreme (% of range)",      group="Entry", minval=10.0, maxval=50.0, step=1.0)
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
-tp_rr         = input.float(3.0,  "Take Profit R:R (full close)",                     group="Entry", minval=1.0, step=0.1)
+tp_rr         = input.float(3.0,  "Range Reversal TP1 R:R",                           group="Entry", minval=1.0, step=0.1)
+tp1_close_pct = input.float(90.0, "% closed at TP1 (rest runs to the opposite range extreme, SL to entry)", group="Entry", minval=10.0, maxval=100.0, step=5.0)
 lock_at_rr    = input.float(2.0,  "Move SL once price reaches R:R",                   group="Entry", minval=0.5, step=0.1)
 lock_to_rr    = input.float(1.0,  "...to this R:R (locked profit)",                   group="Entry", minval=0.0, step=0.1)
 
@@ -411,11 +412,15 @@ short_entry = close
 short_sl    = not na(top_extreme) ? math.max(top_extreme + atr_now * sl_atr_buf, short_entry + _min_sl_price) : na
 short_risk  = not na(short_sl) ? short_sl - short_entry : na
 short_tp    = not na(short_risk) ? short_entry - short_risk * tp_rr : na
+// Runner target (2026-10-17): the opposite range extreme. None when it isn't
+// beyond TP1 (then TP1 closes 100%).
+short_tp2   = not na(short_tp) and tp1_close_pct < 100 and range_low < short_tp ? range_low : na
 
 long_entry = close
 long_sl    = not na(bot_extreme) ? math.min(bot_extreme - atr_now * sl_atr_buf, long_entry - _min_sl_price) : na
 long_risk  = not na(long_sl) ? long_entry - long_sl : na
 long_tp    = not na(long_risk) ? long_entry + long_risk * tp_rr : na
+long_tp2   = not na(long_tp) and tp1_close_pct < 100 and range_high > long_tp ? range_high : na
 
 _size(entry_p, sl_p, risk_usd) =>
     sl_dist = not na(sl_p) ? math.max(math.abs(entry_p - sl_p), syminfo.mintick) : syminfo.mintick
@@ -524,15 +529,16 @@ var int    s_bar   = -1        // entry bar (every setup; time exit + SL lock)
 var string s_setup = ""        // "rev", "bb", "mc"
 var bool   lock_done = false   // range reversal SL already moved to lock_to_rr
 
-// Single full target: "tp1" carries the 1:3 TP and no "tp2" is sent (same
-// single-target shape as box_break). sl_lock_* are informational.
-_entry_msg(dir, lots, entry, sl, tp, lock_trig, lock_to, bos) =>
+// TP1 (1:3) closes tp1_close_pct (90%); "tp2" = opposite range extreme for the
+// runner (key omitted when there is no runner -> single target as before).
+_entry_msg(dir, lots, entry, sl, tp, tp2, lock_trig, lock_to, bos) =>
     '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
          '","direction":"' + dir + '","setup":"range_rev","timeframe":"60"' +
          ',"lot_size":'    + str.tostring(lots) +
          ',"entry_price":' + str.tostring(entry, price_format) +
          ',"stop_loss":'   + str.tostring(sl,    price_format) +
          ',"tp1":'         + str.tostring(tp,    price_format) +
+         (na(tp2) ? '' : ',"tp2":' + str.tostring(tp2, price_format) + ',"tp1_close_pct":' + str.tostring(tp1_close_pct)) +
          ',"rr_to_tp1":'   + str.tostring(tp_rr) +
          ',"sl_lock_trigger":' + str.tostring(lock_trig, price_format) +
          ',"sl_lock_to":'  + str.tostring(lock_to, price_format) +
@@ -543,32 +549,40 @@ _entry_msg(dir, lots, entry, sl, tp, lock_trig, lock_to, bos) =>
 
 if short_signal
     strategy.entry("SHORT", strategy.short, qty=short_lots, comment="SHORT " + str.tostring(short_lots) + "L")
-    strategy.exit("SHORT_X", from_entry="SHORT", limit=short_tp, stop=short_sl, comment="TP 1:" + str.tostring(tp_rr))
+    if na(short_tp2)
+        strategy.exit("SHORT_X", from_entry="SHORT", limit=short_tp, stop=short_sl, comment="TP 1:" + str.tostring(tp_rr))
+    else
+        strategy.exit("SHORT_X",  from_entry="SHORT", qty_percent=tp1_close_pct, limit=short_tp, stop=short_sl, comment="TP1 1:" + str.tostring(tp_rr))
+        strategy.exit("SHORT_X2", from_entry="SHORT", limit=short_tp2, stop=short_sl, comment="TP2 range extreme")
     s_entry := short_entry
     s_sl    := short_sl
     s_tp1   := short_tp
-    s_tp2   := na
+    s_tp2   := short_tp2
     s_risk  := short_risk
     s_bar   := bar_index
     s_setup := "rev"
     lock_done := false
     _entry_alert_pending := true
-    _entry_alert_msg     := _entry_msg("SHORT", short_lots, short_entry, short_sl, short_tp,
+    _entry_alert_msg     := _entry_msg("SHORT", short_lots, short_entry, short_sl, short_tp, short_tp2,
          short_entry - short_risk * lock_at_rr, short_entry - short_risk * lock_to_rr, bos_low)
 
 if long_signal
     strategy.entry("LONG", strategy.long, qty=long_lots, comment="LONG " + str.tostring(long_lots) + "L")
-    strategy.exit("LONG_X", from_entry="LONG", limit=long_tp, stop=long_sl, comment="TP 1:" + str.tostring(tp_rr))
+    if na(long_tp2)
+        strategy.exit("LONG_X", from_entry="LONG", limit=long_tp, stop=long_sl, comment="TP 1:" + str.tostring(tp_rr))
+    else
+        strategy.exit("LONG_X",  from_entry="LONG", qty_percent=tp1_close_pct, limit=long_tp, stop=long_sl, comment="TP1 1:" + str.tostring(tp_rr))
+        strategy.exit("LONG_X2", from_entry="LONG", limit=long_tp2, stop=long_sl, comment="TP2 range extreme")
     s_entry := long_entry
     s_sl    := long_sl
     s_tp1   := long_tp
-    s_tp2   := na
+    s_tp2   := long_tp2
     s_risk  := long_risk
     s_bar   := bar_index
     s_setup := "rev"
     lock_done := false
     _entry_alert_pending := true
-    _entry_alert_msg     := _entry_msg("LONG", long_lots, long_entry, long_sl, long_tp,
+    _entry_alert_msg     := _entry_msg("LONG", long_lots, long_entry, long_sl, long_tp, long_tp2,
          long_entry + long_risk * lock_at_rr, long_entry + long_risk * lock_to_rr, bos_high)
 
 _bb_msg(dir, lots, entry, sl, tp1) =>
@@ -690,7 +704,10 @@ if s_setup == "rev" and strategy.position_size != 0 and not lock_done and bar_in
         lock_done := true
         s_sl      := _is_short ? s_entry - s_risk * lock_to_rr : s_entry + s_risk * lock_to_rr
         strategy.exit(_is_short ? "SHORT_X" : "LONG_X", from_entry=_is_short ? "SHORT" : "LONG",
-             limit=s_tp1, stop=s_sl, comment="TP 1:" + str.tostring(tp_rr) + " | SL locked 1:" + str.tostring(lock_to_rr))
+             qty_percent=na(s_tp2) ? 100 : tp1_close_pct, limit=s_tp1, stop=s_sl, comment="TP 1:" + str.tostring(tp_rr) + " | SL locked 1:" + str.tostring(lock_to_rr))
+        if not na(s_tp2)
+            strategy.exit(_is_short ? "SHORT_X2" : "LONG_X2", from_entry=_is_short ? "SHORT" : "LONG",
+                 limit=s_tp2, stop=s_sl, comment="TP2 range extreme | SL locked 1:" + str.tostring(lock_to_rr))
 
 // =============================================================================
 // TIME EXIT — any trade still open max_hold_bars 1H bars after entry is closed
@@ -718,6 +735,12 @@ tp1_short_hit = prev_pos < 0 and strategy.position_size < 0 and strategy.positio
 tp1_long_hit  = prev_pos > 0 and strategy.position_size > 0 and strategy.position_size < prev_pos and not tp1_hit
 if tp1_short_hit or tp1_long_hit
     tp1_hit := true
+    // Range reversal runner (2026-10-17): after TP1 the rest closes at the
+    // opposite range extreme or back at entry.
+    if s_setup == "rev" and not na(s_tp2)
+        s_sl := s_entry
+        strategy.exit(tp1_short_hit ? "SHORT_X2" : "LONG_X2", from_entry=tp1_short_hit ? "SHORT" : "LONG",
+             limit=s_tp2, stop=s_entry, comment="TP2 range extreme | SL at entry")
 
 _closed_now     = prev_pos != 0 and strategy.position_size == 0 and _n >= 0
 tp2_close_short = _closed_now and prev_pos < 0 and strategy.closedtrades.exit_price(_n) <  strategy.closedtrades.entry_price(_n)
@@ -738,7 +761,8 @@ if tp1_long_hit
     _lc("tp1_hit", "LONG")
 // A range reversal closed in profit but short of its 1:3 target was stopped at
 // the locked 1:1 -> reported as tp1_hit (a 1R win); a full target hit is tp2_hit.
-_rev_lock_exit = s_setup == "rev" and lock_done and _closed_now and
+_rev_runner_be = s_setup == "rev" and tp1_hit and _closed_now and not na(s_tp2)
+_rev_lock_exit = s_setup == "rev" and lock_done and not tp1_hit and _closed_now and
      (prev_pos < 0 ? strategy.closedtrades.exit_price(_n) > s_tp1 + syminfo.mintick :
                      strategy.closedtrades.exit_price(_n) < s_tp1 - syminfo.mintick)
 _time_exit = _closed_now and strategy.closedtrades.exit_comment(_n) == "TIME"
@@ -749,9 +773,9 @@ else
         _lc(_rev_lock_exit ? "tp1_hit" : "tp2_hit", "SHORT")
     if tp2_close_long
         _lc(_rev_lock_exit ? "tp1_hit" : "tp2_hit", "LONG")
-    if sl_short_hit
+    if sl_short_hit and not _rev_runner_be
         _lc("sl_hit", "SHORT")
-    if sl_long_hit
+    if sl_long_hit and not _rev_runner_be
         _lc("sl_hit", "LONG")
 
 // Entry alert goes out after any lifecycle alert from the same bar, so the
@@ -795,10 +819,10 @@ plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.a
 plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
 
 if show_signals and short_signal
-    label.new(bar_index, high, "4H BOS ↓ " + str.tostring(bos_low, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
+    label.new(bar_index, high, "4H BOS ↓ " + str.tostring(bos_low, price_format) + " | TP1 1:" + str.tostring(tp_rr) + " (" + str.tostring(tp1_close_pct) + "%), SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.orange, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
 if show_signals and long_signal
-    label.new(bar_index, low, "4H BOS ↑ " + str.tostring(bos_high, price_format) + " | TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
+    label.new(bar_index, low, "4H BOS ↑ " + str.tostring(bos_high, price_format) + " | TP1 1:" + str.tostring(tp_rr) + " (" + str.tostring(tp1_close_pct) + "%), SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.aqua, 30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
 plotshape(show_signals and short_signal_bb, "SHORT_BB", shape.triangledown, location.abovebar, color.fuchsia, size=size.normal)
@@ -883,7 +907,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/17)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/17b)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
@@ -900,7 +924,7 @@ if show_info and _draw_now
     table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + (leg_side != "down" ? " | no long BOS (latest leg is up)" : " | BOS > " + (na(bos_high) ? "none yet (no 4H swing high since the range low)" : _fmt(bos_high))) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 7, "REV: SL wick, TP 1:" + str.tostring(tp_rr) + ", SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 7, "REV: SL wick, TP1 1:" + str.tostring(tp_rr) + " closes " + str.tostring(tp1_close_pct) + "%, rest to opp. extreme / entry, SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 8, "Risk",       text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#") + " | Mid Cont $" + str.tostring(risk_dollars_mc, "#"), text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 10, "1H Taps (structure)",   text_color=color.gray, text_size=_tsize)

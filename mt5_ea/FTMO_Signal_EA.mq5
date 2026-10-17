@@ -22,6 +22,11 @@
 //| the entry falls back to a market order at a different price.       |
 //| mid_cont keeps two targets (50% at tp1, rest at tp2, SL unmoved).  |
 //|                                                                    |
+//| 2026-10-17: range_rev with a "tp2" (opposite range extreme) closes |
+//| tp1_close_pct (90%) at tp1 (1:3), broker TP = tp2 for the runner,  |
+//| and the runner's SL moves to entry once TP1 is hit. A range_rev    |
+//| signal without tp2 stays single-target at tp1.                     |
+//|                                                                    |
 //| EXCEPTION -- box_break (Entry E) signals are single-target: Pine  |
 //| never sends a tp2 for them (s_tp2 := na, full close at tp1, no    |
 //| partial/trail split). Broker TP is set to tp1 directly and no     |
@@ -389,7 +394,7 @@ void TryEnter(string botSymbol, string block)
    // returns for the missing "tp2" key. Any signal without a tp2 is treated
    // the same way as a safety net.
    bool isBoxBreak     = (setup == "box_break");
-   bool isSingleTarget = isBoxBreak || setup == "range_rev" || tp2 <= 0;
+   bool isSingleTarget = isBoxBreak || tp2 <= 0;
    double orderTP      = isSingleTarget ? tp1 : tp2;
 
    double lots = ComputeLotSize(botSymbol, brokerSymbol, slDistance, setup);
@@ -450,7 +455,16 @@ void TryEnter(string botSymbol, string block)
 
    ulong orderTicket = trade.ResultOrder();
    if(!isSingleTarget)
+     {
       GlobalVariableSet("ftmo_ea_tp1_" + (string)orderTicket, tp1);
+      // range_rev runner (2026-10-17): close tp1_close_pct at TP1, then SL to entry.
+      if(setup == "range_rev")
+        {
+         double pct = JsonNum(block, "tp1_close_pct");
+         GlobalVariableSet("ftmo_ea_tp1pct_" + (string)orderTicket, pct > 0 ? pct / 100.0 : 0.9);
+         GlobalVariableSet("ftmo_ea_tp1be_"  + (string)orderTicket, 1);
+        }
+     }
    // v7 range_rev SL lock, stored as R-multiples of the signal's own risk.
    if(setup == "range_rev")
      {
@@ -670,14 +684,25 @@ void ManageOpenPositions()
          bool tp1Hit = isLong ? (bid >= tp1) : (ask <= tp1);
          if(!tp1Hit) continue;
 
-         double closeVol = NormalizeDouble(vol / 2.0, 2);
+         string pctKey = "ftmo_ea_tp1pct_" + (string)ticket;
+         double frac   = GlobalVariableCheck(pctKey) ? GlobalVariableGet(pctKey) : 0.5;
          double volMin = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
+         double volStep = SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP);
+         if(volStep <= 0) volStep = 0.01;
+         double closeVol = NormalizeDouble(MathFloor(vol * frac / volStep + 1e-9) * volStep, 2);
+         // range_rev: if the runner left over would be below the broker's min
+         // lot, TP1 closes the whole position (TP1 is the main target).
+         if(frac > 0.5 && vol - closeVol < volMin - 1e-9)
+           {
+            trade.PositionClose(ticket);
+            continue;
+           }
          if(closeVol >= volMin && closeVol < vol)
            {
             trade.PositionClosePartial(ticket, closeVol);
            }
 
-         if(InpBreakevenAtTP1)
+         if(InpBreakevenAtTP1 || GlobalVariableCheck("ftmo_ea_tp1be_" + (string)ticket))
            {
             double breakeven = NormalizeDouble(entry, digits);
             trade.PositionModify(ticket, breakeven, curTP); // keep tp2 as broker TP unchanged
