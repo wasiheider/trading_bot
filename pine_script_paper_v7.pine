@@ -5,12 +5,12 @@
 // Replaces every v5 entry model (A/B/C/D/E) with ONE setup, per user spec
 // 2026-09-28. v5 is kept untouched in pine_script_paper_v5.pine for rollback.
 //
-// Range (reworked 2026-10-02, user spec):
-//   Range High / Low = the MOST RECENT confirmed Daily swing high / swing low,
-//   read from chart history (non-repainting: from the last CLOSED daily bar).
-//   Updates whenever a newer Daily swing confirms, so it follows current
-//   structure instead of locking onto the first pivots it saw. Frozen while a
-//   trade is open; picks up the latest swings as soon as the position is flat.
+// Range (reworked 2026-10-17, user spec + SOXS / US100 / SPY examples):
+//   Range High / Low = the high and low of the MOST SIGNIFICANT LEG = the
+//   highest high and lowest low of the last range_lookback (80) CLOSED Daily
+//   bars. Consolidations inside it are a range within the range and are
+//   ignored. A Daily close beyond an edge extends that edge. Frozen while a
+//   trade is open.
 //   No entries while price is more than max_break_pct beyond the range.
 //
 // Taps (market structure, not candles):
@@ -77,11 +77,11 @@ strategy(
 // =============================================================================
 // INPUTS
 // =============================================================================
-pivot_len     = input.int(2,      "Daily Swing Length (range leg origin)",            group="Range", minval=1,   maxval=20)
+range_lookback = input.int(80,    "Range = high/low of the last N Daily bars (major leg)", group="Range", minval=20, maxval=300)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
 max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
-man_ranges    = input.text_area("USDCAD=1.42992/1.37598\nNZDUSD=0.598/0.55846\nXAUUSD=4697.1/3959.8\nXAGUSD=71.18/54.776",
-     "Manual ranges: SYMBOL=high/low, one per line (symbols not listed = auto)", group="Range")
+man_ranges    = input.text_area("",
+     "Manual range overrides: SYMBOL=high/low per line (blank = auto major leg)", group="Range")
 
 bos_pivot_len = input.int(5,      "4H Swing Length (range extremes + BOS)",           group="Entry", minval=2,   maxval=10)
 tap_pivot_len = input.int(3,      "1H Swing Length (taps)",                           group="Entry", minval=2,   maxval=10)
@@ -141,12 +141,12 @@ _quote_to_usd    = syminfo.currency == "JPY" ? 1.0 / close : syminfo.currency ==
 atr_now = ta.atr(14)
 
 // =============================================================================
-// RANGE = THE LATEST LEG (user levels 2026-10-09, verified on NQ / USDCAD /
-// XAGUSD):
-//   * A 4H swing high ABOVE the range high (or a Daily swing beyond it) is a new
-//     extreme: it becomes the range high, and the range low becomes the latest
-//     confirmed Daily swing low = where that leg started. Mirror for a new low.
-//   * Swings that form INSIDE the range change nothing (they are pullbacks).
+// RANGE = THE MOST SIGNIFICANT LEG (user, 2026-10-17): highest high / lowest
+// low of the last range_lookback closed Daily bars. Matches the user's marked
+// charts: SOXS 73.30 / 28.46, US100 31,401 / 27,093 (Skilling 31,360 / 27,060),
+// SPY 780 / 730 (SPX 7,852.6 / 7,299.6), XAG 71.18 / 54.78, XAU 4,697 / 3,942.
+// Swing chains (latest Daily swing, keep-origin) picked consolidations or
+// whole trends; the user reads ranges as the last few months' major leg.
 // BOS LEVELS = "the floor that held" (user, 2026-10-10):
 //   Only the side of the latest leg is used: after a new range HIGH the short
 //   BOS, after a new range LOW the long BOS (the other side is not drawn/traded).
@@ -161,13 +161,16 @@ atr_now = ta.atr(14)
 // Swings come from expr[1] + lookahead_on (last CLOSED Daily / 4H bar, no
 // repaint) along with the swing bar's time. Same logic on every instrument.
 // =============================================================================
-[_d_ph, _d_pl, _d_pt] = request.security(syminfo.tickerid, "D",
-     [ta.pivothigh(high, pivot_len, pivot_len)[1], ta.pivotlow(low, pivot_len, pivot_len)[1], time[pivot_len + 1]],
-     lookahead=barmerge.lookahead_on)
+_leg() =>
+    float hi = ta.highest(high, range_lookback)
+    float lo = ta.lowest(low, range_lookback)
+    int   ht = time[-ta.highestbars(high, range_lookback)]
+    int   lt = time[-ta.lowestbars(low, range_lookback)]
+    [hi[1], lo[1], ht[1], lt[1]]
+[_lg_hi, _lg_lo, _lg_hi_t, _lg_lo_t] = request.security(syminfo.tickerid, "D", _leg(), lookahead=barmerge.lookahead_on)
 [_h4_ph, _h4_pl, _h4_pt] = request.security(syminfo.tickerid, "240",
      [ta.pivothigh(high, bos_pivot_len, bos_pivot_len)[1], ta.pivotlow(low, bos_pivot_len, bos_pivot_len)[1], time[bos_pivot_len + 1]],
      lookahead=barmerge.lookahead_on)
-_new_d  = ta.change(time("D"))   != 0
 _new_h4 = ta.change(time("240")) != 0
 
 // Floor / ceiling: lowest (highest) swing after time t that is at least
@@ -194,10 +197,7 @@ _ceil_after(vals, times, t, hi, lo) =>
                 res := na(res) ? v : math.max(res, v)
     res
 
-var float last_dph   = na
-var int   last_dph_t = na
-var float last_dpl   = na
-var int   last_dpl_t = na
+_t_changed(int a, int b) => na(a) != na(b) or (not na(a) and a != b)
 var array<float> h4_hv = array.new_float()   // confirmed 4H swing highs (oldest first)
 var array<int>   h4_ht = array.new_int()
 var array<float> h4_lv = array.new_float()   // confirmed 4H swing lows
@@ -212,82 +212,23 @@ var bool  bos_low_frozen  = false   // short fired off bos_low -> fixed until th
 var bool  bos_high_frozen = false
 var string leg_side = na            // "up" = latest extreme is the range high, "down" = the range low
 
-float ext_hi   = na
-int   ext_hi_t = na
-float ext_lo   = na
-int   ext_lo_t = na
-
-if _new_d
-    if not na(_d_ph)
-        last_dph   := _d_ph
-        last_dph_t := _d_pt
-        if not na(rng_hi) and _d_ph > rng_hi
-            ext_hi   := _d_ph
-            ext_hi_t := _d_pt
-    if not na(_d_pl)
-        last_dpl   := _d_pl
-        last_dpl_t := _d_pt
-        if not na(rng_lo) and _d_pl < rng_lo
-            ext_lo   := _d_pl
-            ext_lo_t := _d_pt
-
 if _new_h4
     if not na(_h4_ph)
         array.push(h4_hv, _h4_ph)
         array.push(h4_ht, _h4_pt)
-        if array.size(h4_hv) > 80
+        if array.size(h4_hv) > 200
             array.shift(h4_hv)
             array.shift(h4_ht)
-        if not na(rng_hi) and _h4_ph > rng_hi and (na(ext_hi) or _h4_ph > ext_hi)
-            ext_hi   := _h4_ph
-            ext_hi_t := _h4_pt
-        else if not bos_high_frozen and not na(rng_lo_t) and _h4_pt > rng_lo_t and _h4_ph >= rng_lo + (rng_hi - rng_lo) * bos_min_depth / 100.0
+        if not bos_high_frozen and not na(rng_hi) and _h4_ph <= rng_hi and not na(rng_lo_t) and _h4_pt > rng_lo_t and _h4_ph >= rng_lo + (rng_hi - rng_lo) * bos_min_depth / 100.0
             bos_high := na(bos_high) ? _h4_ph : math.max(bos_high, _h4_ph)
     if not na(_h4_pl)
         array.push(h4_lv, _h4_pl)
         array.push(h4_lt, _h4_pt)
-        if array.size(h4_lv) > 80
+        if array.size(h4_lv) > 200
             array.shift(h4_lv)
             array.shift(h4_lt)
-        if not na(rng_lo) and _h4_pl < rng_lo and (na(ext_lo) or _h4_pl < ext_lo)
-            ext_lo   := _h4_pl
-            ext_lo_t := _h4_pt
-        else if not bos_low_frozen and not na(rng_hi_t) and _h4_pt > rng_hi_t and _h4_pl <= rng_hi - (rng_hi - rng_lo) * bos_min_depth / 100.0
+        if not bos_low_frozen and not na(rng_lo) and _h4_pl >= rng_lo and not na(rng_hi_t) and _h4_pt > rng_hi_t and _h4_pl <= rng_hi - (rng_hi - rng_lo) * bos_min_depth / 100.0
             bos_low := na(bos_low) ? _h4_pl : math.min(bos_low, _h4_pl)
-
-// New extreme -> new leg: the opposite end becomes the latest Daily swing.
-if not na(ext_hi)
-    rng_hi   := ext_hi
-    rng_hi_t := ext_hi_t
-    leg_side := "up"
-    if not na(last_dpl) and last_dpl < rng_hi
-        rng_lo   := last_dpl
-        rng_lo_t := last_dpl_t
-        bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
-        bos_high_frozen := false
-    bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
-    bos_low_frozen := false
-if not na(ext_lo)
-    rng_lo   := ext_lo
-    rng_lo_t := ext_lo_t
-    leg_side := "down"
-    if not na(last_dph) and last_dph > rng_lo
-        rng_hi   := last_dph
-        rng_hi_t := last_dph_t
-        bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
-        bos_low_frozen := false
-    bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
-    bos_high_frozen := false
-
-// First range on the chart: latest Daily swing high / low.
-if na(rng_hi) and not na(last_dph) and not na(last_dpl)
-    rng_hi   := last_dph
-    rng_hi_t := last_dph_t
-    rng_lo   := last_dpl
-    rng_lo_t := last_dpl_t
-    leg_side := rng_hi_t > rng_lo_t ? "up" : "down"
-    bos_low  := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
-    bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
 
 // Manual range (2026-10-14): when both inputs are set, they replace the auto
 // range on this chart (for charts where the auto read doesn't match yours, e.g.
@@ -312,7 +253,6 @@ if barstate.isfirst
                     man_hi := math.max(_a, _b)
                     man_lo := math.min(_a, _b)
 use_manual = man_hi > 0 and man_lo > 0 and man_hi > man_lo
-_t_changed(int a, int b) => na(a) != na(b) or (not na(a) and a != b)
 var int man_hi_t    = na   // first touch of the high zone since price last visited the low zone
 var int man_lo_t    = na
 var int man_hi_last = na   // latest touches (which extreme price visited last = leg_side)
@@ -339,6 +279,26 @@ if use_manual
         bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
         bos_low_frozen  := false
         bos_high_frozen := false
+
+// Auto range (symbols without a manual line): major leg from the Daily
+// lookback. leg_side = whichever extreme is newer.
+// A changed high re-searches the short BOS floor from it (mirror for the low).
+if not use_manual and not na(_lg_hi) and not na(_lg_lo) and _lg_hi > _lg_lo
+    bool _hi_new = na(rng_hi) or _lg_hi != rng_hi or _t_changed(rng_hi_t, _lg_hi_t)
+    bool _lo_new = na(rng_lo) or _lg_lo != rng_lo or _t_changed(rng_lo_t, _lg_lo_t)
+    rng_hi   := _lg_hi
+    rng_hi_t := _lg_hi_t
+    rng_lo   := _lg_lo
+    rng_lo_t := _lg_lo_t
+    leg_side := rng_hi_t > rng_lo_t ? "up" : "down"
+    if _hi_new or (_lo_new and not bos_low_frozen)
+        bos_low := _floor_after(h4_lv, h4_lt, rng_hi_t, rng_hi, rng_lo)
+        if _hi_new
+            bos_low_frozen := false
+    if _lo_new or (_hi_new and not bos_high_frozen)
+        bos_high := _ceil_after(h4_hv, h4_ht, rng_lo_t, rng_hi, rng_lo)
+        if _lo_new
+            bos_high_frozen := false
 
 // Frozen while a trade is open.
 var float range_high = na
@@ -879,7 +839,7 @@ _fmt(v) => na(v) ? "--" : str.tostring(v, price_format)
 
 status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 1H" :
      not instrument_ok ? "INSTRUMENT DISABLED" :
-     not range_valid ? (na(last_dph) or na(last_dpl) ? "BUILDING RANGE: waiting for Daily swing high + low" : "NO VALID RANGE: latest Daily swing high is below the swing low (trending), waiting for new swings") :
+     not range_valid ? "BUILDING RANGE: waiting for " + str.tostring(range_lookback) + " Daily bars of history" :
      in_trade ? (strategy.position_size > 0 ? "IN TRADE: LONG" : "IN TRADE: SHORT") + (tp1_hit ? " (TP1 hit)" : "") +
          (s_setup == "rev" and lock_done ? " | SL locked at 1:" + str.tostring(lock_to_rr) + " " + _fmt(s_sl) : "") :
      mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 1H close > " + _fmt(mc_l_c1_high) :
@@ -923,7 +883,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/14c)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/17)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
