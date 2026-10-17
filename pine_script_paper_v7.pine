@@ -108,7 +108,7 @@ mc_tp2_rr        = input.float(2.0,  "TP2 R:R (closes remaining 50%)",          
 show_range      = input.bool(true, "Show range levels",   group="Display")
 show_signals    = input.bool(true, "Show entry signals",  group="Display")
 show_trade_lvls = input.bool(true, "Show SL/TP on trade", group="Display")
-show_info       = input.bool(true, "Show info table",     group="Display")
+show_info       = input.bool(false, "Show info table (optional)", group="Display")
 show_status     = input.bool(true, "Show status label + level tags next to price", group="Display")
 table_pos_in    = input.string("Bottom Right", "Info table position", options=["Top Right", "Bottom Right", "Bottom Left", "Top Left", "Middle Right"], group="Display")
 table_size_in   = input.string("Normal", "Info table text size", options=["Small", "Normal", "Large"], group="Display")
@@ -304,9 +304,11 @@ if not use_manual and not na(_lg_hi) and not na(_lg_lo) and _lg_hi > _lg_lo
 // Frozen while a trade is open.
 var float range_high = na
 var float range_low  = na
+var int   range_t0   = na   // time of the older range extreme (where the lines start)
 if strategy.position_size == 0
     range_high := rng_hi
     range_low  := rng_lo
+    range_t0   := math.min(nz(rng_hi_t, time), nz(rng_lo_t, time))
 
 range_valid   = not na(range_high) and not na(range_low) and range_high > range_low
 range_changed = range_valid and (range_high != range_high[1] or range_low != range_low[1])
@@ -791,11 +793,11 @@ prev_pos := strategy.position_size
 // =============================================================================
 // VISUALS
 // =============================================================================
-// Current range only: flat High / Mid / Low lines from the bar this range
-// started on, extended right. Older ranges are not drawn (user, 2026-10-02).
-var int range_start_bar = na
-if range_changed or (range_valid and na(range_start_bar))
-    range_start_bar := bar_index
+// Current range only: flat High / Mid / Low lines from the older of the two
+// range extremes, extended right. Older ranges are not drawn (user, 2026-10-02).
+// (Drawing from the bar the range last changed gave a zero-length line when it
+// changed on the last bar -- TradingView drew it as a vertical red/green line,
+// US30 10/17.)
 // Strategies only run on the open realtime bar when it closes, so barstate.islast
 // alone left the table/status/range lines blank until the first 1H close after
 // loading. The last confirmed history bar draws them right away (2026-10-08).
@@ -808,10 +810,10 @@ if _draw_now
     line.delete(ln_mid)
     line.delete(ln_lo)
     if show_range and range_valid
-        _x1 = math.max(nz(range_start_bar, bar_index), bar_index - 4900)
-        ln_hi  := line.new(_x1, range_high, bar_index, range_high, extend=extend.right, color=color.red,   width=2)
-        ln_mid := line.new(_x1, range_mid,  bar_index, range_mid,  extend=extend.right, color=color.gray,  width=1, style=line.style_dashed)
-        ln_lo  := line.new(_x1, range_low,  bar_index, range_low,  extend=extend.right, color=color.green, width=2)
+        int _t1 = na(range_t0) or range_t0 >= time ? time[1] : range_t0
+        ln_hi  := line.new(_t1, range_high, time, range_high, xloc=xloc.bar_time, extend=extend.right, color=color.red,   width=2)
+        ln_mid := line.new(_t1, range_mid,  time, range_mid,  xloc=xloc.bar_time, extend=extend.right, color=color.gray,  width=1, style=line.style_dashed)
+        ln_lo  := line.new(_t1, range_low,  time, range_low,  xloc=xloc.bar_time, extend=extend.right, color=color.green, width=2)
 
 bgcolor(top_active ? color.new(color.red,   92) : na, title="Top side active")
 bgcolor(bot_active ? color.new(color.green, 92) : na, title="Bottom side active")
@@ -908,7 +910,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/17d)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/17e)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
