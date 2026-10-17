@@ -7,7 +7,7 @@
 //
 // Range (reworked 2026-10-17, user spec + SOXS / US100 / SPY examples):
 //   Range High / Low = the high and low of the MOST SIGNIFICANT LEG = the
-//   highest high and lowest low of the last range_lookback (80) CLOSED Daily
+//   highest high and lowest low of the last range_lookback (90) CLOSED Daily
 //   bars. Consolidations inside it are a range within the range and are
 //   ignored. A Daily close beyond an edge extends that edge. Frozen while a
 //   trade is open.
@@ -77,7 +77,7 @@ strategy(
 // =============================================================================
 // INPUTS
 // =============================================================================
-range_lookback = input.int(80,    "Range = high/low of the last N Daily bars (major leg)", group="Range", minval=20, maxval=300)
+range_lookback = input.int(90,    "Range = high/low of the last N Daily bars (major leg)", group="Range", minval=20, maxval=300)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
 max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
 man_ranges    = input.text_area("",
