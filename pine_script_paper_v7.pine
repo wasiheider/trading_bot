@@ -78,6 +78,8 @@ strategy(
 // INPUTS
 // =============================================================================
 range_lookback = input.int(90,    "Range = high/low of the last N Daily bars (major leg)", group="Range", minval=20, maxval=300)
+major_lookback = input.int(250,   "Major high/low lookback (Daily bars) after a 2-pivot break", group="Range", minval=50, maxval=1000)
+major_piv_len  = input.int(5,     "Daily pivot length (2-pivot break)",                    group="Range", minval=2, maxval=20)
 zone_pct      = input.float(10.0, "Boundary Zone % of Range",                         group="Range", minval=1.0, maxval=30.0, step=0.5)
 max_break_pct = input.float(30.0, "No entries if price is beyond range by % of range", group="Range", minval=5.0, step=5.0)
 man_ranges    = input.text_area("",
@@ -162,12 +164,56 @@ atr_now = ta.atr(14)
 // Swings come from expr[1] + lookahead_on (last CLOSED Daily / 4H bar, no
 // repaint) along with the swing bar's time. Same logic on every instrument.
 // =============================================================================
+// 2-pivot break (user, 2026-10-17, AVGO): once Daily closes have broken the
+// two most recent Daily pivot lows AND price made the range low after them,
+// the range low becomes the MAJOR low (lowest low of major_lookback Daily
+// bars) -- AVGO 334.61 -> 291 (the 3/30 low the rally to the ATH started
+// from). Mirror for highs. The extreme's time stays the recent one, so
+// leg_side and the BOS search follow the breakdown, not the old major low.
 _leg() =>
     float hi = ta.highest(high, range_lookback)
     float lo = ta.lowest(low, range_lookback)
     int   ht = time[-ta.highestbars(high, range_lookback)]
     int   lt = time[-ta.lowestbars(low, range_lookback)]
-    [hi[1], lo[1], ht[1], lt[1]]
+    int   ml = math.min(major_lookback, bar_index + 1)
+    float mhi = ta.highest(high, ml)
+    float mlo = ta.lowest(low, ml)
+    float _pl = ta.pivotlow(low, major_piv_len, major_piv_len)
+    float _ph = ta.pivothigh(high, major_piv_len, major_piv_len)
+    int   _pt = time[major_piv_len]
+    var float pl1 = na
+    var float pl2 = na
+    var int   pl1_t = na
+    var bool  pl1_b = false
+    var bool  pl2_b = false
+    var float ph1 = na
+    var float ph2 = na
+    var int   ph1_t = na
+    var bool  ph1_b = false
+    var bool  ph2_b = false
+    if not na(_pl)
+        pl2   := pl1
+        pl2_b := pl1_b
+        pl1   := _pl
+        pl1_t := _pt
+        pl1_b := false
+    if not na(_ph)
+        ph2   := ph1
+        ph2_b := ph1_b
+        ph1   := _ph
+        ph1_t := _pt
+        ph1_b := false
+    if not na(pl1) and close < pl1
+        pl1_b := true
+    if not na(pl2) and close < pl2
+        pl2_b := true
+    if not na(ph1) and close > ph1
+        ph1_b := true
+    if not na(ph2) and close > ph2
+        ph2_b := true
+    float lo_out = pl1_b and pl2_b and lt > pl1_t ? math.min(lo, nz(mlo, lo)) : lo
+    float hi_out = ph1_b and ph2_b and ht > ph1_t ? math.max(hi, nz(mhi, hi)) : hi
+    [hi_out[1], lo_out[1], ht[1], lt[1]]
 [_lg_hi, _lg_lo, _lg_hi_t, _lg_lo_t] = request.security(syminfo.tickerid, "D", _leg(), lookahead=barmerge.lookahead_on)
 [_h4_ph, _h4_pl, _h4_pt] = request.security(syminfo.tickerid, "240",
      [ta.pivothigh(high, bos_pivot_len, bos_pivot_len)[1], ta.pivotlow(low, bos_pivot_len, bos_pivot_len)[1], time[bos_pivot_len + 1]],
@@ -910,7 +956,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/17e)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/17f)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
