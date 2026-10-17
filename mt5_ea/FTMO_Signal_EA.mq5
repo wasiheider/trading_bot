@@ -24,7 +24,7 @@
 //|                                                                    |
 //| 2026-10-17: range_rev with a "tp2" (opposite range extreme) closes |
 //| tp1_close_pct (90%) at tp1 (1:3), broker TP = tp2 for the runner,  |
-//| and the runner's SL moves to entry once TP1 is hit. A range_rev    |
+//| and the runner's SL sits at the 1:1 lock after TP1. A range_rev   |
 //| signal without tp2 stays single-target at tp1.                     |
 //|                                                                    |
 //| EXCEPTION -- box_break (Entry E) signals are single-target: Pine  |
@@ -457,12 +457,11 @@ void TryEnter(string botSymbol, string block)
    if(!isSingleTarget)
      {
       GlobalVariableSet("ftmo_ea_tp1_" + (string)orderTicket, tp1);
-      // range_rev runner (2026-10-17): close tp1_close_pct at TP1, then SL to entry.
+      // range_rev runner (2026-10-17): close tp1_close_pct at TP1, runner SL at the 1:1 lock.
       if(setup == "range_rev")
         {
          double pct = JsonNum(block, "tp1_close_pct");
          GlobalVariableSet("ftmo_ea_tp1pct_" + (string)orderTicket, pct > 0 ? pct / 100.0 : 0.9);
-         GlobalVariableSet("ftmo_ea_tp1be_"  + (string)orderTicket, 1);
         }
      }
    // v7 range_rev SL lock, stored as R-multiples of the signal's own risk.
@@ -702,7 +701,20 @@ void ManageOpenPositions()
             trade.PositionClosePartial(ticket, closeVol);
            }
 
-         if(InpBreakevenAtTP1 || GlobalVariableCheck("ftmo_ea_tp1be_" + (string)ticket))
+         // range_rev runner: make sure the SL is at the 1:1 lock (normally already
+         // there from ManageSlLocks at 1:2; covers a gap straight through to TP1).
+         string lockToKey = "ftmo_ea_lockto_" + (string)ticket;
+         if(GlobalVariableCheck(pctKey) && GlobalVariableCheck(lockToKey))
+           {
+            string lockOrigKey = "ftmo_ea_lockorig_" + (string)ticket;
+            double R0 = MathAbs(entry - (GlobalVariableCheck(lockOrigKey) ? GlobalVariableGet(lockOrigKey) : origSL));
+            double lockSL = NormalizeDouble(isLong ? entry + GlobalVariableGet(lockToKey) * R0 : entry - GlobalVariableGet(lockToKey) * R0, digits);
+            bool tighter = isLong ? (lockSL > curSL) : (lockSL < curSL);
+            if(R0 > 0 && tighter && trade.PositionModify(ticket, lockSL, curTP))
+               GlobalVariableSet("ftmo_ea_lockdone_" + (string)ticket, 1);
+           }
+
+         if(InpBreakevenAtTP1)
            {
             double breakeven = NormalizeDouble(entry, digits);
             trade.PositionModify(ticket, breakeven, curTP); // keep tp2 as broker TP unchanged

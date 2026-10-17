@@ -90,7 +90,7 @@ bos_max_depth = input.float(40.0, "BOS max depth from the extreme (% of range)",
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
 tp_rr         = input.float(3.0,  "Range Reversal TP1 R:R",                           group="Entry", minval=1.0, step=0.1)
-tp1_close_pct = input.float(90.0, "% closed at TP1 (rest runs to the opposite range extreme, SL to entry)", group="Entry", minval=10.0, maxval=100.0, step=5.0)
+tp1_close_pct = input.float(90.0, "% closed at TP1 (rest runs to the opposite range extreme, SL at 1:1)", group="Entry", minval=10.0, maxval=100.0, step=5.0)
 lock_at_rr    = input.float(2.0,  "Move SL once price reaches R:R",                   group="Entry", minval=0.5, step=0.1)
 lock_to_rr    = input.float(1.0,  "...to this R:R (locked profit)",                   group="Entry", minval=0.0, step=0.1)
 
@@ -736,11 +736,12 @@ tp1_long_hit  = prev_pos > 0 and strategy.position_size > 0 and strategy.positio
 if tp1_short_hit or tp1_long_hit
     tp1_hit := true
     // Range reversal runner (2026-10-17): after TP1 the rest closes at the
-    // opposite range extreme or back at entry.
+    // opposite range extreme or at the 1:1 lock (user: runner SL 1:1, not entry).
     if s_setup == "rev" and not na(s_tp2)
-        s_sl := s_entry
+        lock_done := true
+        s_sl := tp1_short_hit ? s_entry - s_risk * lock_to_rr : s_entry + s_risk * lock_to_rr
         strategy.exit(tp1_short_hit ? "SHORT_X2" : "LONG_X2", from_entry=tp1_short_hit ? "SHORT" : "LONG",
-             limit=s_tp2, stop=s_entry, comment="TP2 range extreme | SL at entry")
+             limit=s_tp2, stop=s_sl, comment="TP2 range extreme | SL 1:" + str.tostring(lock_to_rr))
 
 _closed_now     = prev_pos != 0 and strategy.position_size == 0 and _n >= 0
 tp2_close_short = _closed_now and prev_pos < 0 and strategy.closedtrades.exit_price(_n) <  strategy.closedtrades.entry_price(_n)
@@ -907,7 +908,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/17b)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/17c)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
@@ -924,7 +925,7 @@ if show_info and _draw_now
     table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + (leg_side != "down" ? " | no long BOS (latest leg is up)" : " | BOS > " + (na(bos_high) ? "none yet (no 4H swing high since the range low)" : _fmt(bos_high))) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 7, "REV: SL wick, TP1 1:" + str.tostring(tp_rr) + " closes " + str.tostring(tp1_close_pct) + "%, rest to opp. extreme / entry, SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
+    table.cell(info, 1, 7, "REV: SL wick, TP1 1:" + str.tostring(tp_rr) + " closes " + str.tostring(tp1_close_pct) + "%, rest to opp. extreme (SL 1:1), SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 8, "Risk",       text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 8, "$" + str.tostring(risk_dollars_eff, "#") + " | Mid Cont $" + str.tostring(risk_dollars_mc, "#"), text_color=color.gray, text_size=_tsize)
     table.cell(info, 0, 10, "1H Taps (structure)",   text_color=color.gray, text_size=_tsize)
