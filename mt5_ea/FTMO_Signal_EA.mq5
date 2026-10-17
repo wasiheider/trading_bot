@@ -110,7 +110,7 @@ input double InpTrailGapR   = 0.5;
 // v7 time exit (2026-10-08): close any EA position still open this many H1
 // bars after it filled, every setup -- matches the Pine script's max_hold_bars
 // so FTMO doesn't keep holding a trade the paper strategy already closed. 0 = off.
-input int    InpMaxHoldBars = 120;
+input int    InpMaxHoldBars = 0;     // 0 = off (user 2026-10-17: ranges can take weeks to play out)
 
 // Min-lot tolerance (2026-10-08, user call): when the risk-sized lot rounds
 // below the broker minimum, still take the trade at the minimum lot if that
