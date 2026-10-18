@@ -940,7 +940,7 @@ plot(show_trade_lvls and in_trade ? s_tp1   : na, "TP1",   color=color.new(color
 plot(show_trade_lvls and in_trade ? s_tp2   : na, "TP2",   color=color.green,               style=plot.style_linebr, linewidth=2)
 
 if show_signals and (tp1_short_hit or tp1_long_hit)
-    label.new(bar_index, last_exit_price, "TP1 50%", color=color.new(color.green, 40), textcolor=color.white, size=size.small)
+    label.new(bar_index, last_exit_price, s_setup == "mc" ? "TP1 50%" : "TP1 " + str.tostring(tp1_close_pct) + "%", color=color.new(color.green, 40), textcolor=color.white, size=size.small)
 if show_signals and _time_exit
     label.new(bar_index, last_exit_price, "TIME " + str.tostring(max_hold_bars) + " bars", color=color.gray, textcolor=color.white, size=size.small)
 if show_signals and not _time_exit and (tp2_close_short or tp2_close_long)
@@ -999,7 +999,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/18c)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/18d)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
