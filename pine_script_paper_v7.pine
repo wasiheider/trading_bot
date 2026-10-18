@@ -90,6 +90,7 @@ tap_pivot_len = input.int(3,      "1H Swing Length (taps)",                     
 bos_min_depth = input.float(15.0, "BOS floor: min pullback depth (% of range)",       group="Entry", minval=0.0, maxval=50.0, step=1.0)
 bos_max_depth = input.float(40.0, "BOS max depth from the extreme (% of range)",      group="Entry", minval=10.0, maxval=50.0, step=1.0)
 rev_counter_leg = input.bool(true, "Also reverse at the extreme opposite the latest leg (4H BOS)", group="Entry")
+rev_off_syms  = input.string("XAUUSD,XAGUSD", "Disable Range Reversal on (symbols, comma-separated)", group="Filters")
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
 tp_rr         = input.float(3.0,  "Range Reversal TP1 R:R",                           group="Entry", minval=1.0, step=0.1)
@@ -486,6 +487,14 @@ bear_lvl = bear_bos ? bos_low  : bos_low_ctr
 bull_lvl = bull_bos ? bos_high : bos_high_ctr
 bear_bos := bear_bos or (not na(bos_low_ctr)  and close < bos_low_ctr  and close[1] >= bos_low_ctr)
 bull_bos := bull_bos or (not na(bos_high_ctr) and close > bos_high_ctr and close[1] <= bos_high_ctr)
+
+// No Range Reversal on symbols in rev_off_syms (user, 2026-10-18). 3-yr replay:
+// Gold took 11 straight losing top-of-range shorts in the 1,830 -> 5,600 bull
+// run, Silver 6 of 7; with reversals off there the total went +7.0R -> +24.0R.
+// Box Break and Mid Continuation still trade these symbols.
+rev_off_here = array.includes(str.split(str.upper(str.replace_all(rev_off_syms, " ", "")), ","), str.upper(symbol_name))
+bear_bos := bear_bos and not rev_off_here
+bull_bos := bull_bos and not rev_off_here
 
 // =============================================================================
 // SL / TP
@@ -990,7 +999,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/18b)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/18c)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
