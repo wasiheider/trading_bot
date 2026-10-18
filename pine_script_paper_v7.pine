@@ -102,7 +102,7 @@ exclude_disabled = input.bool(true, "Skip GBPUSD / AUDUSD / GBPJPY (disabled ins
 bb_enabled       = input.bool(true, "Enable Box Break (1H close beyond Daily range)",      group="Filters")
 bb_sl_atr_cap    = input.float(3.0, "Box Break max SL distance (x ATR14)",                   group="Filters", minval=0.5, step=0.5)
 trade_from       = input.time(timestamp("2026-10-08T00:00:00-05:00"), "Only take entries from (older history stays flat)", group="Filters")
-max_hold_bars    = input.int(2160,  "Time exit: close after N 1H bars (2160 = ~90 trading days, 0 = off)",  group="Filters", minval=0)
+max_hold_bars    = input.int(1440,  "Time exit: close after N 1H bars (1440 = ~60 trading days, 0 = off)",  group="Filters", minval=0)
 
 mc_enabled       = input.bool(true,  "Enable Mid Continuation",                              group="Mid Continuation")
 mc_max_taps      = input.int(2,      "Allowed while boundary 1H taps are below",             group="Mid Continuation", minval=1, maxval=10)
@@ -999,7 +999,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/18d)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/18e)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
