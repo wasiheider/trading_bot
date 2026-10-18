@@ -89,6 +89,7 @@ bos_pivot_len = input.int(5,      "4H Swing Length (range extremes + BOS)",     
 tap_pivot_len = input.int(3,      "1H Swing Length (taps)",                           group="Entry", minval=2,   maxval=10)
 bos_min_depth = input.float(15.0, "BOS floor: min pullback depth (% of range)",       group="Entry", minval=0.0, maxval=50.0, step=1.0)
 bos_max_depth = input.float(40.0, "BOS max depth from the extreme (% of range)",      group="Entry", minval=10.0, maxval=50.0, step=1.0)
+rev_counter_leg = input.bool(true, "Also reverse at the extreme opposite the latest leg (4H BOS)", group="Entry")
 sl_atr_buf    = input.float(0.1,  "SL buffer beyond reversal wick (x ATR14)",         group="Entry", minval=0.0, step=0.05)
 min_sl_pips   = input.int(15,     "Min SL Distance from Entry (pips)",                group="Entry", minval=1,   maxval=500)
 tp_rr         = input.float(3.0,  "Range Reversal TP1 R:R",                           group="Entry", minval=1.0, step=0.1)
@@ -453,6 +454,39 @@ bull_bos = bot_active and leg_side == "down" and not na(bos_high) and bos_high <
      bos_high - range_low <= range_size * bos_max_depth / 100.0 and
      close > bos_high and close[1] <= bos_high
 
+// Counter-leg reversal (user, 2026-10-18; 3-yr replay: reversals -2.2R -> +3.3R):
+// after a top rejection the latest extreme is still the high, so the long BOS
+// above never arms at the range low. Here the BOS is the most recent 4H swing
+// high formed since price was last in the top zone (the last lower high of the
+// drop), within bos_min_depth..bos_max_depth % of the range above the low;
+// entry is still a 1H close through it. Shorts at the top after a down leg mirror.
+var int last_top_t = na
+var int last_bot_t = na
+if in_top_zone
+    last_top_t := time
+if in_bot_zone
+    last_bot_t := time
+_latest_in(vals, times, t, lo_v, hi_v) =>
+    float res = na
+    int n = array.size(vals)
+    if n > 0 and not na(t)
+        for i = n - 1 to 0
+            if array.get(times, i) <= t
+                break
+            float x = array.get(vals, i)
+            if x >= lo_v and x <= hi_v
+                res := x
+                break
+    res
+bos_low_ctr  = rev_counter_leg and range_valid and top_active and leg_side == "down" ?
+     _latest_in(h4_lv, h4_lt, last_bot_t, range_high - range_size * bos_max_depth / 100.0, range_high - range_size * bos_min_depth / 100.0) : na
+bos_high_ctr = rev_counter_leg and range_valid and bot_active and leg_side == "up" ?
+     _latest_in(h4_hv, h4_ht, last_top_t, range_low + range_size * bos_min_depth / 100.0, range_low + range_size * bos_max_depth / 100.0) : na
+bear_lvl = bear_bos ? bos_low  : bos_low_ctr
+bull_lvl = bull_bos ? bos_high : bos_high_ctr
+bear_bos := bear_bos or (not na(bos_low_ctr)  and close < bos_low_ctr  and close[1] >= bos_low_ctr)
+bull_bos := bull_bos or (not na(bos_high_ctr) and close > bos_high_ctr and close[1] <= bos_high_ctr)
+
 // =============================================================================
 // SL / TP
 // =============================================================================
@@ -612,7 +646,7 @@ if short_signal
     lock_done := false
     _entry_alert_pending := true
     _entry_alert_msg     := _entry_msg("SHORT", short_lots, short_entry, short_sl, short_tp, short_tp2,
-         short_entry - short_risk * lock_at_rr, short_entry - short_risk * lock_to_rr, bos_low)
+         short_entry - short_risk * lock_at_rr, short_entry - short_risk * lock_to_rr, bear_lvl)
 
 if long_signal
     strategy.entry("LONG", strategy.long, qty=long_lots, comment="LONG " + str.tostring(long_lots) + "L")
@@ -631,7 +665,7 @@ if long_signal
     lock_done := false
     _entry_alert_pending := true
     _entry_alert_msg     := _entry_msg("LONG", long_lots, long_entry, long_sl, long_tp, long_tp2,
-         long_entry + long_risk * lock_at_rr, long_entry + long_risk * lock_to_rr, bos_high)
+         long_entry + long_risk * lock_at_rr, long_entry + long_risk * lock_to_rr, bull_lvl)
 
 _bb_msg(dir, lots, entry, sl, tp1) =>
     '{"event":"entry_filled","account":"PAPER","symbol":"' + symbol_name +
@@ -868,10 +902,10 @@ plotshape(show_signals and short_signal, "SHORT", shape.triangledown, location.a
 plotshape(show_signals and long_signal,  "LONG",  shape.triangleup,   location.belowbar, color.aqua,   size=size.normal)
 
 if show_signals and short_signal
-    label.new(bar_index, high, "4H BOS ↓ " + str.tostring(bos_low, price_format) + " | TP1 1:" + str.tostring(tp_rr) + " (" + str.tostring(tp1_close_pct) + "%), SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
+    label.new(bar_index, high, "4H BOS ↓ " + str.tostring(bear_lvl, price_format) + " | TP1 1:" + str.tostring(tp_rr) + " (" + str.tostring(tp1_close_pct) + "%), SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.orange, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
 if show_signals and long_signal
-    label.new(bar_index, low, "4H BOS ↑ " + str.tostring(bos_high, price_format) + " | TP1 1:" + str.tostring(tp_rr) + " (" + str.tostring(tp1_close_pct) + "%), SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
+    label.new(bar_index, low, "4H BOS ↑ " + str.tostring(bull_lvl, price_format) + " | TP1 1:" + str.tostring(tp_rr) + " (" + str.tostring(tp1_close_pct) + "%), SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr),
          color=color.new(color.aqua, 30), textcolor=color.white, style=label.style_label_up, size=size.small)
 
 plotshape(show_signals and short_signal_bb, "SHORT_BB", shape.triangledown, location.abovebar, color.fuchsia, size=size.normal)
@@ -917,11 +951,11 @@ status_txt = not tf_ok ? "WRONG TIMEFRAME: load on 1H" :
          (s_setup == "rev" and lock_done ? " | SL locked at 1:" + str.tostring(lock_to_rr) + " " + _fmt(s_sl) : "") :
      mc_l_c1_bar == bar_index ? "MID CONT LONG ARMED: next 1H close > " + _fmt(mc_l_c1_high) :
      mc_s_c1_bar == bar_index ? "MID CONT SHORT ARMED: next 1H close < " + _fmt(mc_s_c1_low) :
-     top_active ? (leg_side != "up" ? "TOP ACTIVE: no short reversal, latest leg is down" :
+     top_active ? (leg_side != "up" ? (not na(bos_low_ctr) ? "TOP ACTIVE: short on 1H close < " + _fmt(bos_low_ctr) + " (4H BOS, counter-leg)" : rev_counter_leg ? "TOP ACTIVE: counter-leg, waiting for a 4H swing low 15-40% below the high" : "TOP ACTIVE: no short reversal, latest leg is down") :
                    not na(bos_low) and range_high - bos_low > range_size * bos_max_depth / 100.0 ? "TOP ACTIVE: no short, BOS " + _fmt(bos_low) + " is too deep (mid-range)" :
                    not na(bos_low) and bos_low > range_mid ? "TOP ACTIVE: short on 1H close < " + _fmt(bos_low) + " (BOS)" :
                    "TOP ACTIVE: waiting for a 4H BOS level (swing low) near the high") :
-     bot_active ? (leg_side != "down" ? "BOTTOM ACTIVE: no long reversal, latest leg is up" :
+     bot_active ? (leg_side != "down" ? (not na(bos_high_ctr) ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(bos_high_ctr) + " (4H BOS, counter-leg)" : rev_counter_leg ? "BOTTOM ACTIVE: counter-leg, waiting for a 4H swing high 15-40% above the low" : "BOTTOM ACTIVE: no long reversal, latest leg is up") :
                    not na(bos_high) and bos_high - range_low > range_size * bos_max_depth / 100.0 ? "BOTTOM ACTIVE: no long, BOS " + _fmt(bos_high) + " is too deep (mid-range)" :
                    not na(bos_high) and bos_high < range_mid ? "BOTTOM ACTIVE: long on 1H close > " + _fmt(bos_high) + " (BOS)" :
                    "BOTTOM ACTIVE: waiting for a 4H BOS level (swing high) near the low") :
@@ -956,7 +990,7 @@ var table info = table.new(_tpos, 2, 12, bgcolor=color.new(color.black, 20), bor
 if show_info and _draw_now
     table.cell(info, 0, 11, "Status",   text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 11, status_txt, text_color=status_clr, text_size=_tsize)
-    table.cell(info, 0, 0, "PAPER v7 (10/17f)",  text_color=color.white, text_size=_tsize)
+    table.cell(info, 0, 0, "PAPER v7 (10/18)",  text_color=color.white, text_size=_tsize)
     table.cell(info, 1, 0, "Daily Range | 1H BOS Reversal", text_color=color.yellow, text_size=_tsize)
     table.cell(info, 0, 1, "Timeframe", text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 1, tf_ok ? "1H OK" : "WRONG TF — load on 1H", text_color=tf_ok ? color.green : color.red, text_size=_tsize)
@@ -967,10 +1001,10 @@ if show_info and _draw_now
     table.cell(info, 0, 4, use_manual ? "Range Low (manual)" : "Range Low",  text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 4, range_valid ? str.tostring(range_low, price_format) : "Building...", text_color=color.green, text_size=_tsize)
     table.cell(info, 0, 5, "Top side",   text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + (leg_side != "up" ? " | no short BOS (latest leg is down)" : " | BOS < " + (na(bos_low) ? "none yet (no 4H swing low since the range high)" : _fmt(bos_low))) : "--",
+    table.cell(info, 1, 5, top_active ? "ACTIVE — wick " + str.tostring(top_extreme, price_format) + (leg_side != "up" ? (not na(bos_low_ctr) ? " | BOS < " + _fmt(bos_low_ctr) + " (counter-leg)" : " | counter-leg: no 4H BOS yet") : " | BOS < " + (na(bos_low) ? "none yet (no 4H swing low since the range high)" : _fmt(bos_low))) : "--",
          text_color=top_active ? color.orange : color.gray, text_size=_tsize)
     table.cell(info, 0, 6, "Bottom side", text_color=color.gray, text_size=_tsize)
-    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + (leg_side != "down" ? " | no long BOS (latest leg is up)" : " | BOS > " + (na(bos_high) ? "none yet (no 4H swing high since the range low)" : _fmt(bos_high))) : "--",
+    table.cell(info, 1, 6, bot_active ? "ACTIVE — wick " + str.tostring(bot_extreme, price_format) + (leg_side != "down" ? (not na(bos_high_ctr) ? " | BOS > " + _fmt(bos_high_ctr) + " (counter-leg)" : " | counter-leg: no 4H BOS yet") : " | BOS > " + (na(bos_high) ? "none yet (no 4H swing high since the range low)" : _fmt(bos_high))) : "--",
          text_color=bot_active ? color.aqua : color.gray, text_size=_tsize)
     table.cell(info, 0, 7, "Exits",      text_color=color.gray, text_size=_tsize)
     table.cell(info, 1, 7, "REV: SL wick, TP1 1:" + str.tostring(tp_rr) + " closes " + str.tostring(tp1_close_pct) + "%, rest to opp. extreme (SL 1:1), SL to 1:" + str.tostring(lock_to_rr) + " at 1:" + str.tostring(lock_at_rr) + " | BB: SL opp. wall (max " + str.tostring(bb_sl_atr_cap) + " ATR), TP 1:1" + (max_hold_bars > 0 ? " | all: close after " + str.tostring(max_hold_bars) + " bars" : "") + (bb_enabled ? "" : " (OFF)"), text_color=color.gray, text_size=_tsize)
@@ -992,12 +1026,14 @@ if _draw_now
     line.delete(ln_bos_hi)
     label.delete(lb_bos_lo)
     label.delete(lb_bos_hi)
-    if show_range and leg_side == "up" and not na(bos_low)
-        ln_bos_lo := line.new(bar_index - 60, bos_low, bar_index, bos_low, extend=extend.right, color=color.orange, width=2, style=line.style_dotted)
-        lb_bos_lo := label.new(bar_index + 2, bos_low, "4H BOS (short) " + _fmt(bos_low), style=label.style_label_left, color=color.new(color.orange, 30), textcolor=color.white, size=size.small)
-    if show_range and leg_side == "down" and not na(bos_high)
-        ln_bos_hi := line.new(bar_index - 60, bos_high, bar_index, bos_high, extend=extend.right, color=color.aqua, width=2, style=line.style_dotted)
-        lb_bos_hi := label.new(bar_index + 2, bos_high, "4H BOS (long) " + _fmt(bos_high), style=label.style_label_left, color=color.new(color.aqua, 30), textcolor=color.black, size=size.small)
+    float _bs = leg_side == "up" ? bos_low : bos_low_ctr
+    float _bl = leg_side == "down" ? bos_high : bos_high_ctr
+    if show_range and not na(_bs)
+        ln_bos_lo := line.new(bar_index - 60, _bs, bar_index, _bs, extend=extend.right, color=color.orange, width=2, style=line.style_dotted)
+        lb_bos_lo := label.new(bar_index + 2, _bs, "4H BOS (short) " + _fmt(_bs) + (leg_side == "up" ? "" : " counter-leg"), style=label.style_label_left, color=color.new(color.orange, 30), textcolor=color.white, size=size.small)
+    if show_range and not na(_bl)
+        ln_bos_hi := line.new(bar_index - 60, _bl, bar_index, _bl, extend=extend.right, color=color.aqua, width=2, style=line.style_dotted)
+        lb_bos_hi := label.new(bar_index + 2, _bl, "4H BOS (long) " + _fmt(_bl) + (leg_side == "down" ? "" : " counter-leg"), style=label.style_label_left, color=color.new(color.aqua, 30), textcolor=color.black, size=size.small)
 
 // A 1H close through the BOS breaks structure -> freeze the level until the
 // range extreme on that side changes, whether or not a trade fired (runs last:
