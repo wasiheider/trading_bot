@@ -509,11 +509,43 @@ def analysis_text(sym, d):
          else "Bullish" if isinstance(d.get("fng_value"), int) and d["fng_value"] >= 75
          else None) if d.get("fng_value") is not None else None
     ) or d.get("eia_bias") or d.get("ng_bias")
-    if ts_bias and s1b != "Neutral" and ts_bias != "?" and ts_bias != s1b:
+    # Neutral third source is "no signal", not a disagreement (2026-10-23).
+    if ts_bias and s1b != "Neutral" and ts_bias not in ("?", "Neutral") and ts_bias != s1b:
         parts.append(f"Third-source check ({ts_bias}) diverges from Source 1 ({s1b}) -- "
                      f"institutional COT positioning and the independent check disagree.")
 
     return " ".join(parts) or "Insufficient data for clear analysis."
+
+
+def smart_money_conflict(d):
+    """Speculators (Source 1) one way, smart money the other (added 2026-10-23,
+    NATGAS: Leveraged Funds/Non-Commercial both Bearish = CONFIRMED, while
+    Commercials sat at IDX 100 and the Smart Money Score was +44 -- the
+    report still printed "Bearish, COT supports downside"). Conflict =
+    Commercial IDX at an extreme against the speculator bias (>=90 vs.
+    Bearish, <=10 vs. Bullish) or a Smart Money Score of 30+ against it.
+    Returns the contrarian direction ("Bullish"/"Bearish") or None."""
+    s1b = d["s1_bias"]
+    comm_i, score = d.get("comm_idx"), d.get("score")
+    comm_i = comm_i if isinstance(comm_i, int) else None
+    if s1b == "Bearish" and ((comm_i is not None and comm_i >= 90)
+                             or (score is not None and score >= 30)):
+        return "Bullish"
+    if s1b == "Bullish" and ((comm_i is not None and comm_i <= 10)
+                             or (score is not None and score <= -30)):
+        return "Bearish"
+    return None
+
+
+def _conflict_head(d, contra):
+    s1b, s1i, s2i = d["s1_bias"], d["s1_idx"], d.get("s2_idx", "?")
+    comm_i, score = d.get("comm_idx", "?"), d.get("score")
+    comm_txt = (f"Commercials at an extreme {contra} (IDX {comm_i})"
+                if isinstance(comm_i, int) and (comm_i >= 90 or comm_i <= 10)
+                else f"Commercials {d.get('comm_bias', '?')} (IDX {comm_i})")
+    score_txt = f", Smart Money {score:+d}" if score is not None else ""
+    return (f"Conflicted: speculators {s1b} (Leveraged Funds IDX {s1i}, "
+            f"Non-Commercial IDX {s2i}) but {comm_txt}{score_txt}.")
 
 
 def this_week_text(sym, d):
@@ -521,6 +553,18 @@ def this_week_text(sym, d):
     s2b = d.get("s2_bias","?")
     s1i, lev = d["s1_idx"], d["lev_sig"]
     extreme = isinstance(s1i, int) and (s1i <= 5 or s1i >= 95)
+
+    contra = smart_money_conflict(d)
+    if contra == "Bullish":
+        txt = _conflict_head(d, contra) + " Contrarian bullish setup -- don't press shorts;"
+        if lev in ("covering", "flip-UP"):
+            return txt + " Leveraged Funds have started covering, watch for that to continue as the trigger."
+        return txt + " wait for Leveraged Funds short covering as the trigger."
+    if contra == "Bearish":
+        txt = _conflict_head(d, contra) + " Contrarian bearish setup -- don't chase longs;"
+        if lev in ("pressing", "flip-DN"):
+            return txt + " Leveraged Funds have started selling, watch for that to continue as the trigger."
+        return txt + " wait for Leveraged Funds long liquidation as the trigger."
 
     if align == "CONFIRMED" and s1b == "Bullish":
         base = "Bullish. Both sources aligned."
@@ -564,6 +608,16 @@ def next_week_text(sym, d, next_date_str):
     s1i, lev, am = d["s1_idx"], d["lev_sig"], d.get("am_sig")
     extreme = isinstance(s1i, int) and (s1i <= 5 or s1i >= 95)
     nxt = next_date_str  # e.g. "Jun 30"
+
+    contra = smart_money_conflict(d)
+    if contra == "Bullish":
+        return (f"Conflicted through {nxt}. Squeeze risk: speculators are crowded short against "
+                f"smart money. A second week of Leveraged Funds covering would confirm the turn; "
+                f"until then no fresh shorts.")
+    if contra == "Bearish":
+        return (f"Conflicted through {nxt}. Exhaustion risk: speculators are crowded long against "
+                f"smart money. A second week of Leveraged Funds selling would confirm the turn; "
+                f"until then no fresh longs.")
 
     if align == "CONFIRMED":
         if s1b == "Bullish":
@@ -986,12 +1040,14 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     tops     = [sym for sym in ORDER
                 if sym in result and isinstance(result[sym]["s1_idx"], int)
                 and result[sym]["s1_idx"] >= 95]
+    conflicted = [sym for sym in ORDER
+                  if sym in result and smart_money_conflict(result[sym])]
     confirmed_bull = [sym for sym in ORDER
                       if sym in result and result[sym].get("alignment")=="CONFIRMED"
-                      and result[sym]["s1_bias"]=="Bullish"]
+                      and result[sym]["s1_bias"]=="Bullish" and sym not in conflicted]
     confirmed_bear = [sym for sym in ORDER
                       if sym in result and result[sym].get("alignment")=="CONFIRMED"
-                      and result[sym]["s1_bias"]=="Bearish"]
+                      and result[sym]["s1_bias"]=="Bearish" and sym not in conflicted]
     diverge = [sym for sym in ORDER
                if sym in result and result[sym].get("alignment")=="DIVERGE"]
     ts_diverge = [sym for sym in ORDER
@@ -1012,6 +1068,10 @@ def build_pdf(result, today, next_date_str, latest_report_date):
         themes.append(f"<b>CONFIRMED Bullish:</b> {', '.join(confirmed_bull)}.")
     if confirmed_bear:
         themes.append(f"<b>CONFIRMED Bearish:</b> {', '.join(confirmed_bear)}.")
+    if conflicted:
+        themes.append(f"<b>Conflicted (speculators vs. smart money):</b> "
+                      f"{', '.join(f'{s} ({smart_money_conflict(result[s])} contrarian)' for s in conflicted)} -- "
+                      f"speculator direction opposes an extreme Commercial reading or a 30+ Smart Money Score.")
     if diverge:
         themes.append(f"<b>Diverging sources (watch closely):</b> {', '.join(diverge)}.")
     if ts_diverge:
