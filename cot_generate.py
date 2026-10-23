@@ -6,7 +6,8 @@ Sources: CFTC TFF / Disaggregated + Tradingster Legacy Non-Commercial,
 plus (added 2026-07-10) the Commercial/Non-Reportable (Retail) breakdown
 from the same Tradingster data, and genuine third-source independent
 checks where a free one exists: OANDA position book (forex), Crypto
-Fear & Greed Index (BTC), EIA weekly crude stocks (Oil). See
+Fear & Greed Index (BTC), EIA weekly crude stocks (Oil), EIA weekly
+natural gas storage (NATGAS). See
 cot_fetch.py's docstring for the full reasoning on why Source 1/Source 2
 aren't truly independent of each other, and why NQ/ES/US30/Gold/Silver
 have no viable free third source.
@@ -155,6 +156,49 @@ def fetch_eia_crude_stocks():
     data = fetch(url)
     rows = data["response"]["data"]
     return int(rows[0]["value"]), int(rows[1]["value"])
+
+def fetch_eia_natgas_storage():
+    """EIA weekly working gas in storage, Lower 48 (Bcf), added 2026-10-23 as
+    the independent fundamental check for NATGAS (the gas analog of crude
+    stocks). The standard read is this week's net change vs. the 5-year
+    average change for the same week: a smaller injection / bigger draw than
+    normal is bullish, a bigger injection / smaller draw is bearish."""
+    import datetime as _dt
+    url = (
+        "https://api.eia.gov/v2/natural-gas/stor/wkly/data/"
+        f"?api_key={EIA_API_KEY}&frequency=weekly&data[0]=value"
+        "&facets[duoarea][]=R48&facets[process][]=SWO"
+        "&sort[0][column]=period&sort[0][direction]=desc&length=330"
+    )
+    rows = fetch(url)["response"]["data"]
+    pts = sorted((_dt.date.fromisoformat(r["period"]), int(r["value"])) for r in rows)
+    level = dict(pts)
+    dates = [d for d, _ in pts]
+
+    def change_at(d):
+        i = dates.index(d)
+        return level[d] - level[dates[i - 1]] if i > 0 else None
+
+    def nearest(target):
+        return min(dates, key=lambda d: abs((d - target).days))
+
+    now_d = dates[-1]
+    now_chg = change_at(now_d)
+    hist_chg, hist_lvl = [], []
+    for y in range(1, 6):
+        d = nearest(now_d - _dt.timedelta(days=364 * y))
+        if abs((d - (now_d - _dt.timedelta(days=364 * y))).days) <= 3 and change_at(d) is not None:
+            hist_chg.append(change_at(d))
+            hist_lvl.append(level[d])
+    avg_chg = round(sum(hist_chg) / len(hist_chg)) if hist_chg else None
+    avg_lvl = sum(hist_lvl) / len(hist_lvl) if hist_lvl else None
+    vs5 = round(100 * (level[now_d] - avg_lvl) / avg_lvl, 1) + 0.0 if avg_lvl else None  # +0.0 avoids "-0.0"
+    bias = "Neutral"
+    if avg_chg is not None:
+        diff = now_chg - avg_chg
+        bias = "Bullish" if diff <= -5 else "Bearish" if diff >= 5 else "Neutral"
+    return {"ng_week": now_d.isoformat(), "ng_level": level[now_d], "ng_change": now_chg,
+            "ng_avg5_change": avg_chg, "ng_vs5yr_pct": vs5, "ng_bias": bias}
 
 # ── Compute ───────────────────────────────────────────────────────────────────
 
@@ -376,6 +420,11 @@ def third_source_text(sym, d):
         chg = d["eia_now"] - d["eia_prev"]
         return (f"EIA weekly crude stocks: {chg:+,} thousand barrels ({d['eia_bias']}) -- "
                 f"real supply/demand fundamentals, not positioning data.")
+    if d.get("ng_bias"):
+        vs5 = f", storage {d['ng_vs5yr_pct']:+.1f}% vs. 5-yr average" if d.get("ng_vs5yr_pct") is not None else ""
+        return (f"EIA natural gas storage (week of {d['ng_week']}): {d['ng_change']:+,} Bcf vs. 5-yr average "
+                f"{d['ng_avg5_change']:+,} Bcf for the same week ({d['ng_bias']}){vs5} -- "
+                f"real supply/demand fundamentals, not positioning data.")
     return None
 
 
@@ -459,7 +508,7 @@ def analysis_text(sym, d):
         ("Bearish" if isinstance(d.get("fng_value"), int) and d["fng_value"] <= 25
          else "Bullish" if isinstance(d.get("fng_value"), int) and d["fng_value"] >= 75
          else None) if d.get("fng_value") is not None else None
-    ) or d.get("eia_bias")
+    ) or d.get("eia_bias") or d.get("ng_bias")
     if ts_bias and s1b != "Neutral" and ts_bias != "?" and ts_bias != s1b:
         parts.append(f"Third-source check ({ts_bias}) diverges from Source 1 ({s1b}) -- "
                      f"institutional COT positioning and the independent check disagree.")
@@ -628,7 +677,7 @@ def build_pdf(result, today, next_date_str, latest_report_date):
         "<b>Commercial/Retail:</b> CFTC Legacy report's classic 3-way split (Commercial hedgers vs. large "
         "speculators vs. small/retail traders), same underlying Tradingster data as Source 2.  "
         "<b>Third Source:</b> a genuinely independent, non-CFTC check where a free one exists -- OANDA position "
-        "book (forex), Crypto Fear &amp; Greed Index (BTC), EIA weekly crude stocks (Oil). No free independent source "
+        "book (forex), Crypto Fear &amp; Greed Index (BTC), EIA weekly crude stocks (Oil), EIA weekly natural gas storage vs. 5-yr average (NatGas). No free independent source "
         "exists for indices or Gold/Silver.  "
         "<b>COT Index:</b> Larry Williams percentile over full history -- Bullish >=60 | Bearish <=40 | Neutral 40-60.",
         sty["META"]))
@@ -745,7 +794,7 @@ def build_pdf(result, today, next_date_str, latest_report_date):
 
     # ─ Third-source independent check table (new 2026-07-10)
     story.append(Paragraph(
-        "Third-Source Independent Check (non-CFTC -- forex/BTC/Oil only, see note above)", sty["H2"]))
+        "Third-Source Independent Check (non-CFTC -- forex/BTC/Oil/NatGas only, see note above)", sty["H2"]))
     hdr4 = [ph(h) for h in ["SYM","SOURCE","READING","BIAS"]]
     cw4  = [16*mm,35*mm,70*mm,35*mm]
     ts4  = list(BASE_TS)
@@ -774,6 +823,12 @@ def build_pdf(result, today, next_date_str, latest_report_date):
                          pl_(f"{chg:+,} thousand bbl"),
                          pd_(d["eia_bias"])])
             ts4.append(("BACKGROUND",(3,len(rows4)-1),(3,len(rows4)-1), bc(d["eia_bias"])))
+        elif d.get("ng_bias"):
+            has_third = True
+            rows4.append([ps_(sym), pl_("EIA Nat Gas Storage"),
+                         pl_(f"{d['ng_change']:+,} Bcf vs 5-yr avg {d['ng_avg5_change']:+,} Bcf"),
+                         pd_(d["ng_bias"])])
+            ts4.append(("BACKGROUND",(3,len(rows4)-1),(3,len(rows4)-1), bc(d["ng_bias"])))
     if has_third:
         t4 = Table(rows4, colWidths=cw4, repeatRows=1)
         t4.setStyle(TableStyle(ts4))
@@ -941,7 +996,7 @@ def build_pdf(result, today, next_date_str, latest_report_date):
                if sym in result and result[sym].get("alignment")=="DIVERGE"]
     ts_diverge = [sym for sym in ORDER
                   if sym in result and result[sym].get("s1_bias") != "Neutral"
-                  and (result[sym].get("oanda_bias") or result[sym].get("eia_bias")
+                  and (result[sym].get("oanda_bias") or result[sym].get("eia_bias") or result[sym].get("ng_bias")
                        or result[sym].get("fng_value") is not None)
                   and third_source_text(sym, result[sym])
                   and "diverge" in analysis_text(sym, result[sym]).lower()]
@@ -1014,6 +1069,14 @@ def main():
     except Exception as e:
         print(f"  failed: {e}")
         eia_now, eia_prev = None, None
+
+    print("Fetching EIA weekly natural gas storage (NATGAS)...")
+    try:
+        ng_eia = fetch_eia_natgas_storage()
+        print(f"  {ng_eia}")
+    except Exception as e:
+        print(f"  failed: {e}")
+        ng_eia = None
 
     # ── Process Source 1 (CFTC) ───────────────────────────────────────────────
     result = {}
@@ -1129,6 +1192,9 @@ def main():
         result["CRUDE"]["eia_now"] = eia_now
         result["CRUDE"]["eia_prev"] = eia_prev
         result["CRUDE"]["eia_bias"] = "Bullish" if change < -2000 else "Bearish" if change > 2000 else "Neutral"
+
+    if "NATGAS" in result and ng_eia:
+        result["NATGAS"].update(ng_eia)
 
     # ── Dates ─────────────────────────────────────────────────────────────────
     latest_report_date = result[ORDER[0]]["dates"][-1]  # "06-16"
