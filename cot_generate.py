@@ -44,19 +44,21 @@ TFF_CODES = {
 }
 DISAGG_CODES = {
     "GOLD": "088691", "SILVER": "084691", "CRUDE": "067651",
+    "NATGAS": "023651",   # NYMEX Henry Hub natural gas (UNG), added 2026-10-23
 }
 TRADINGSTER_CODES = {
     "EUR": "099741", "GBP": "096742", "JPY": "097741", "NZD": "112741",
     "USD": "098662", "ES":  "13874%2B","NQ":  "209742", "US30": "12460%2B",
     "BTC": "133741", "VIX": "1170E1",
     "GOLD": "088691","SILVER": "084691","CRUDE": "067651",
+    "NATGAS": "023651",
 }
 INVERT = {"VIX"}
-ORDER  = ["EUR","GBP","JPY","NZD","USD","ES","NQ","US30","BTC","GOLD","SILVER","CRUDE","VIX"]
+ORDER  = ["EUR","GBP","JPY","NZD","USD","ES","NQ","US30","BTC","GOLD","SILVER","CRUDE","NATGAS","VIX"]
 SECTION_MAP = {
     "EUR":"FOREX","GBP":"FOREX","JPY":"FOREX","NZD":"FOREX","USD":"FOREX",
     "ES":"INDICES","NQ":"INDICES","US30":"INDICES","BTC":"INDICES",
-    "GOLD":"COMMODITIES","SILVER":"COMMODITIES","CRUDE":"COMMODITIES",
+    "GOLD":"COMMODITIES","SILVER":"COMMODITIES","CRUDE":"COMMODITIES","NATGAS":"COMMODITIES",
     "VIX":"VOLATILITY (VIX)",
 }
 OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -94,7 +96,7 @@ def fetch_disagg():
     codes = "','".join(DISAGG_CODES.values())
     return fetch(f"https://publicreporting.cftc.gov/resource/kh3c-gbw2.json"
                  f"?$where=cftc_contract_market_code%20in('{codes}')"
-                 f"&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=200")
+                 f"&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=270")  # ~67 weeks x 4 codes
 
 def fetch_tradingster(sym):
     try:
@@ -617,10 +619,10 @@ def build_pdf(result, today, next_date_str, latest_report_date):
         f"Data: Week Ending {report_str}  |  Analysis: {today_str}", sty["META"]))
     story.append(Paragraph(
         "<b>Source 1 -- Leveraged Funds:</b> CFTC TFF's speculative cohort (hedge funds/CTAs); "
-        "Disaggregated Managed Money for GOLD/SILVER/CRUDE.  "
+        "Disaggregated Managed Money for GOLD/SILVER/CRUDE/NATGAS.  "
         "<b>Asset Manager:</b> CFTC TFF's real-money institutional cohort (pension funds, insurers, mutual funds), "
         "tracked as its own series with its own net position/COT index/bias, same treatment as Leveraged Funds -- "
-        "not available for GOLD/SILVER/CRUDE (the Disaggregated report has no Asset Manager category).  "
+        "not available for GOLD/SILVER/CRUDE/NATGAS (the Disaggregated report has no Asset Manager category).  "
         "<b>Source 2 -- Non-Commercial:</b> Tradingster Legacy Non-Commercial (broader spec group = "
         "Leveraged Funds + Asset Manager combined).  "
         "<b>Commercial/Retail:</b> CFTC Legacy report's classic 3-way split (Commercial hedgers vs. large "
@@ -654,7 +656,7 @@ def build_pdf(result, today, next_date_str, latest_report_date):
 
     # ─ Asset Manager table (new 2026-09-22) -- tracked as its own source,
     # same treatment as Leveraged Funds, not folded into Source 2. TFF
-    # symbols only; GOLD/SILVER/CRUDE have no Asset Manager category in the
+    # symbols only; GOLD/SILVER/CRUDE/NATGAS have no Asset Manager category in the
     # Disaggregated report.
     story.append(Paragraph(
         "Asset Manager -- CFTC TFF Real-Money Institutional: Pension Funds, Insurers, Mutual Funds  (net contracts)",
@@ -674,7 +676,7 @@ def build_pdf(result, today, next_date_str, latest_report_date):
         t_am.setStyle(TableStyle(ts_am))
         story.append(t_am)
         story.append(Paragraph(
-            "Not available for GOLD/SILVER/CRUDE -- the Disaggregated report has no Asset Manager category "
+            "Not available for GOLD/SILVER/CRUDE/NATGAS -- the Disaggregated report has no Asset Manager category "
             "(its cohorts are Producer/Merchant, Swap Dealer, and Managed Money instead).", sty["META"]))
     else:
         story.append(Paragraph("No Asset Manager data available this run.", sty["META"]))
@@ -709,7 +711,7 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     story.append(Paragraph(
         "Weights: Commercial 50% (most reliable smart money vs. Retail), Asset Manager 30%, Leveraged Funds 20% "
         "(trend-following, weakest for a contrarian read) -- renormalized to Commercial ~71%/Leveraged Funds ~29% "
-        "for GOLD/SILVER/CRUDE (no Asset Manager data). Score = weighted cohort index minus Retail's own index; "
+        "for GOLD/SILVER/CRUDE/NATGAS (no Asset Manager data). Score = weighted cohort index minus Retail's own index; "
         "positive fades Retail short, negative fades Retail long. Prior-week score shown for short-term direction "
         "(building/fading/flipping), not just current level.", sty["META"]))
     hdr5 = [ph(h) for h in ["SYM","COMMERCIAL","ASSET MANAGER","LEVERAGED FUNDS","RETAIL",
@@ -1040,7 +1042,7 @@ def main():
         # index/bias/signal) -- not folded into Source 2 and not reduced to a
         # long-side-only adding/closing signal. TFF-only field, no "_all"
         # suffix (confirmed against a live API row 2026-09-22); not available
-        # for GOLD/SILVER/CRUDE, whose Disaggregated report has no Asset
+        # for GOLD/SILVER/CRUDE/NATGAS, whose Disaggregated report has no Asset
         # Manager category (Producer/Merchant, Swap Dealer, Managed Money
         # instead).
         am_nets  = [int(r["asset_mgr_positions_long"]) - int(r["asset_mgr_positions_short"]) for r in rows]
