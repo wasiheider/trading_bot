@@ -1,46 +1,49 @@
-"""Shared smart-money override for every COT read (added 2026-10-23).
+"""The one COT rule, shared by every COT output (rewritten 2026-10-23).
 
-One rule, used by cot_generate.py (weekly breakdown PDF), cot_fetch.py
-(the /cot dashboard payload, which the weekly trading plan also reads),
-so the three can't disagree. User rule 10/23: "if commercials are
-extreme bearish how is this bullish" and "Commercials and Retail split
-against the lean means LEAN towards Commercial".
+Used by cot_generate.py (weekly breakdown PDF) and cot_fetch.py (the /cot
+dashboard payload, which the weekly trading plan also reads), so they
+always agree.
 
-The speculator read (Leveraged Funds / Managed Money, confirmed or not by
-Non-Commercial) is trend-following. Commercials are the contrarian
-smart-money read. When they oppose the speculators, the lean follows the
-Commercials:
+User rule 10/23: "we never follow retail or hedge funds. we look for
+extremes when Commercials are on one side and hedge funds and/or retail
+are towards other extreme." Thresholds (user, 10/23): 80 / 20 COT Index.
+"Hedge funds" = either speculator source: Leveraged Funds / Managed Money
+(CFTC TFF / Disaggregated) or Non-Commercial (CFTC Legacy, the same report
+the Commercial index comes from).
 
-  CONFLICTED  Commercial IDX at an extreme against the speculator bias
-              (>=90 vs. Bearish, <=10 vs. Bullish) or a Smart Money Score of
-              30+ against it. Strongest form: lean with Commercials, and
-              expect a squeeze/exhaustion against the speculators.
-  SPLIT       Commercial bias opposes the speculator bias while Retail sits
-              on the speculators' side (e.g. speculators Bullish, Commercial
-              Bearish, Retail Bullish -- NQ on 10/20 data). Lean with
-              Commercials, at lower conviction than CONFLICTED.
+  Bullish setup: Commercial IDX >= 80 and hedge funds and/or retail <= 20.
+  Bearish setup: Commercial IDX <= 20 and hedge funds and/or retail >= 80.
+  Anything else: no COT edge (the speculators' direction is never a lean).
 
-Returns None when neither applies (speculator read stands)."""
+Returns {"signal", "comm_idx", "opposite", "note"} or None."""
+
+EXTREME_HI = 80
+EXTREME_LO = 20
 
 
-def smart_money_check(spec_bias, comm_idx, comm_bias, retail_bias, score):
-    if spec_bias not in ("Bullish", "Bearish"):
+def cot_setup(comm_idx, hf_idx, nc_idx, retail_idx):
+    if not isinstance(comm_idx, int):
         return None
-    contra = "Bearish" if spec_bias == "Bullish" else "Bullish"
-    comm_i = comm_idx if isinstance(comm_idx, int) else None
-    if spec_bias == "Bearish":
-        extreme = (comm_i is not None and comm_i >= 90) or (score is not None and score >= 30)
+    if comm_idx >= EXTREME_HI:
+        signal, hit = "Bullish", lambda v: isinstance(v, int) and v <= EXTREME_LO
+    elif comm_idx <= EXTREME_LO:
+        signal, hit = "Bearish", lambda v: isinstance(v, int) and v >= EXTREME_HI
     else:
-        extreme = (comm_i is not None and comm_i <= 10) or (score is not None and score <= -30)
-    if extreme:
-        return {"status": "CONFLICTED", "lean": contra,
-                "note": f"Speculators {spec_bias} but Commercials at an extreme {contra} "
-                        f"(IDX {comm_idx}, Smart Money {score:+d}). Lean {contra} with Commercials; "
-                        f"squeeze risk against the speculators." if score is not None else
-                        f"Speculators {spec_bias} but Commercials at an extreme {contra} (IDX {comm_idx}). "
-                        f"Lean {contra} with Commercials."}
-    if comm_bias == contra and retail_bias == spec_bias:
-        return {"status": "SPLIT", "lean": contra,
-                "note": f"Speculators and Retail {spec_bias}, Commercials {contra} (IDX {comm_idx}). "
-                        f"Lean {contra} with Commercials, lower conviction."}
+        return None
+    opposite = [f"{name} IDX {v}" for name, v in (("Hedge funds", hf_idx), ("Non-Commercial", nc_idx),
+                                                  ("Retail", retail_idx)) if hit(v)]
+    if not opposite:
+        return None
+    side = "long" if signal == "Bullish" else "short"
+    other = "short" if signal == "Bullish" else "long"
+    return {"signal": signal, "comm_idx": comm_idx, "opposite": opposite,
+            "note": f"Commercials at an extreme {side} (IDX {comm_idx}) vs. {', '.join(opposite)} at the "
+                    f"opposite extreme ({other}). Lean {signal} with Commercials."}
+
+
+def commercials_waiting(comm_idx):
+    """Commercials at an extreme but nobody stretched the other way yet --
+    a watch item, not a lean."""
+    if isinstance(comm_idx, int) and (comm_idx >= EXTREME_HI or comm_idx <= EXTREME_LO):
+        return "long" if comm_idx >= EXTREME_HI else "short"
     return None

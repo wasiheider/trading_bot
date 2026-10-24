@@ -74,7 +74,7 @@ long/short (raw net position, not just the long-side change). TFF-only;
 GOLD/SILVER/CRUDE use the Disaggregated report, which has no Asset Manager
 category.
 """
-from cot_rules import smart_money_check
+from cot_rules import cot_setup
 import concurrent.futures
 import json
 import os
@@ -476,10 +476,12 @@ def build_payload():
         item.update(_comm_retail_breakdown(leg_rows, invert))
         item["score"], item["score_1wk"] = _smart_money_score(item)
         item["score_label"] = _score_label(item["score"])
-        # Shared smart-money override (cot_rules.py, 2026-10-23): same rule as
-        # the breakdown PDF; the dashboard and the weekly trading plan read it.
-        item["smart_money"] = smart_money_check(item["bias"], item.get("comm_idx"), item.get("comm_bias"),
-                                                item.get("retail_bias"), item.get("score"))
+        # The one COT rule (cot_rules.py, 2026-10-23): a setup only when
+        # Commercials are at an extreme vs. hedge funds and/or retail at the
+        # opposite extreme. Same rule as the breakdown PDF; the dashboard and
+        # the weekly trading plan read this field.
+        item["cot_setup"] = cot_setup(item.get("comm_idx"), item.get("cot_idx"), item.get("leg_idx"),
+                                      item.get("retail_idx"))
 
         if sym in oanda_pos:
             long_pct, short_pct = oanda_pos[sym]
@@ -552,10 +554,12 @@ def build_payload():
         item.update(_comm_retail_breakdown(leg_rows, invert=False))
         item["score"], item["score_1wk"] = _smart_money_score(item)
         item["score_label"] = _score_label(item["score"])
-        # Shared smart-money override (cot_rules.py, 2026-10-23): same rule as
-        # the breakdown PDF; the dashboard and the weekly trading plan read it.
-        item["smart_money"] = smart_money_check(item["bias"], item.get("comm_idx"), item.get("comm_bias"),
-                                                item.get("retail_bias"), item.get("score"))
+        # The one COT rule (cot_rules.py, 2026-10-23): a setup only when
+        # Commercials are at an extreme vs. hedge funds and/or retail at the
+        # opposite extreme. Same rule as the breakdown PDF; the dashboard and
+        # the weekly trading plan read this field.
+        item["cot_setup"] = cot_setup(item.get("comm_idx"), item.get("cot_idx"), item.get("leg_idx"),
+                                      item.get("retail_idx"))
 
         if sym == "CRUDE" and eia_now is not None:
             change = eia_now - eia_prev

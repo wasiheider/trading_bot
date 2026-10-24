@@ -124,12 +124,12 @@ Push to `paper-trading` → Railway auto-deploys.
 - FTMO EA: `InpBreakevenAtTP1` / `InpTrailEnabled` both default false to match. **v7 support added 2026-10-02:** `range_rev` is single-target (broker TP = `tp1` = 1:3; any signal with no `tp2` is treated the same), and `ManageSlLocks()` moves the SL to `sl_lock_to` (1:1) once live price reaches `sl_lock_trigger` (1:2), stored per ticket as R-multiples so a market-order fallback stays correct. `mid_cont` keeps 50% at tp1 / rest at tp2. Compiles clean (0 errors/0 warnings, OANDA MetaEditor). Still receives nothing while `/latest-signal` is disabled (`EA_SIGNALS_ENABLED`).
 - **Server enforces 1H-only:** `handle_paper_signal` rejects any entry whose `timeframe` isn't `"60"` (`V7_TIMEFRAME` in `server.py`) with a "Paper Signal Blocked" Telegram — catches leftover v5 15M alerts. TP/SL lifecycle events are not affected.
 
-## COT smart-money rule (2026-10-23, all COT outputs)
+## COT rule (2026-10-23, all COT outputs)
 
-`cot_rules.py` `smart_money_check()` is the ONE rule used by the weekly breakdown PDF (`cot_generate.py`), the `/cot` dashboard payload (`cot_fetch.py`, field `smart_money`, shown on the dashboard card) and the weekly trading plan (`ClaudeAutomation\TradingCOT\trade_plan_prompt.txt` reads `smart_money` from `/cot`). When Commercials oppose the speculators (Leveraged Funds / Managed Money), **the lean follows the Commercials** (user: "Commercials and Retail split against the lean means LEAN towards Commercial"):
-- **CONFLICTED:** Commercial IDX >=90 vs. a Bearish speculator read (<=10 vs. Bullish) or Smart Money Score 30+ against it -> lean with Commercials, squeeze/exhaustion risk.
-- **SPLIT:** Commercial bias opposes the speculators while Retail sides with them -> lean with Commercials, lower conviction.
-Change thresholds only in `cot_rules.py`.
+User: "we never follow retail or hedge funds. we look for extremes when Commercials are on one side and hedge funds and/or retail are towards other extreme." `cot_rules.py` `cot_setup()` is the ONE rule, used by the weekly breakdown PDF (`cot_generate.py`), the `/cot` dashboard payload (`cot_fetch.py`, field `cot_setup`, shown on the dashboard card) and the weekly trading plan (`ClaudeAutomation\TradingCOT\trade_plan_prompt.txt` reads `cot_setup` from `/cot`):
+- **Bullish setup:** Commercial COT Index >= 80 and hedge funds (Leveraged Funds/Managed Money OR Non-Commercial) and/or Retail <= 20. Mirror for Bearish (<= 20 vs >= 80). Lean with the Commercials.
+- **Anything else: no COT edge.** Hedge-fund/retail direction, covering streaks, CONFIRMED badges and the Smart Money Score are context only, never a lean. No "conflicted"/"split" categories.
+Change thresholds only in `cot_rules.py` (EXTREME_HI / EXTREME_LO).
 
 ## Strategy — v5 (retired 2026-09-28, kept for reference)
 

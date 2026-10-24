@@ -440,11 +440,11 @@ def analysis_text(sym, d):
 
     if align == "CONFIRMED":
         d_word = s1b.lower() if s1b != "Neutral" else "neutral"
-        parts.append(f"Both CFTC and Tradingster confirm {d_word} institutional positioning -- "
-                     f"directional read is reliable.")
+        parts.append(f"Both hedge-fund sources (CFTC and Tradingster) are {d_word} -- this is crowd "
+                     f"positioning, context only; the lean comes from Commercials (see This week).")
     elif align == "DIVERGE":
         parts.append(f"Source divergence: CFTC {s1b} (IDX {s1i}) vs Tradingster {s2b} (IDX {s2i}). "
-                     f"Monitor for one to confirm the other before full conviction.")
+                     f"Hedge-fund sources disagree -- context only.")
     elif align == "NEUTRAL":
         parts.append("Both sources neutral -- no COT directional edge.")
 
@@ -517,132 +517,44 @@ def analysis_text(sym, d):
     return " ".join(parts) or "Insufficient data for clear analysis."
 
 
-from cot_rules import smart_money_check
+from cot_rules import cot_setup, commercials_waiting, EXTREME_HI, EXTREME_LO
 
 
-def smart_money_conflict(d):
-    """Smart-money override for the weekly verdict -- the shared rule in
-    cot_rules.py (2026-10-23), so this PDF, the /cot dashboard and the
-    trading plan always agree. Returns {"status": "CONFLICTED"|"SPLIT",
-    "lean": <Commercials' side>, "note": ...} or None."""
-    return smart_money_check(d["s1_bias"], d.get("comm_idx"), d.get("comm_bias"),
-                             d.get("retail_bias"), d.get("score"))
-
-
-def _sm_head(d, chk):
-    s1b, s1i, s2i, lean = d["s1_bias"], d["s1_idx"], d.get("s2_idx", "?"), chk["lean"]
-    comm_i, score = d.get("comm_idx", "?"), d.get("score")
-    score_txt = f", Smart Money {score:+d}" if score is not None else ""
-    if chk["status"] == "CONFLICTED":
-        return (f"Conflicted -- lean {lean} with Commercials. Speculators {s1b} (Leveraged Funds IDX {s1i}, "
-                f"Non-Commercial IDX {s2i}) but Commercials at an extreme {lean} (IDX {comm_i}){score_txt}.")
-    return (f"Smart-money split -- lean {lean} with Commercials, lower conviction. Speculators {s1b} "
-            f"(Leveraged Funds IDX {s1i}, Non-Commercial IDX {s2i}) and Retail {d.get('retail_bias')} "
-            f"(IDX {d.get('retail_idx', '?')}), but Commercials {lean} (IDX {comm_i}){score_txt}.")
+def setup_of(d):
+    """The one COT rule (cot_rules.py, user 2026-10-23): a setup only when
+    Commercials are at an extreme and hedge funds and/or retail sit at the
+    opposite extreme. Never a lean from hedge funds or retail themselves."""
+    return cot_setup(d.get("comm_idx"), d.get("s1_idx"), d.get("s2_idx"), d.get("retail_idx"))
 
 
 def this_week_text(sym, d):
-    align, s1b = d.get("alignment","?"), d["s1_bias"]
-    s2b = d.get("s2_bias","?")
-    s1i, lev = d["s1_idx"], d["lev_sig"]
-    extreme = isinstance(s1i, int) and (s1i <= 5 or s1i >= 95)
-
-    chk = smart_money_conflict(d)
-    if chk:
-        head = _sm_head(d, chk)
-        if chk["lean"] == "Bullish":
-            txt = head + " Favor long setups; don't press shorts."
-            if lev in ("covering", "flip-UP"):
-                return txt + " Leveraged Funds have started covering, which supports the turn."
-            return txt + " Leveraged Funds short covering would confirm the turn."
-        txt = head + " Favor short setups; don't add longs because of COT."
-        if lev in ("pressing", "flip-DN"):
-            return txt + " Leveraged Funds have started selling, which supports the turn."
-        return txt + " Leveraged Funds long liquidation would confirm the turn."
-
-    if align == "CONFIRMED" and s1b == "Bullish":
-        base = "Bullish. Both sources aligned."
-        if extreme and s1i >= 95:
-            return base + f" IDX={s1i} extreme -- watch for exhaustion; favor pullback entries."
-        if lev == "flip-UP":
-            return base + " Flip-UP confirms fresh momentum. Buy dips."
-        return base + " COT supports upside."
-
-    if align == "CONFIRMED" and s1b == "Bearish":
-        base = "Bearish. Both sources aligned."
-        if extreme and s1i <= 5:
-            return (base + f" IDX={s1i} near extreme -- crowd very one-sided; "
-                    f"sell-side momentum intact but do not add fresh shorts at these levels.")
-        if lev == "flip-DN":
-            return base + " Flip-DN confirms fresh shorts. Sell rallies."
-        if lev == "pressing":
-            return base + " Pressing signal -- sellers accelerating. Sell rallies."
-        return base + " COT supports downside."
-
-    if align == "CONFIRMED" and s1b == "Neutral":
-        return "Neutral. Both sources agree -- no COT directional edge this week."
-
-    if align == "DIVERGE":
-        if s1b == "Bearish" and extreme and s1i <= 5:
-            return (f"Bearish Leveraged Funds at IDX={s1i} near extreme. Sources diverge -- "
-                    f"avoid conviction shorts; contrarian risk elevated.")
-        if s1b == "Bullish" and extreme and s1i >= 95:
-            return (f"Bullish Leveraged Funds at IDX={s1i} near extreme. Sources diverge -- "
-                    f"avoid chasing longs; confirmation needed from Non-Commercial.")
-        if s1b != "Neutral":
-            return (f"{s1b} lean from CFTC (IDX {s1i}) but Tradingster diverges ({s2b}). "
-                    f"Trade Leveraged Funds direction with reduced size until Non-Commercial confirms.")
-        return "Sources diverge around neutral. No clear edge -- wait for convergence."
-
-    return "Neutral. No COT edge this week. Use price structure alone for entries."
+    st = setup_of(d)
+    if st:
+        side, other = ("long", "short") if st["signal"] == "Bullish" else ("short", "long")
+        return (f"{st['signal']} COT setup. {st['note']} Favor {side} v7 signals; "
+                f"no COT support for {other}s.")
+    comm_i = d.get("comm_idx", "?")
+    w = commercials_waiting(d.get("comm_idx"))
+    if w:
+        need = f"<= {EXTREME_LO}" if w == "long" else f">= {EXTREME_HI}"
+        return (f"No COT edge yet. Commercials at an extreme {w} (IDX {comm_i}), but hedge funds and retail "
+                f"are not at the opposite extreme. A setup forms if either reaches IDX {need}.")
+    return (f"No COT edge. Commercials are not at an extreme (IDX {comm_i}). "
+            f"Trade v7 signals on their own.")
 
 
 def next_week_text(sym, d, next_date_str):
-    align, s1b = d.get("alignment","?"), d["s1_bias"]
-    s1i, lev, am = d["s1_idx"], d["lev_sig"], d.get("am_sig")
-    extreme = isinstance(s1i, int) and (s1i <= 5 or s1i >= 95)
-    nxt = next_date_str  # e.g. "Jun 30"
-
-    chk = smart_money_conflict(d)
-    if chk:
-        lean, spec = chk["lean"], s1b
-        if chk["status"] == "CONFLICTED":
-            risk = "Squeeze" if lean == "Bullish" else "Exhaustion"
-            return (f"Lean {lean} with Commercials through {nxt}. {risk} risk: speculators are crowded "
-                    f"{spec.lower()} against smart money. A second week of Leveraged Funds "
-                    f"{'covering' if lean == 'Bullish' else 'selling'} would confirm the turn.")
-        return (f"Lean {lean} with Commercials through {nxt}, lower conviction. It firms up if Commercials "
-                f"keep adding {'longs' if lean == 'Bullish' else 'shorts'} while Retail chases; it ends if "
-                f"Commercials turn {spec}.")
-
-    if align == "CONFIRMED":
-        if s1b == "Bullish":
-            base = f"Bullish continuation expected through {nxt}."
-            if am in ("covering", "flip-UP"):
-                base += " Asset Manager accumulation supports medium-term upside."
-            return base
-        if s1b == "Bearish":
-            base = f"Bearish continuation expected through {nxt}."
-            if extreme:
-                base += (f" IDX={s1i} -- watch next CFTC release for short-covering "
-                         f"acceleration which would signal a potential squeeze.")
-            if am in ("pressing", "flip-DN"):
-                base += " Asset Manager selling confirms distribution."
-            return base
-        return f"Neutral through {nxt}. Watch for a source to break out of neutral zone."
-
-    if align == "DIVERGE":
-        watch = ("Non-Commercial follow Leveraged Funds into " + s1b if s1b != "Neutral"
-                 else "sources converge directionally")
-        base = (f"Key watch for {nxt}: will {watch}? "
-                f"Next CFTC release will clarify.")
-        if extreme:
-            base += (f" With IDX={s1i} at extremes, a reversal would first show "
-                     f"up as short-covering in next week's data.")
-        return base
-
-    return (f"Neutral through {nxt}. "
-            f"Wait for one source to establish directional bias before committing.")
+    nxt = next_date_str
+    st = setup_of(d)
+    if st:
+        lvl = f">= {EXTREME_HI}" if st["signal"] == "Bullish" else f"<= {EXTREME_LO}"
+        return (f"{st['signal']} lean with Commercials holds through {nxt} while Commercials stay at IDX {lvl} "
+                f"and the other side stays at the opposite extreme.")
+    if commercials_waiting(d.get("comm_idx")):
+        return (f"Watch through {nxt}: Commercials are already at an extreme; the next CFTC release shows "
+                f"whether hedge funds or retail get stretched the other way.")
+    return (f"No COT edge through {nxt} unless Commercials reach an extreme "
+            f"against hedge funds or retail.")
 
 # ── PDF styles ────────────────────────────────────────────────────────────────
 
@@ -1036,14 +948,9 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     tops     = [sym for sym in ORDER
                 if sym in result and isinstance(result[sym]["s1_idx"], int)
                 and result[sym]["s1_idx"] >= 95]
-    conflicted = [sym for sym in ORDER
-                  if sym in result and smart_money_conflict(result[sym])]
-    confirmed_bull = [sym for sym in ORDER
-                      if sym in result and result[sym].get("alignment")=="CONFIRMED"
-                      and result[sym]["s1_bias"]=="Bullish" and sym not in conflicted]
-    confirmed_bear = [sym for sym in ORDER
-                      if sym in result and result[sym].get("alignment")=="CONFIRMED"
-                      and result[sym]["s1_bias"]=="Bearish" and sym not in conflicted]
+    setups = [sym for sym in ORDER if sym in result and setup_of(result[sym])]
+    waiting = [sym for sym in ORDER if sym in result and not setup_of(result[sym])
+               and commercials_waiting(result[sym].get("comm_idx"))]
     diverge = [sym for sym in ORDER
                if sym in result and result[sym].get("alignment")=="DIVERGE"]
     ts_diverge = [sym for sym in ORDER
@@ -1060,16 +967,14 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     if tops:
         themes.append(f"<b>Extreme bullish positioning (IDX >=95):</b> {', '.join(tops)} -- "
                       f"crowd fully long; exhaustion risk elevated.")
-    if confirmed_bull:
-        themes.append(f"<b>CONFIRMED Bullish:</b> {', '.join(confirmed_bull)}.")
-    if confirmed_bear:
-        themes.append(f"<b>CONFIRMED Bearish:</b> {', '.join(confirmed_bear)}.")
-    if conflicted:
-        themes.append(f"<b>Smart money vs. speculators (lean with Commercials):</b> "
-                      + ", ".join(f"{s} ({smart_money_conflict(result[s])['lean']}, "
-                                  f"{smart_money_conflict(result[s])['status'].lower()})" for s in conflicted)
-                      + " -- conflicted = Commercials at an extreme or a 30+ Smart Money Score against the "
-                        "speculators; split = Commercials oppose speculators while Retail sides with them.")
+    if setups:
+        themes.append("<b>COT setups (lean with Commercials):</b> "
+                      + ", ".join(f"{s} ({setup_of(result[s])['signal']})" for s in setups)
+                      + f" -- Commercials at an extreme (IDX >= {EXTREME_HI} or <= {EXTREME_LO}) with hedge funds "
+                        "and/or retail at the opposite extreme.")
+    if waiting:
+        themes.append("<b>Commercials at an extreme, other side not stretched yet (watch):</b> "
+                      + ", ".join(f"{s} (Commercials {commercials_waiting(result[s].get('comm_idx'))})" for s in waiting) + ".")
     if diverge:
         themes.append(f"<b>Diverging sources (watch closely):</b> {', '.join(diverge)}.")
     if ts_diverge:

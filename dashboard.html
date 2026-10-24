@@ -1193,22 +1193,22 @@ function renderCOT(items) {
         </div>`;
     }
 
-    // Alignment badge
+    // Hedge-fund alignment is crowd context only -- the lean comes from the
+    // one COT rule (cot_rules.py, 2026-10-23): Commercials at an extreme vs.
+    // hedge funds and/or retail at the opposite extreme.
     let alignHtml = '';
     if (item.alignment === 'confirmed') {
-      const aColor = item.bias === 'Bullish' ? '#26a69a' : '#ef5350';
-      alignHtml = `<div style="font-size:10px;color:${aColor};margin-top:4px;font-weight:700;letter-spacing:.5px">✓ CONFIRMED ${item.bias.toUpperCase()}</div>`;
+      alignHtml = `<div style="font-size:10px;color:var(--t2);margin-top:4px;letter-spacing:.5px">Hedge funds: both sources ${item.bias}</div>`;
     } else if (item.alignment === 'diverge') {
-      alignHtml = `<div style="font-size:10px;color:#ff9800;margin-top:4px;font-weight:700;letter-spacing:.5px">⚡ DIVERGE — Mixed Signals</div>`;
+      alignHtml = `<div style="font-size:10px;color:var(--t2);margin-top:4px;letter-spacing:.5px">Hedge funds: sources diverge</div>`;
     }
-    // Smart-money override (cot_rules.py, 2026-10-23) — same rule as the
-    // breakdown PDF and trading plan: the lean follows the Commercials.
-    const sm = item.smart_money;
-    if (sm && sm.status) {
-      const smColor = sm.lean === 'Bullish' ? '#26a69a' : '#ef5350';
-      const smLabel = sm.status === 'CONFLICTED' ? 'CONFLICTED' : 'SMART-MONEY SPLIT';
-      alignHtml += `<div style="font-size:10px;color:${smColor};margin-top:3px;font-weight:700;letter-spacing:.5px">⚠ ${smLabel} — LEAN ${sm.lean.toUpperCase()} (with Commercials)</div>
-        <div style="font-size:9.5px;color:var(--t2);margin-top:1px">${sm.note}</div>`;
+    const st = item.cot_setup;
+    if (st && st.signal) {
+      const stColor = st.signal === 'Bullish' ? '#26a69a' : '#ef5350';
+      alignHtml += `<div style="font-size:11px;color:${stColor};margin-top:3px;font-weight:700;letter-spacing:.5px">★ ${st.signal.toUpperCase()} COT SETUP — lean with Commercials</div>
+        <div style="font-size:9.5px;color:var(--t2);margin-top:1px">${st.note}</div>`;
+    } else {
+      alignHtml += `<div style="font-size:10px;color:var(--t3);margin-top:3px;font-weight:700;letter-spacing:.5px">No COT edge</div>`;
     }
 
     // Commercial / Asset Manager / Retail cohorts row — upgraded 2026-09-22
