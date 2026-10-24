@@ -1201,6 +1201,15 @@ function renderCOT(items) {
     } else if (item.alignment === 'diverge') {
       alignHtml = `<div style="font-size:10px;color:#ff9800;margin-top:4px;font-weight:700;letter-spacing:.5px">⚡ DIVERGE — Mixed Signals</div>`;
     }
+    // Smart-money override (cot_rules.py, 2026-10-23) — same rule as the
+    // breakdown PDF and trading plan: the lean follows the Commercials.
+    const sm = item.smart_money;
+    if (sm && sm.status) {
+      const smColor = sm.lean === 'Bullish' ? '#26a69a' : '#ef5350';
+      const smLabel = sm.status === 'CONFLICTED' ? 'CONFLICTED' : 'SMART-MONEY SPLIT';
+      alignHtml += `<div style="font-size:10px;color:${smColor};margin-top:3px;font-weight:700;letter-spacing:.5px">⚠ ${smLabel} — LEAN ${sm.lean.toUpperCase()} (with Commercials)</div>
+        <div style="font-size:9.5px;color:var(--t2);margin-top:1px">${sm.note}</div>`;
+    }
 
     // Commercial / Asset Manager / Retail cohorts row — upgraded 2026-09-22
     // from a bias-only Commercial/Retail line to all 3 remaining cohorts

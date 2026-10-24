@@ -517,35 +517,28 @@ def analysis_text(sym, d):
     return " ".join(parts) or "Insufficient data for clear analysis."
 
 
+from cot_rules import smart_money_check
+
+
 def smart_money_conflict(d):
-    """Speculators (Source 1) one way, smart money the other (added 2026-10-23,
-    NATGAS: Leveraged Funds/Non-Commercial both Bearish = CONFIRMED, while
-    Commercials sat at IDX 100 and the Smart Money Score was +44 -- the
-    report still printed "Bearish, COT supports downside"). Conflict =
-    Commercial IDX at an extreme against the speculator bias (>=90 vs.
-    Bearish, <=10 vs. Bullish) or a Smart Money Score of 30+ against it.
-    Returns the contrarian direction ("Bullish"/"Bearish") or None."""
-    s1b = d["s1_bias"]
-    comm_i, score = d.get("comm_idx"), d.get("score")
-    comm_i = comm_i if isinstance(comm_i, int) else None
-    if s1b == "Bearish" and ((comm_i is not None and comm_i >= 90)
-                             or (score is not None and score >= 30)):
-        return "Bullish"
-    if s1b == "Bullish" and ((comm_i is not None and comm_i <= 10)
-                             or (score is not None and score <= -30)):
-        return "Bearish"
-    return None
+    """Smart-money override for the weekly verdict -- the shared rule in
+    cot_rules.py (2026-10-23), so this PDF, the /cot dashboard and the
+    trading plan always agree. Returns {"status": "CONFLICTED"|"SPLIT",
+    "lean": <Commercials' side>, "note": ...} or None."""
+    return smart_money_check(d["s1_bias"], d.get("comm_idx"), d.get("comm_bias"),
+                             d.get("retail_bias"), d.get("score"))
 
 
-def _conflict_head(d, contra):
-    s1b, s1i, s2i = d["s1_bias"], d["s1_idx"], d.get("s2_idx", "?")
+def _sm_head(d, chk):
+    s1b, s1i, s2i, lean = d["s1_bias"], d["s1_idx"], d.get("s2_idx", "?"), chk["lean"]
     comm_i, score = d.get("comm_idx", "?"), d.get("score")
-    comm_txt = (f"Commercials at an extreme {contra} (IDX {comm_i})"
-                if isinstance(comm_i, int) and (comm_i >= 90 or comm_i <= 10)
-                else f"Commercials {d.get('comm_bias', '?')} (IDX {comm_i})")
     score_txt = f", Smart Money {score:+d}" if score is not None else ""
-    return (f"Conflicted: speculators {s1b} (Leveraged Funds IDX {s1i}, "
-            f"Non-Commercial IDX {s2i}) but {comm_txt}{score_txt}.")
+    if chk["status"] == "CONFLICTED":
+        return (f"Conflicted -- lean {lean} with Commercials. Speculators {s1b} (Leveraged Funds IDX {s1i}, "
+                f"Non-Commercial IDX {s2i}) but Commercials at an extreme {lean} (IDX {comm_i}){score_txt}.")
+    return (f"Smart-money split -- lean {lean} with Commercials, lower conviction. Speculators {s1b} "
+            f"(Leveraged Funds IDX {s1i}, Non-Commercial IDX {s2i}) and Retail {d.get('retail_bias')} "
+            f"(IDX {d.get('retail_idx', '?')}), but Commercials {lean} (IDX {comm_i}){score_txt}.")
 
 
 def this_week_text(sym, d):
@@ -554,17 +547,18 @@ def this_week_text(sym, d):
     s1i, lev = d["s1_idx"], d["lev_sig"]
     extreme = isinstance(s1i, int) and (s1i <= 5 or s1i >= 95)
 
-    contra = smart_money_conflict(d)
-    if contra == "Bullish":
-        txt = _conflict_head(d, contra) + " Contrarian bullish setup -- don't press shorts;"
-        if lev in ("covering", "flip-UP"):
-            return txt + " Leveraged Funds have started covering, watch for that to continue as the trigger."
-        return txt + " wait for Leveraged Funds short covering as the trigger."
-    if contra == "Bearish":
-        txt = _conflict_head(d, contra) + " Contrarian bearish setup -- don't chase longs;"
+    chk = smart_money_conflict(d)
+    if chk:
+        head = _sm_head(d, chk)
+        if chk["lean"] == "Bullish":
+            txt = head + " Favor long setups; don't press shorts."
+            if lev in ("covering", "flip-UP"):
+                return txt + " Leveraged Funds have started covering, which supports the turn."
+            return txt + " Leveraged Funds short covering would confirm the turn."
+        txt = head + " Favor short setups; don't add longs because of COT."
         if lev in ("pressing", "flip-DN"):
-            return txt + " Leveraged Funds have started selling, watch for that to continue as the trigger."
-        return txt + " wait for Leveraged Funds long liquidation as the trigger."
+            return txt + " Leveraged Funds have started selling, which supports the turn."
+        return txt + " Leveraged Funds long liquidation would confirm the turn."
 
     if align == "CONFIRMED" and s1b == "Bullish":
         base = "Bullish. Both sources aligned."
@@ -609,15 +603,17 @@ def next_week_text(sym, d, next_date_str):
     extreme = isinstance(s1i, int) and (s1i <= 5 or s1i >= 95)
     nxt = next_date_str  # e.g. "Jun 30"
 
-    contra = smart_money_conflict(d)
-    if contra == "Bullish":
-        return (f"Conflicted through {nxt}. Squeeze risk: speculators are crowded short against "
-                f"smart money. A second week of Leveraged Funds covering would confirm the turn; "
-                f"until then no fresh shorts.")
-    if contra == "Bearish":
-        return (f"Conflicted through {nxt}. Exhaustion risk: speculators are crowded long against "
-                f"smart money. A second week of Leveraged Funds selling would confirm the turn; "
-                f"until then no fresh longs.")
+    chk = smart_money_conflict(d)
+    if chk:
+        lean, spec = chk["lean"], s1b
+        if chk["status"] == "CONFLICTED":
+            risk = "Squeeze" if lean == "Bullish" else "Exhaustion"
+            return (f"Lean {lean} with Commercials through {nxt}. {risk} risk: speculators are crowded "
+                    f"{spec.lower()} against smart money. A second week of Leveraged Funds "
+                    f"{'covering' if lean == 'Bullish' else 'selling'} would confirm the turn.")
+        return (f"Lean {lean} with Commercials through {nxt}, lower conviction. It firms up if Commercials "
+                f"keep adding {'longs' if lean == 'Bullish' else 'shorts'} while Retail chases; it ends if "
+                f"Commercials turn {spec}.")
 
     if align == "CONFIRMED":
         if s1b == "Bullish":
@@ -1069,9 +1065,11 @@ def build_pdf(result, today, next_date_str, latest_report_date):
     if confirmed_bear:
         themes.append(f"<b>CONFIRMED Bearish:</b> {', '.join(confirmed_bear)}.")
     if conflicted:
-        themes.append(f"<b>Conflicted (speculators vs. smart money):</b> "
-                      f"{', '.join(f'{s} ({smart_money_conflict(result[s])} contrarian)' for s in conflicted)} -- "
-                      f"speculator direction opposes an extreme Commercial reading or a 30+ Smart Money Score.")
+        themes.append(f"<b>Smart money vs. speculators (lean with Commercials):</b> "
+                      + ", ".join(f"{s} ({smart_money_conflict(result[s])['lean']}, "
+                                  f"{smart_money_conflict(result[s])['status'].lower()})" for s in conflicted)
+                      + " -- conflicted = Commercials at an extreme or a 30+ Smart Money Score against the "
+                        "speculators; split = Commercials oppose speculators while Retail sides with them.")
     if diverge:
         themes.append(f"<b>Diverging sources (watch closely):</b> {', '.join(diverge)}.")
     if ts_diverge:
