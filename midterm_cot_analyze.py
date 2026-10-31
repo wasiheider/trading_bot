@@ -136,6 +136,21 @@ res["si_shock"] = events("XAG_USD", lambda i, c, h: c[i] / c[i - 1] - 1 <= -0.05
 # Silver: any 1-day drop of 5%+ (broader set)
 res["si_shock_all"] = events("XAG_USD", lambda i, c, h: c[i] / c[i - 1] - 1 <= -0.05)
 
+# ---------- how COT moved after each midterm (0/4/8/13/26 weeks) ----------
+traj = {}
+for sym in ["NQ", "ES", "GC", "SI", "BTC"]:
+    ds = [x["d"] for x in S[sym]]; traj[sym] = []
+    for d, _ in MID:
+        i = bisect.bisect_left(ds, d) - 1
+        if i < 0 or S[sym][i]["comm_idx"] is None: continue
+        row = {"date": d, "cot": {w: (S[sym][i + w]["comm_idx"], S[sym][i + w]["spec_idx"], S[sym][i + w]["retail_idx"])
+                                  for w in (0, 4, 8, 13, 26) if i + w < len(S[sym])}}
+        inst = PXMAP[sym]
+        if inst in P and P[inst][0][0] <= d:
+            k = idx_on(inst, d); row["px"] = {w: fwd(inst, k, w * 5) for w in (4, 8, 13, 26)}
+        traj[sym].append(row)
+res["post_midterm_cot"] = traj
+
 json.dump(res, open(os.path.join(OUT, "results.json"), "w"), indent=1)
 
 def summ(ev, k):
@@ -154,3 +169,6 @@ for k in ("nq_shock", "si_shock", "si_shock_all"):
     print("\n", k)
     for e in res[k]: print("  ", e)
     for f in ("f5", "f20", "f60", "mdd20"): print("   ", f, summ(res[k], f))
+print("\nPOST-MIDTERM COT (C/Spec/Retail at +0/4/8/13/26 wks; price % at +4/8/13/26 wks)")
+for sym, rows in traj.items():
+    for r in rows: print(sym, r["date"], r["cot"], r.get("px", ""))
