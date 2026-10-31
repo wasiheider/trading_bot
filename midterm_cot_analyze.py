@@ -10,7 +10,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "midterm"
 os.makedirs(OUT, exist_ok=True)
 cot = json.load(open(os.path.join(OUT, "cot_legacy.json")))
 px = json.load(open(os.path.join(OUT, "px.json")))
-PXMAP = {"NQ": "NAS100_USD", "ES": "SPX500_USD", "GC": "XAU_USD", "SI": "XAG_USD", "BTC": "BTC_USD"}
+PXMAP = {"NQ": "NAS100_USD", "ES": "SPX500_USD", "GC": "XAU_USD", "SI": "XAG_USD", "BTC": "BTC_USD", "NG": "NATGAS_USD"}
 N = 70  # weeks, same scale as the dashboard
 
 # ---------- COT series ----------
@@ -71,7 +71,7 @@ MID = [("2002-11-05", "Bush (R)"), ("2006-11-07", "Bush (R)"), ("2010-11-02", "O
 mt = []
 for d, pres in MID:
     row = {"date": d, "pres": pres, "assets": {}}
-    for sym in ["NQ", "ES", "GC", "SI", "BTC"]:
+    for sym in ["NQ", "ES", "GC", "SI", "BTC", "NG"]:
         x = cot_on(sym, d)
         a = {}
         if x and x["comm_idx"] is not None:
@@ -110,7 +110,7 @@ res["presidencies"] = pres
 
 # ---------- current ----------
 cur = {}
-for sym in ["NQ", "ES", "GC", "SI", "BTC"]:
+for sym in ["NQ", "ES", "GC", "SI", "BTC", "NG"]:
     x = S[sym][-1]; p = S[sym][-2]
     cur[sym] = dict(d=x["d"], comm=x["comm_idx"], spec=x["spec_idx"], retail=x["retail_idx"], spec_pct_oi=x["spec_pct_oi"],
                     verdict=verdict(x), spec_chg=round(x["spec"] - p["spec"]), comm_chg=round(x["comm"] - p["comm"]),
@@ -138,16 +138,16 @@ res["si_shock_all"] = events("XAG_USD", lambda i, c, h: c[i] / c[i - 1] - 1 <= -
 
 # ---------- how COT moved after each midterm (0/4/8/13/26 weeks) ----------
 traj = {}
-for sym in ["NQ", "ES", "GC", "SI", "BTC"]:
+for sym in ["NQ", "ES", "GC", "SI", "BTC", "NG"]:
     ds = [x["d"] for x in S[sym]]; traj[sym] = []
     for d, _ in MID:
         i = bisect.bisect_left(ds, d) - 1
         if i < 0 or S[sym][i]["comm_idx"] is None: continue
         row = {"date": d, "cot": {w: (S[sym][i + w]["comm_idx"], S[sym][i + w]["spec_idx"], S[sym][i + w]["retail_idx"])
-                                  for w in (0, 4, 8, 13, 26) if i + w < len(S[sym])}}
+                                  for w in (0, 4, 8, 13, 26, 52) if i + w < len(S[sym])}}
         inst = PXMAP[sym]
         if inst in P and P[inst][0][0] <= d:
-            k = idx_on(inst, d); row["px"] = {w: fwd(inst, k, w * 5) for w in (4, 8, 13, 26)}
+            k = idx_on(inst, d); row["px"] = {w: fwd(inst, k, w * 5) for w in (4, 8, 13, 26, 52)}
         traj[sym].append(row)
 res["post_midterm_cot"] = traj
 
@@ -169,6 +169,6 @@ for k in ("nq_shock", "si_shock", "si_shock_all"):
     print("\n", k)
     for e in res[k]: print("  ", e)
     for f in ("f5", "f20", "f60", "mdd20"): print("   ", f, summ(res[k], f))
-print("\nPOST-MIDTERM COT (C/Spec/Retail at +0/4/8/13/26 wks; price % at +4/8/13/26 wks)")
+print("\nPOST-MIDTERM COT (C/Spec/Retail at +0/4/8/13/26/52 wks; price % at +4/8/13/26/52 wks)")
 for sym, rows in traj.items():
     for r in rows: print(sym, r["date"], r["cot"], r.get("px", ""))

@@ -1,5 +1,5 @@
 """
-midterm_cot_fetch.py -- pulls full CFTC Legacy COT history (NQ, ES, gold, silver, BTC)
+midterm_cot_fetch.py -- pulls full CFTC Legacy COT history (NQ, ES, gold, silver, BTC, natgas)
 and OANDA daily prices since 2002 into data/midterm/ for midterm_cot_analyze.py.
 Needs OANDA_API_TOKEN in the environment. Built for COT_Midterm_Context_2026-11-03.pdf.
 """
@@ -13,7 +13,7 @@ def get(url, headers=None):
         return json.loads(r.read())
 
 # ---- CFTC legacy futures-only COT, full history ----
-CODES = {"NQ": "209742", "ES": "13874A", "GC": "088691", "SI": "084691", "BTC": "133741"}
+CODES = {"NQ": "209742", "ES": "13874A", "GC": "088691", "SI": "084691", "BTC": "133741", "NG": "023651"}
 SEL = ("report_date_as_yyyy_mm_dd,open_interest_all,noncomm_positions_long_all,noncomm_positions_short_all,"
        "comm_positions_long_all,comm_positions_short_all,nonrept_positions_long_all,nonrept_positions_short_all")
 cot = {}
@@ -33,7 +33,7 @@ json.dump(cot, open(os.path.join(OUT, "cot_legacy.json"), "w"))
 # ---- OANDA daily prices ----
 H = {"Authorization": "Bearer " + os.environ["OANDA_API_TOKEN"]}
 px = {}
-for inst in ["NAS100_USD", "SPX500_USD", "XAU_USD", "XAG_USD", "BTC_USD"]:
+for inst in ["NAS100_USD", "SPX500_USD", "XAU_USD", "XAG_USD", "BTC_USD", "NATGAS_USD"]:
     out, frm = {}, "2002-01-01T00:00:00Z"
     try:
         while True:
